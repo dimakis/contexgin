@@ -95,10 +95,12 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
       const nodes = parseMarkdown(content);
       const sections = extractAllLevel2(nodes, source);
 
-      // Clean content
+      // Clean content and account for heading overhead in token estimate
       for (const section of sections) {
         section.content = cleanContent(section.content);
-        section.tokenEstimate = estimateTokens(section.content);
+        // Include heading markup + separator overhead (~2 newlines + heading chars)
+        const headingOverhead = section.headingPath[section.headingPath.length - 1].length + 10;
+        section.tokenEstimate = estimateTokens(section.content) + estimateTokens(' '.repeat(headingOverhead));
       }
 
       allSections.push(...sections);
