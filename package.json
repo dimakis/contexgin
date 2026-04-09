@@ -1,9 +1,21 @@
 {
   "name": "contexgin",
   "version": "0.1.0",
+  "description": "Context orchestration engine for AI agent harnesses",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dimakis/contexgin.git"
+  },
+  "keywords": [
+    "context",
+    "ai",
+    "agent",
+    "llm",
+    "orchestration"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
