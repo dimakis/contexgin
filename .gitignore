@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/ is committed for github: protocol installs
 *.tsbuildinfo
 .DS_Store
 *.log
