@@ -125,6 +125,19 @@ Indexes constitutions across workspace roots and generates task-relevant reading
 | `extractPurpose(content)`             | Extract purpose from constitution         |
 | `extractEntryPoints(content)`         | Extract entry points                      |
 
+### Registry
+
+Universal schema registry for drift detection. Schemas declare testable assertions about a system's expected shape (file structure, service health, memory vault density). Providers discover and register schemas; validators check declarations against reality; drift reports track what changed and when.
+
+| Export                                      | Description                                           |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `Schema`, `Declaration`                     | Core primitives — what a system declares about itself |
+| `Validator`, `ValidationResult`             | Validate declarations against reality                 |
+| `DriftReport`, `DriftSummary`, `DriftDelta` | Drift detection and change tracking                   |
+| `SchemaVersion`, `CompatibilityResult`      | Schema evolution and compatibility checking           |
+| `SchemaProvider`, `SchemaSource`            | Provider interface for schema discovery               |
+| `WorkspaceProvider`                         | Built-in provider for workspace structure schemas     |
+
 ### Provider / Tools / Permissions
 
 Type definitions and interfaces only — no runtime implementation yet. These define the contracts for future LLM provider adapters, tool registries, and permission engines.
@@ -318,7 +331,7 @@ if (health.violations.errors > 0) {
 ## Development
 
 ```bash
-npm test           # Vitest — 235 tests across 23 files
+npm test           # Vitest — 235 tests across 25 files
 npm run build      # tsup (ESM + declarations)
 npm run lint       # ESLint + Prettier
 npm run check      # TypeScript type check
@@ -330,13 +343,14 @@ TDD: tests first, implementation second. Conventional commits. Feature branches 
 
 Contexgin looks for these files when discovering context sources:
 
-| File                  | Kind         | Description                                 |
-| --------------------- | ------------ | ------------------------------------------- |
-| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture |
-| `CLAUDE.md`           | reference    | AI session instructions                     |
-| `SERVICES.md`         | service      | Service registry                            |
-| `memory/Profile/*.md` | profile      | User/workspace profile files                |
-| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                   |
+| File                  | Kind         | Description                                                    |
+| --------------------- | ------------ | -------------------------------------------------------------- |
+| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture                    |
+| `CLAUDE.md`           | reference    | AI session instructions                                        |
+| `SERVICES.md`         | service      | Service registry                                               |
+| `memory/Profile/*.md` | profile      | User/workspace profile files                                   |
+| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                                      |
+| `.centaurignore`      | ignore       | Exclude directories from graph traversal (`.gitignore` syntax) |
 
 ## Constitution Templates
 
