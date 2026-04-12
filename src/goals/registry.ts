@@ -84,28 +84,23 @@ export class GoalRegistry {
     const criteria = opts?.successCriteria ?? [];
     const contextCondition = opts?.contextCondition ?? 'unknown';
 
-    this.store.db
-      .prepare(
-        `INSERT INTO goals (id, title, description, success_criteria, status, context_condition, boot_payload_tokens, created_at)
-         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
-      )
-      .run(
-        id,
-        title,
-        opts?.description ?? null,
-        criteria.length > 0 ? JSON.stringify(criteria) : null,
-        contextCondition,
-        opts?.bootPayloadTokens ?? null,
-        now,
-      );
+    this.store.run(
+      `INSERT INTO goals (id, title, description, success_criteria, status, context_condition, boot_payload_tokens, created_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+      id,
+      title,
+      opts?.description ?? null,
+      criteria.length > 0 ? JSON.stringify(criteria) : null,
+      contextCondition,
+      opts?.bootPayloadTokens ?? null,
+      now,
+    );
 
     return this.getGoal(id)!;
   }
 
   getGoal(id: string): Goal | null {
-    const row = this.store.db.prepare('SELECT * FROM goals WHERE id = ?').get(id) as
-      | GoalRow
-      | undefined;
+    const row = this.store.get<GoalRow>('SELECT * FROM goals WHERE id = ?', id);
 
     if (!row) return null;
 
@@ -124,7 +119,7 @@ export class GoalRegistry {
 
     sql += ' ORDER BY created_at DESC';
 
-    const rows = this.store.db.prepare(sql).all(...params) as GoalRow[];
+    const rows = this.store.all<GoalRow>(sql, ...params);
     return rows.map((row) => {
       const totals = this.computeTotals(row.id);
       return this.rowToGoal(row, totals);
@@ -132,9 +127,7 @@ export class GoalRegistry {
   }
 
   updateGoal(id: string, fields: UpdateGoalFields): Goal | null {
-    const existing = this.store.db.prepare('SELECT id FROM goals WHERE id = ?').get(id) as
-      | { id: string }
-      | undefined;
+    const existing = this.store.get<{ id: string }>('SELECT id FROM goals WHERE id = ?', id);
 
     if (!existing) return null;
 
@@ -174,16 +167,17 @@ export class GoalRegistry {
 
     if (sets.length > 0) {
       params.push(id);
-      this.store.db.prepare(`UPDATE goals SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      this.store.run(`UPDATE goals SET ${sets.join(', ')} WHERE id = ?`, ...params);
     }
 
     return this.getGoal(id);
   }
 
   deleteGoal(id: string): boolean {
-    const result = this.store.db
-      .prepare("UPDATE goals SET status = 'abandoned' WHERE id = ?")
-      .run(id);
+    const result = this.store.run(
+      "UPDATE goals SET status = 'abandoned' WHERE id = ? AND status NOT IN ('achieved', 'abandoned')",
+      id,
+    );
     return result.changes > 0;
   }
 
@@ -191,7 +185,7 @@ export class GoalRegistry {
 
   addContribution(goalId: string, input: AddContributionInput): UsageContribution {
     // Verify goal exists
-    const goal = this.store.db.prepare('SELECT id FROM goals WHERE id = ?').get(goalId) as
+    const goal = this.store.get('SELECT id FROM goals WHERE id = ?', goalId) as
       | { id: string }
       | undefined;
 
@@ -202,41 +196,58 @@ export class GoalRegistry {
     const id = randomUUID();
     const now = Date.now() / 1000;
 
-    this.store.db
-      .prepare(
-        `INSERT INTO contributions
-         (id, goal_id, source, source_id, source_label,
-          input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-          cost_usd, turns, tool_calls, duration_ms, duration_api_ms,
-          metadata, timestamp)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        goalId,
-        input.source,
-        input.sourceId,
-        input.sourceLabel ?? null,
-        input.inputTokens ?? 0,
-        input.outputTokens ?? 0,
-        input.cacheReadTokens ?? 0,
-        input.cacheCreationTokens ?? 0,
-        input.costUsd ?? 0,
-        input.turns ?? 0,
-        input.toolCalls ?? 0,
-        input.durationMs ?? 0,
-        input.durationApiMs ?? 0,
-        input.metadata ? JSON.stringify(input.metadata) : null,
-        now,
-      );
+    this.store.run(
+      `INSERT INTO contributions
+       (id, goal_id, source, source_id, source_label,
+        input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+        cost_usd, turns, tool_calls, duration_ms, duration_api_ms,
+        metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      goalId,
+      input.source,
+      input.sourceId,
+      input.sourceLabel ?? null,
+      input.inputTokens ?? 0,
+      input.outputTokens ?? 0,
+      input.cacheReadTokens ?? 0,
+      input.cacheCreationTokens ?? 0,
+      input.costUsd ?? 0,
+      input.turns ?? 0,
+      input.toolCalls ?? 0,
+      input.durationMs ?? 0,
+      input.durationApiMs ?? 0,
+      input.metadata ? JSON.stringify(input.metadata) : null,
+      now,
+    );
 
-    return this.getContributions(goalId).find((c) => c.id === id)!;
+    // Query by id directly instead of fetching all and filtering
+    const row = this.store.get('SELECT * FROM contributions WHERE id = ?', id) as ContributionRow;
+    return {
+      id: row.id,
+      goalId: row.goal_id,
+      source: row.source,
+      sourceId: row.source_id,
+      sourceLabel: row.source_label,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+      costUsd: row.cost_usd,
+      turns: row.turns,
+      toolCalls: row.tool_calls,
+      durationMs: row.duration_ms,
+      durationApiMs: row.duration_api_ms,
+      metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
+      timestamp: row.timestamp,
+    };
   }
 
   getContributions(goalId: string): UsageContribution[] {
-    const rows = this.store.db
-      .prepare('SELECT * FROM contributions WHERE goal_id = ? ORDER BY timestamp ASC')
-      .all(goalId) as ContributionRow[];
+    const rows = this.store.all<ContributionRow>(
+      'SELECT * FROM contributions WHERE goal_id = ? ORDER BY timestamp ASC',
+      goalId,
+    );
 
     return rows.map((row) => ({
       id: row.id,
@@ -262,9 +273,7 @@ export class GoalRegistry {
 
   addArtifact(goalId: string, input: AddArtifactInput): GoalArtifact {
     // Verify goal exists
-    const goal = this.store.db.prepare('SELECT id FROM goals WHERE id = ?').get(goalId) as
-      | { id: string }
-      | undefined;
+    const goal = this.store.get<{ id: string }>('SELECT id FROM goals WHERE id = ?', goalId);
 
     if (!goal) {
       throw new Error(`Goal not found: ${goalId}`);
@@ -273,20 +282,25 @@ export class GoalRegistry {
     const id = randomUUID();
     const now = Date.now() / 1000;
 
-    this.store.db
-      .prepare(
-        `INSERT INTO artifacts (id, goal_id, type, ref, repo, linked_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(id, goalId, input.type, input.ref, input.repo ?? null, now);
+    this.store.run(
+      `INSERT INTO artifacts (id, goal_id, type, ref, repo, linked_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id,
+      goalId,
+      input.type,
+      input.ref,
+      input.repo ?? null,
+      now,
+    );
 
     return this.getArtifacts(goalId).find((a) => a.id === id)!;
   }
 
   getArtifacts(goalId: string): GoalArtifact[] {
-    const rows = this.store.db
-      .prepare('SELECT * FROM artifacts WHERE goal_id = ? ORDER BY linked_at ASC')
-      .all(goalId) as ArtifactRow[];
+    const rows = this.store.all<ArtifactRow>(
+      'SELECT * FROM artifacts WHERE goal_id = ? ORDER BY linked_at ASC',
+      goalId,
+    );
 
     return rows.map((row) => ({
       id: row.id,
@@ -301,31 +315,27 @@ export class GoalRegistry {
   // ── Usage Summary ─────────────────────────────────────────
 
   getUsageSummary(): UsageSummary {
-    const countRow = this.store.db
-      .prepare(
-        `SELECT
-           COUNT(*) as total,
-           COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active,
-           COALESCE(SUM(CASE WHEN status = 'achieved' THEN 1 ELSE 0 END), 0) as achieved
-         FROM goals`,
-      )
-      .get() as { total: number; active: number; achieved: number };
+    const countRow = this.store.get<{ total: number; active: number; achieved: number }>(
+      `SELECT
+         COUNT(*) as total,
+         COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active,
+         COALESCE(SUM(CASE WHEN status = 'achieved' THEN 1 ELSE 0 END), 0) as achieved
+       FROM goals`,
+    )!;
 
-    const totalsRow = this.store.db
-      .prepare(
-        `SELECT
-           COALESCE(SUM(input_tokens), 0) as input_tokens,
-           COALESCE(SUM(output_tokens), 0) as output_tokens,
-           COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
-           COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
-           COALESCE(SUM(cost_usd), 0) as cost_usd,
-           COALESCE(SUM(turns), 0) as turns,
-           COALESCE(SUM(tool_calls), 0) as tool_calls,
-           COALESCE(SUM(duration_ms), 0) as duration_ms,
-           COALESCE(SUM(duration_api_ms), 0) as duration_api_ms
-         FROM contributions`,
-      )
-      .get() as TotalsRow;
+    const totalsRow = this.store.get<TotalsRow>(
+      `SELECT
+         COALESCE(SUM(input_tokens), 0) as input_tokens,
+         COALESCE(SUM(output_tokens), 0) as output_tokens,
+         COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+         COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
+         COALESCE(SUM(cost_usd), 0) as cost_usd,
+         COALESCE(SUM(turns), 0) as turns,
+         COALESCE(SUM(tool_calls), 0) as tool_calls,
+         COALESCE(SUM(duration_ms), 0) as duration_ms,
+         COALESCE(SUM(duration_api_ms), 0) as duration_api_ms
+       FROM contributions`,
+    )!;
 
     return {
       totalGoals: countRow.total,
@@ -344,21 +354,20 @@ export class GoalRegistry {
   // ── Private helpers ───────────────────────────────────────
 
   private computeTotals(goalId: string): GoalUsageTotals {
-    const row = this.store.db
-      .prepare(
-        `SELECT
-           COALESCE(SUM(input_tokens), 0) as input_tokens,
-           COALESCE(SUM(output_tokens), 0) as output_tokens,
-           COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
-           COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
-           COALESCE(SUM(cost_usd), 0) as cost_usd,
-           COALESCE(SUM(turns), 0) as turns,
-           COALESCE(SUM(tool_calls), 0) as tool_calls,
-           COALESCE(SUM(duration_ms), 0) as duration_ms,
-           COALESCE(SUM(duration_api_ms), 0) as duration_api_ms
-         FROM contributions WHERE goal_id = ?`,
-      )
-      .get(goalId) as TotalsRow;
+    const row = this.store.get<TotalsRow>(
+      `SELECT
+         COALESCE(SUM(input_tokens), 0) as input_tokens,
+         COALESCE(SUM(output_tokens), 0) as output_tokens,
+         COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+         COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
+         COALESCE(SUM(cost_usd), 0) as cost_usd,
+         COALESCE(SUM(turns), 0) as turns,
+         COALESCE(SUM(tool_calls), 0) as tool_calls,
+         COALESCE(SUM(duration_ms), 0) as duration_ms,
+         COALESCE(SUM(duration_api_ms), 0) as duration_api_ms
+       FROM contributions WHERE goal_id = ?`,
+      goalId,
+    )!;
 
     return this.totalsRowToTotals(row);
   }

@@ -1,6 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import type { GoalRegistry } from './registry.js';
-import type { GoalStatus } from './types.js';
+import type { GoalStatus, ContextCondition } from './types.js';
+
+// ── Validation helpers ────────────────────────────────────────
+
+const VALID_STATUSES: GoalStatus[] = ['active', 'achieved', 'failed', 'abandoned'];
+const VALID_CONTEXT_CONDITIONS: ContextCondition[] = ['none', 'compiled', 'partial', 'unknown'];
+
+function isValidStatus(value: unknown): value is GoalStatus {
+  return typeof value === 'string' && VALID_STATUSES.includes(value as GoalStatus);
+}
+
+function isValidContextCondition(value: unknown): value is ContextCondition {
+  return typeof value === 'string' && VALID_CONTEXT_CONDITIONS.includes(value as ContextCondition);
+}
+
+// ── Routes ────────────────────────────────────────────────────
 
 export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
   // ── POST /api/goals ───────────────────────────────────────
@@ -11,13 +26,19 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
       return reply.status(400).send({ error: 'title is required' });
     }
 
+    // Validate contextCondition if provided
+    if (body.contextCondition !== undefined && !isValidContextCondition(body.contextCondition)) {
+      return reply.status(400).send({
+        error: `Invalid contextCondition. Must be one of: ${VALID_CONTEXT_CONDITIONS.join(', ')}`,
+      });
+    }
+
     const goal = registry.createGoal(body.title, {
       description: typeof body.description === 'string' ? body.description : undefined,
       successCriteria: Array.isArray(body.successCriteria) ? body.successCriteria : undefined,
-      contextCondition:
-        typeof body.contextCondition === 'string'
-          ? (body.contextCondition as 'none' | 'compiled' | 'partial' | 'unknown')
-          : undefined,
+      contextCondition: isValidContextCondition(body.contextCondition)
+        ? body.contextCondition
+        : undefined,
       bootPayloadTokens:
         typeof body.bootPayloadTokens === 'number' ? body.bootPayloadTokens : undefined,
     });
@@ -27,8 +48,16 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
 
   // ── GET /api/goals ────────────────────────────────────────
 
-  app.get('/api/goals', async (request) => {
+  app.get('/api/goals', async (request, reply) => {
     const query = request.query as Record<string, string>;
+
+    // Validate status if provided
+    if (query.status && !isValidStatus(query.status)) {
+      return reply.status(400).send({
+        error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`,
+      });
+    }
+
     const status = query.status as GoalStatus | undefined;
     return registry.listGoals(status ? { status } : undefined);
   });
@@ -51,16 +80,30 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
 
   app.patch<{ Params: { id: string } }>('/api/goals/:id', async (request, reply) => {
     const body = request.body as Record<string, unknown> | null;
+
+    // Validate status if provided
+    if (body?.status !== undefined && !isValidStatus(body.status)) {
+      return reply.status(400).send({
+        error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`,
+      });
+    }
+
+    // Validate contextCondition if provided
+    if (body?.contextCondition !== undefined && !isValidContextCondition(body.contextCondition)) {
+      return reply.status(400).send({
+        error: `Invalid contextCondition. Must be one of: ${VALID_CONTEXT_CONDITIONS.join(', ')}`,
+      });
+    }
+
     const updated = registry.updateGoal(request.params.id, {
       title: typeof body?.title === 'string' ? body.title : undefined,
       description:
         body?.description !== undefined ? (body.description as string | null) : undefined,
       successCriteria: Array.isArray(body?.successCriteria) ? body.successCriteria : undefined,
-      status: typeof body?.status === 'string' ? (body.status as GoalStatus) : undefined,
-      contextCondition:
-        typeof body?.contextCondition === 'string'
-          ? (body.contextCondition as 'none' | 'compiled' | 'partial' | 'unknown')
-          : undefined,
+      status: isValidStatus(body?.status) ? body.status : undefined,
+      contextCondition: isValidContextCondition(body?.contextCondition)
+        ? body.contextCondition
+        : undefined,
       bootPayloadTokens:
         body?.bootPayloadTokens !== undefined
           ? (body.bootPayloadTokens as number | null)

@@ -5,12 +5,32 @@ import Database from 'better-sqlite3';
  * The GoalRegistry class wraps this with typed methods.
  */
 export class GoalStore {
-  readonly db: Database.Database;
+  private db: Database.Database;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.migrate();
+  }
+
+  /** Execute a query and return a single row */
+  get<T = unknown>(sql: string, ...params: unknown[]): T | undefined {
+    return this.db.prepare(sql).get(...params) as T | undefined;
+  }
+
+  /** Execute a query and return all rows */
+  all<T = unknown>(sql: string, ...params: unknown[]): T[] {
+    return this.db.prepare(sql).all(...params) as T[];
+  }
+
+  /** Execute a statement (INSERT, UPDATE, DELETE) */
+  run(sql: string, ...params: unknown[]): Database.RunResult {
+    return this.db.prepare(sql).run(...params);
+  }
+
+  /** Execute raw SQL (for multi-statement operations) */
+  exec(sql: string): void {
+    this.db.exec(sql);
   }
 
   private migrate(): void {

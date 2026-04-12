@@ -64,6 +64,20 @@ describe('Goal Routes', () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('returns 400 for invalid contextCondition', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/goals',
+        payload: {
+          title: 'Test Goal',
+          contextCondition: 'invalid',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid contextCondition');
+    });
   });
 
   // ── GET /api/goals ──────────────────────────────────────────
@@ -89,6 +103,16 @@ describe('Goal Routes', () => {
       });
       expect(response.statusCode).toBe(200);
       expect(response.json()).toHaveLength(1);
+    });
+
+    it('returns 400 for invalid status query param', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/goals?status=bogus',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid status');
     });
   });
 
@@ -151,6 +175,32 @@ describe('Goal Routes', () => {
         payload: { title: 'x' },
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 400 for invalid status in body', async () => {
+      const goal = registry.createGoal('Test Goal');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/goals/${goal.id}`,
+        payload: { status: 'bogus' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid status');
+    });
+
+    it('returns 400 for invalid contextCondition in body', async () => {
+      const goal = registry.createGoal('Test Goal');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/goals/${goal.id}`,
+        payload: { contextCondition: 'invalid' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid contextCondition');
     });
   });
 

@@ -117,3 +117,22 @@ export type {
   PermissionPolicy,
   PermissionEvaluation,
 } from './permissions/types.js';
+
+// Goals
+export { GoalRegistry } from './goals/registry.js';
+export { GoalStore } from './goals/store.js';
+export { goalRoutes } from './goals/routes.js';
+export type {
+  Goal,
+  GoalStatus,
+  ContextCondition,
+  GoalUsageTotals,
+  UsageContribution,
+  GoalArtifact,
+  CreateGoalOpts,
+  UpdateGoalFields,
+  AddContributionInput,
+  AddArtifactInput,
+  ListGoalsOpts,
+  UsageSummary,
+} from './goals/types.js';
