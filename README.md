@@ -410,13 +410,14 @@ if (health.violations.errors > 0) {
 
 ContexGin discovers these files when scanning a workspace:
 
-| File                  | Kind         | Description                                 |
-| --------------------- | ------------ | ------------------------------------------- |
-| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture |
-| `CLAUDE.md`           | reference    | AI session instructions                     |
-| `SERVICES.md`         | service      | Service registry                            |
-| `memory/Profile/*.md` | profile      | User/workspace profile files                |
-| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                   |
+| File                  | Kind         | Description                                                    |
+| --------------------- | ------------ | -------------------------------------------------------------- |
+| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture                    |
+| `CLAUDE.md`           | reference    | AI session instructions                                        |
+| `SERVICES.md`         | service      | Service registry                                               |
+| `memory/Profile/*.md` | profile      | User/workspace profile files                                   |
+| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                                      |
+| `.centaurignore`      | ignore       | Exclude directories from graph traversal (`.gitignore` syntax) |
 
 ## Constitution Templates
 
