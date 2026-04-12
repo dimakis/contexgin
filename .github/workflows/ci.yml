@@ -50,8 +50,8 @@ jobs:
         run: |
           COUNT=$(grep 'Tests' test-output.txt | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
           echo "Test count: $COUNT"
-          if [ -z "$COUNT" ] || [ "$COUNT" -lt 160 ]; then
-            echo "::error::Test count dropped below 160 (got ${COUNT:-0}). Did you accidentally delete tests?"
+          if [ -z "$COUNT" ] || [ "$COUNT" -lt 230 ]; then
+            echo "::error::Test count dropped below 230 (got ${COUNT:-0}). Did you accidentally delete tests?"
             exit 1
           fi
 
@@ -71,20 +71,10 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true
 
-      # ── Future: server phase ──────────────────────────────────
-      # When ContexGin becomes a daemon/API server, add:
-      # - name: Integration tests
-      #   run: npm run test:integration
-      #
-      # - name: Docker build
-      #   run: docker build -t contexgin .
-      #
-      # - name: Health check
-      #   run: |
-      #     docker run -d --name contexgin-test -p 3000:3000 contexgin
-      #     sleep 2
-      #     curl -f http://localhost:3000/health
-      #     docker stop contexgin-test
+      - name: Verify server exports
+        id: verify-server
+        if: always()
+        run: node -e "import('./dist/index.js').then(m => { if (!m.createServer || !m.GraphStore) { console.error('Missing server exports'); process.exit(1); } console.log('Server exports verified'); })"
 
       - name: Summary
         if: always()
@@ -99,6 +89,7 @@ jobs:
           echo "| Test count | ${{ steps.test-count.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ steps.build.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Dist exports | ${{ steps.verify-dist.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server exports | ${{ steps.verify-server.outcome }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Audit | ${{ steps.audit.outcome }} |" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ steps.lint.outcome }}" = "failure" ] || \
@@ -107,7 +98,8 @@ jobs:
              [ "${{ steps.test.outcome }}" = "failure" ] || \
              [ "${{ steps.test-count.outcome }}" = "failure" ] || \
              [ "${{ steps.build.outcome }}" = "failure" ] || \
-             [ "${{ steps.verify-dist.outcome }}" = "failure" ]; then
+             [ "${{ steps.verify-dist.outcome }}" = "failure" ] || \
+             [ "${{ steps.verify-server.outcome }}" = "failure" ]; then
             echo "::error::One or more CI steps failed."
             exit 1
           fi

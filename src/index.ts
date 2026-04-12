@@ -92,6 +92,23 @@ export type {
   IgnorePatterns,
 } from './graph/index.js';
 
+// Server
+export { createServer, type ContexGinServer } from './server/app.js';
+export { startListeners, type ListenerInfo } from './server/listener.js';
+export { startWatcher, type Watcher } from './server/watcher.js';
+export { GraphStore, type GraphSnapshot } from './server/store.js';
+export {
+  DEFAULT_CONFIG,
+  type ServerConfig,
+  type ServerState,
+  type HealthResponse,
+  type CompileRequest,
+  type CompileResponse,
+  type ValidateRequest,
+  type ValidateResponse,
+  type GraphResponse,
+} from './server/types.js';
+
 // Permissions
 export { evaluatePermission } from './permissions/policy.js';
 export type {

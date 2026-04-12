@@ -71,6 +71,16 @@ export async function validateFederated(
       total: allResults.length,
       valid: allResults.filter((r) => r.valid).length,
       invalid: allDrift.length,
+      byKind: allResults.reduce(
+        (acc, r) => {
+          const kind = r.claim.kind;
+          if (!acc[kind]) acc[kind] = { total: 0, invalid: 0 };
+          acc[kind].total++;
+          if (!r.valid) acc[kind].invalid++;
+          return acc;
+        },
+        {} as Record<string, { total: number; invalid: number }>,
+      ),
     },
   };
 
