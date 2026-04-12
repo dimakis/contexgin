@@ -93,20 +93,22 @@ Authentication and token management.
 
 let tmpDir: string;
 let root: string;
+let provider: WorkspaceProvider;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-registry-'));
   root = await createFixtureWorkspace(tmpDir);
+  provider = new WorkspaceProvider();
 });
 
 afterEach(async () => {
+  provider.clearCache();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
 describe('WorkspaceProvider', () => {
   describe('discover()', () => {
     it('should find CONSTITUTION.md in workspace roots', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
 
       expect(sources).toHaveLength(1);
@@ -116,7 +118,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should skip roots without CONSTITUTION.md', async () => {
-      const provider = new WorkspaceProvider();
       const emptyDir = path.join(tmpDir, 'empty');
       await fs.mkdir(emptyDir, { recursive: true });
 
@@ -127,7 +128,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should handle multiple roots', async () => {
-      const provider = new WorkspaceProvider();
       const root2 = path.join(tmpDir, 'workspace2');
       await fs.mkdir(root2, { recursive: true });
       await fs.writeFile(
@@ -141,7 +141,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should return empty array for empty roots list', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([]);
 
       expect(sources).toHaveLength(0);
@@ -150,7 +149,6 @@ describe('WorkspaceProvider', () => {
 
   describe('extract()', () => {
     it('should produce a schema with declarations from constitution', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
       const schema = await provider.extract(sources[0]);
 
@@ -161,7 +159,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should include file_exists and directory_exists declarations from tree', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
       const schema = await provider.extract(sources[0]);
 
@@ -177,7 +174,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should include spoke_declared declarations', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
       const schema = await provider.extract(sources[0]);
 
@@ -191,7 +187,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should include entry_point declarations', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
       const schema = await provider.extract(sources[0]);
 
@@ -200,7 +195,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should set watch config for continuous CONSTITUTION.md monitoring', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
       const schema = await provider.extract(sources[0]);
 
@@ -211,7 +205,6 @@ describe('WorkspaceProvider', () => {
 
   describe('createValidators()', () => {
     it('should return validators for all workspace declaration kinds', () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
 
       const kinds = validators.map((v) => v.kind);
@@ -225,7 +218,6 @@ describe('WorkspaceProvider', () => {
 
   describe('validators', () => {
     it('file_exists: valid for existing file', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const fileValidator = validators.find((v) => v.kind === 'file_exists')!;
 
@@ -238,7 +230,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('file_exists: invalid for missing file', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const fileValidator = validators.find((v) => v.kind === 'file_exists')!;
 
@@ -252,7 +243,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('directory_exists: valid for existing directory', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const dirValidator = validators.find((v) => v.kind === 'directory_exists')!;
 
@@ -265,7 +255,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('directory_exists: invalid for missing directory', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const dirValidator = validators.find((v) => v.kind === 'directory_exists')!;
 
@@ -278,7 +267,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('spoke_declared: valid for existing spoke directory', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const spokeValidator = validators.find((v) => v.kind === 'spoke_declared')!;
 
@@ -296,7 +284,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('spoke_declared: invalid for missing spoke directory', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const spokeValidator = validators.find((v) => v.kind === 'spoke_declared')!;
 
@@ -315,7 +302,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('file_exists: resolves relative path against workspaceRoot', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const fileValidator = validators.find((v) => v.kind === 'file_exists')!;
 
@@ -329,7 +315,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('directory_exists: invalid when target is a file', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const dirValidator = validators.find((v) => v.kind === 'directory_exists')!;
 
@@ -344,7 +329,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('external_reference: valid for existing path', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const extValidator = validators.find((v) => v.kind === 'external_reference')!;
 
@@ -359,7 +343,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('external_reference: invalid for missing path', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const extValidator = validators.find((v) => v.kind === 'external_reference')!;
 
@@ -374,7 +357,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('external_reference: expands tilde paths', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const extValidator = validators.find((v) => v.kind === 'external_reference')!;
 
@@ -388,7 +370,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('entry_point: valid for existing script', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const epValidator = validators.find((v) => v.kind === 'entry_point')!;
 
@@ -406,7 +387,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('entry_point: skips HTTP endpoints', async () => {
-      const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
       const epValidator = validators.find((v) => v.kind === 'entry_point')!;
 
@@ -417,12 +397,43 @@ describe('WorkspaceProvider', () => {
 
       expect(result.valid).toBe(true); // skipped, not validated
     });
+
+    it('entry_point: invalid for missing script', async () => {
+      const validators = provider.createValidators();
+      const epValidator = validators.find((v) => v.kind === 'entry_point')!;
+
+      const result = await epValidator.validate(
+        {
+          kind: 'entry_point',
+          target: './nonexistent.sh',
+          severity: 'warning',
+          metadata: { resolveRoot: root },
+        },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('not found');
+      expect(result.remediation).toBeDefined();
+    });
+
+    it('file_exists: invalid when target is a directory', async () => {
+      const validators = provider.createValidators();
+      const fileValidator = validators.find((v) => v.kind === 'file_exists')!;
+
+      const result = await fileValidator.validate(
+        { kind: 'file_exists', target: path.join(root, 'src'), severity: 'error' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.actual).toBe('directory');
+      expect(result.remediation).toContain('directory_exists');
+    });
   });
 
   describe('validateViaGraph()', () => {
     it('should produce violations matching direct graph validation', async () => {
-      const provider = new WorkspaceProvider();
-
       // Direct graph path
       const graph = await buildGraph([root]);
       const directViolations = await validateGraph(graph);
@@ -437,7 +448,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should detect missing spoke (ghost)', async () => {
-      const provider = new WorkspaceProvider();
       const results = await provider.validateViaGraph([root]);
       const invalid = results.filter((r) => !r.valid);
 
@@ -449,7 +459,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should detect missing constitution for api spoke', async () => {
-      const provider = new WorkspaceProvider();
       const results = await provider.validateViaGraph([root]);
       const invalid = results.filter((r) => !r.valid);
 
@@ -462,7 +471,6 @@ describe('WorkspaceProvider', () => {
 
   describe('cache', () => {
     it('should cache graph between extract calls', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
 
       const schema1 = await provider.extract(sources[0]);
@@ -473,7 +481,6 @@ describe('WorkspaceProvider', () => {
     });
 
     it('should clear cache when clearCache() is called', async () => {
-      const provider = new WorkspaceProvider();
       const sources = await provider.discover([root]);
 
       await provider.extract(sources[0]);

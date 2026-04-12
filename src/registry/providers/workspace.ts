@@ -182,11 +182,12 @@ export class WorkspaceProvider implements SchemaProvider {
 
   /** Build or return cached graph */
   private async getGraph(roots: string[]): Promise<HubGraph> {
+    // Use null byte delimiter — root paths may contain ':' (e.g. on some platforms)
     const rootsKey = roots
       .map((r) => path.resolve(r))
       .sort()
-      .join(':');
-    const cachedKey = [...this.cachedRoots].sort().join(':');
+      .join('\0');
+    const cachedKey = [...this.cachedRoots].sort().join('\0');
 
     if (this.cachedGraph && rootsKey === cachedKey) {
       return this.cachedGraph;
@@ -319,6 +320,11 @@ const entryPointValidator: Validator = {
         message: `Function export (not filesystem-validated): ${command}`,
       };
     }
+    // System command heuristic: if the base command doesn't start with a
+    // relative path prefix (./ or ../) and contains no dot (i.e. no file
+    // extension), treat it as a bare executable on PATH (e.g. "node", "npm",
+    // "python"). Commands with dots like "start.sh" or "run.py" are treated
+    // as local scripts and validated against the filesystem.
     if (!baseCmd.startsWith('./') && !baseCmd.startsWith('../') && !baseCmd.includes('.')) {
       return {
         declaration,
@@ -347,9 +353,13 @@ const entryPointValidator: Validator = {
 const externalReferenceValidator: Validator = {
   kind: 'external_reference',
   async validate(declaration): Promise<ValidationResult> {
-    const refPath = declaration.target.startsWith('~')
-      ? path.join(os.homedir(), declaration.target.slice(1))
-      : path.resolve(declaration.target);
+    // Only expand '~' (bare) or '~/...' — not '~user' forms, which would
+    // require passwd lookup and mean a different home directory.
+    const target = declaration.target;
+    const refPath =
+      target === '~' || target.startsWith('~/')
+        ? path.join(os.homedir(), target.slice(1))
+        : path.resolve(target);
 
     try {
       await fs.access(refPath);
