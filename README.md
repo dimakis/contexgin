@@ -2,7 +2,7 @@
 
 Context infrastructure for the [Centaur](https://github.com/dimakis/centaur) agent ecosystem. Compiles, validates, and maintains structured context payloads that agents consume at boot and throughout their lifecycle.
 
-ContexGin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, ContexGin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, ContexGin isn't the right tool.
+ContexGin is opinionated — it's designed around the hub-spoke topology defined in the Centaur ecosystem. But the compiler works on any workspace with markdown context files (a `CONSTITUTION.md`, `CLAUDE.md`, or similar). You don't need spokes to get value from compilation, relevance ranking, and token budgeting. The hub-spoke model unlocks the full feature set — structural validation, cross-spoke boundaries, drift detection — but a flat project with a constitution file compiles just fine.
 
 **Provider-agnostic** — context compilation is independent of which LLM runs the agent loop.
 
@@ -227,8 +227,8 @@ interface CompileOptions {
 }
 
 interface CompiledContext {
-  bootPayload: string; // System prompt content
-  contextBlocks: Map<string, string>; // Per-turn injections
+  bootPayload: string; // System prompt — injected at session start
+  contextBlocks: Map<string, string>; // Deferred context keyed by spoke/topic
   navigationHints: string[]; // Reading order suggestions
   bootTokens: number; // Token count
   sources: ContextSource[]; // Contributing sources
@@ -248,6 +248,14 @@ interface DriftReport {
   };
 }
 ```
+
+### Boot vs Per-Turn Context
+
+`bootPayload` is everything the agent gets at session start — compiled within the token budget. But not all relevant context belongs at boot. Sections that are important but didn't make the budget cut can be deferred as **context blocks** — injected mid-turn when the agent actually enters that area of the codebase.
+
+The flow: agent reads a file → harness hook detects the spoke → fetches the context block from ContexGin → injects it as a system reminder. No boot tokens spent until the agent goes there.
+
+`contextBlocks` is currently a placeholder (populated as an empty Map). Implementation is tracked in [#14](https://github.com/dimakis/contexgin/issues/14).
 
 ## Daemon
 
