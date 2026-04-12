@@ -258,6 +258,7 @@ async function runServe(roots: string[], args: string[]) {
     port: portFlag !== null ? Number(portFlag) : DEFAULT_CONFIG.port,
     socketPath: parseFlag(args, '--socket'),
     dbPath: parseFlag(args, '--db') ?? DEFAULT_CONFIG.dbPath,
+    goalsDbPath: parseFlag(args, '--goals-db') ?? DEFAULT_CONFIG.goalsDbPath,
     watch: !args.includes('--no-watch'),
   };
 

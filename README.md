@@ -1,14 +1,95 @@
-# Contexgin
+# ContexGin
 
-A context orchestration engine for AI agent harnesses. Compiles, validates, and maintains structured context payloads that AI agents consume at session start and throughout their lifecycle.
+Context infrastructure for the [Centaur](https://github.com/dimakis/centaur) agent ecosystem. Compiles, validates, and maintains structured context payloads that agents consume at boot and throughout their lifecycle.
+
+ContexGin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, ContexGin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, ContexGin isn't the right tool.
 
 **Provider-agnostic** — context compilation is independent of which LLM runs the agent loop.
 
-## Why
+## The Hub-Spoke Model
 
-Agent harnesses (Claude Code, Codex CLI, Cursor) solve tool calling and UX. Nobody solves context. The hard problem isn't "call a function" — it's "know what to inject, when to refresh it, and how to keep it honest."
+ContexGin organises workspaces as a **hub-spoke topology**. This is the foundational pattern everything else builds on.
 
-Contexgin automates that discipline: parse your workspace's context files, rank sections by relevance, trim to a token budget, and validate that the context still matches reality.
+A **hub** is a workspace root — a directory with a `CONSTITUTION.md` at its root that declares its purpose, architecture, principles, and structural contract. A hub contains **spokes** — bounded sub-contexts, each with their own constitution, governance, and directory tree.
+
+```
+~/redhat/mgmt/                  ← Hub
+├── CONSTITUTION.md              ← Declares the hub's structure
+├── command_center/              ← Spoke: operational tooling
+│   └── CONSTITUTION.md
+├── architecture/                ← Spoke: design discussions
+│   └── CONSTITUTION.md
+├── memory/                      ← Spoke: persistent observations
+│   └── CONSTITUTION.md
+└── jira_process/                ← Spoke: data workspace
+    └── CONSTITUTION.md
+```
+
+Why this topology:
+
+- **Bounded contexts** — each spoke has its own governance. A PR review agent doesn't need access to career notes. Boundaries are declared, not implied.
+- **Composable context** — the compiler pulls from specific hubs and spokes to assemble a payload. Different agents get different slices of the same workspace.
+- **Structural validation** — constitutions declare what should exist. ContexGin checks whether reality matches. Drift is detected, not assumed away.
+- **Cross-workspace federation** — multiple hubs connect through external references. A management hub can depend on a projects hub without either owning the other.
+
+The hub-spoke model isn't a universal standard — it's a deliberate implementation choice for workspaces where structured context matters more than ad-hoc discovery.
+
+## What ContexGin Does
+
+Agent harnesses (Claude Code, Cursor, Codex CLI) solve tool calling and user experience — and those are genuinely hard problems. ContexGin doesn't replace any of that. It solves a complementary problem: **what context does the agent receive, and how do you keep it honest?**
+
+A well-contexted agent session starts closer to understanding. It doesn't ask questions the workspace already answers, doesn't violate conventions it wasn't told about, doesn't waste tokens rediscovering what could have been stated. The gap between a bare session and a context-compiled session is immediately measurable in tokens spent to reach a correct result.
+
+ContexGin automates the discipline: parse constitutions, rank sections by relevance, trim to a token budget, validate that declared structure matches reality, and serve it all over an API.
+
+## Agent Definitions
+
+Standard agent frameworks define agents as **tools + prompt**. Centaur defines agents as **tools + compiled context + governance + output conventions**. The difference is that context is not a flat prompt string — it's a structured compilation from hubs, spokes, profiles, and memory, assembled within a token budget.
+
+An agent definition is a config file that describes what context an agent should receive. The schema is defined in the [Centaur repo](https://github.com/dimakis/centaur) under `schemas/agent/`. ContexGin does not consume these configs yet — this is the target integration point where the compiler will read agent definitions to assemble context payloads automatically.
+
+```yaml
+kind: AgentDefinition
+version: "0.1"
+
+identity:
+  name: pr-reviewer
+  description: Reviews PRs against architecture docs and writing guidelines
+  mode: narrow # static context, single purpose
+
+context:
+  budget: 12000 # token ceiling
+  sources:
+    hubs:
+      - path: ~/redhat/mgmt
+        spokes: [architecture]
+  priority:
+    - architecture/discussions/**
+  exclude:
+    - memory/**
+    - career/**
+
+output:
+  conventions:
+    commit_style: conventional
+  guides:
+    - docs/review-criteria.md
+
+governance:
+  boundaries:
+    - spoke: career
+      access: none
+
+memory:
+  scope: none # narrow agents don't persist memory
+```
+
+Two modes from the same schema:
+
+- **Narrow agents** — static context, single purpose. Every session compiles the same payload. A PR reviewer, a code auditor, a doc linter. The value is composability: define a config, point ContexGin at it, get a purpose-built agent.
+- **Dynamic agents** — growing context over sessions. Memory scope is read-write, the vault accumulates observations and decisions, the compiler includes relevant vault content ranked by recency. A workspace assistant that learns over time.
+
+**What's enforceable and what isn't**: Context selection (which hubs, spokes, budget) is fully enforceable — the compiler controls the payload. Governance boundaries are enforceable at both compiler level (won't include inaccessible content) and harness level (can reject tool calls). Output conventions (writing style, commit format) are injected as context instructions — a strong nudge, not a runtime guarantee. LLMs can drift past injected instructions. The schema acknowledges this enforcement gap rather than pretending it's solved.
 
 ## Install
 
@@ -16,7 +97,7 @@ Contexgin automates that discipline: parse your workspace's context files, rank 
 npm install github:dimakis/contexgin
 ```
 
-## Quick Start
+## Library Usage
 
 ### Compile context for a workspace
 
@@ -90,7 +171,7 @@ Parses markdown context sources into a heading tree, extracts sections, ranks by
 | `trimToBudget(sections, budget)`   | Enforce token budget                       |
 | `estimateTokens(text)`             | ~4 chars/token heuristic                   |
 
-**Relevance tiers** (highest → lowest):
+**Relevance tiers** (highest to lowest):
 
 | Tier           | Weight | Examples                                        |
 | -------------- | ------ | ----------------------------------------------- |
@@ -111,6 +192,14 @@ Extracts testable claims from context files and validates them against the files
 | `validateAll(claims, root)`          | Validate all, produce `DriftReport` |
 
 **Claim types**: `file_exists`, `directory_exists`, `entry_point`, `boundary`, `structural`
+
+### Graph
+
+Builds a structural graph from parsed constitutions. Nodes are hubs and spokes; edges are dependencies, boundaries, and cross-hub references. The graph is the foundation for reference resolution (fixing cross-spoke false positives) and structural validation.
+
+### Server (Daemon)
+
+HTTP daemon built on Fastify. Holds the structural graph in memory, watches for constitution changes, and serves compilation and validation over a REST API.
 
 ### Navigation
 
@@ -309,26 +398,17 @@ const { context, tokens, sources } = await res.json();
 
 ```typescript
 // Monitor for drift in an agent loop
-const health = await fetch('http://127.0.0.1:4195/health').then((r) => r.json());
+const health = await fetch('http://127.0.0.1:4195/health').then((r) =>
+  r.json(),
+);
 if (health.violations.errors > 0) {
   console.warn(`Structural drift: ${health.violations.errors} errors`);
 }
 ```
 
-## Development
+## Context Files
 
-```bash
-npm test           # Vitest — 235 tests across 23 files
-npm run build      # tsup (ESM + declarations)
-npm run lint       # ESLint + Prettier
-npm run check      # TypeScript type check
-```
-
-TDD: tests first, implementation second. Conventional commits. Feature branches with PRs.
-
-## Context Files It Understands
-
-Contexgin looks for these files when discovering context sources:
+ContexGin discovers these files when scanning a workspace:
 
 | File                  | Kind         | Description                                 |
 | --------------------- | ------------ | ------------------------------------------- |
@@ -345,6 +425,17 @@ See `examples/` for constitution templates:
 - `hub-constitution.md` — Root workspace with sub-repo charters
 - `spoke-constitution.md` — Leaf spoke with full sections
 - `minimal-constitution.md` — Bare minimum to be valid
+
+## Development
+
+```bash
+npm test           # Vitest — 235 tests across 23 files
+npm run build      # tsup (ESM + declarations)
+npm run lint       # ESLint + Prettier
+npm run check      # TypeScript type check
+```
+
+TDD: tests first, implementation second. Conventional commits. Feature branches with PRs — never commit directly to main (enforced by pre-commit hook).
 
 ## License
 
