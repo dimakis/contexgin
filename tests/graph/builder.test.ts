@@ -54,8 +54,10 @@ Authentication and token management.
 
 ## Dependencies
 
-- \`db\` — needs database access
-- \`config\` — reads configuration
+| Dependency | Purpose |
+|------------|---------|
+| \`db\` | Needs database access |
+| \`config\` | Reads configuration |
 
 ## Directory Semantics
 

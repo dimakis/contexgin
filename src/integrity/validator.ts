@@ -70,9 +70,23 @@ export async function validateClaim(claim: Claim, workspaceRoot: string): Promis
       const actual = await walkFilesystem(workspaceRoot, { maxDepth });
       const diff = diffTrees(treeClaim.declaredTree, actual);
       const valid = diff.declaredButMissing.length === 0;
-      const message = valid
-        ? `Tree structure: all ${diff.matched.length} declared paths found`
-        : `Tree structure: ${diff.declaredButMissing.length} declared path(s) missing — ${diff.declaredButMissing.map((n) => n.path).join(', ')}`;
+      const parts: string[] = [];
+      if (diff.declaredButMissing.length > 0) {
+        parts.push(
+          `${diff.declaredButMissing.length} declared path(s) missing — ${diff.declaredButMissing.map((n) => n.path).join(', ')}`,
+        );
+      }
+      if (diff.presentButUndeclared.length > 0) {
+        parts.push(
+          `${diff.presentButUndeclared.length} undeclared path(s) on disk — ${diff.presentButUndeclared.map((n) => n.path).join(', ')}`,
+        );
+      }
+      const message =
+        valid && diff.presentButUndeclared.length === 0
+          ? `Tree structure: all ${diff.matched.length} declared paths found, no undeclared paths`
+          : parts.length > 0
+            ? `Tree structure: ${parts.join('; ')}`
+            : `Tree structure: all ${diff.matched.length} declared paths found`;
       return { claim, valid, diff, message } as TreeClaimResult;
     }
 

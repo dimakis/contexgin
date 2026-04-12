@@ -71,18 +71,10 @@ export function parseAsciiTree(content: string): ParseResult {
     if (!inTreeBlock) {
       if (TREE_CHARS.test(line)) {
         inTreeBlock = true;
-        // Check if the previous line in the block was the root
-        // We need to re-check — but we handle root below
+        // Any buffered root line is now confirmed as the workspace root — discard it
+        // fall through to parse this line as a tree entry
       } else {
-        // Could be the root line of a tree (e.g. "mgmt/    ← root")
-        // We'll know it's a tree when we see tree chars on subsequent lines
-        // Store potential root
-        const trimmed = line.trim();
-        if (trimmed && trimmed.endsWith('/')) {
-          pathStack.length = 0;
-          // Don't add root to nodes — it's the workspace root itself
-          continue;
-        }
+        // Buffer non-tree lines — only consumed if tree chars follow
         continue;
       }
     }

@@ -7,6 +7,8 @@ import { healthRoute } from './routes/health.js';
 import { compileRoute } from './routes/compile.js';
 import { validateRoute } from './routes/validate.js';
 import { graphRoutes } from './routes/graph.js';
+import { GoalRegistry } from '../goals/registry.js';
+import { goalRoutes } from '../goals/routes.js';
 
 export interface ContexGinServer {
   app: FastifyInstance;
@@ -40,6 +42,10 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   compileRoute(app, state);
   validateRoute(app, config);
   graphRoutes(app, state);
+
+  // Goal registry
+  const goalRegistry = new GoalRegistry(config.goalsDbPath);
+  goalRoutes(app, goalRegistry);
 
   // Serialize rebuilds — if one is in flight, the next caller waits for it
   let rebuildInFlight: Promise<void> | null = null;
@@ -88,6 +94,7 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   }
 
   async function shutdown(): Promise<void> {
+    goalRegistry.close();
     store.close();
     await app.close();
   }

@@ -1,14 +1,14 @@
-# Contexgin
+# ContexGin
 
 Context infrastructure for the [Centaur](https://github.com/dimakis/centaur) agent ecosystem. Compiles, validates, and maintains structured context payloads that agents consume at boot and throughout their lifecycle.
 
-Contexgin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, Contexgin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, Contexgin isn't the right tool.
+ContexGin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, ContexGin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, ContexGin isn't the right tool.
 
 **Provider-agnostic** — context compilation is independent of which LLM runs the agent loop.
 
 ## The Hub-Spoke Model
 
-Contexgin organises workspaces as a **hub-spoke topology**. This is the foundational pattern everything else builds on.
+ContexGin organises workspaces as a **hub-spoke topology**. This is the foundational pattern everything else builds on.
 
 A **hub** is a workspace root — a directory with a `CONSTITUTION.md` at its root that declares its purpose, architecture, principles, and structural contract. A hub contains **spokes** — bounded sub-contexts, each with their own constitution, governance, and directory tree.
 
@@ -29,22 +29,67 @@ Why this topology:
 
 - **Bounded contexts** — each spoke has its own governance. A PR review agent doesn't need access to career notes. Boundaries are declared, not implied.
 - **Composable context** — the compiler pulls from specific hubs and spokes to assemble a payload. Different agents get different slices of the same workspace.
-- **Structural validation** — constitutions declare what should exist. Contexgin checks whether reality matches. Drift is detected, not assumed away.
+- **Structural validation** — constitutions declare what should exist. ContexGin checks whether reality matches. Drift is detected, not assumed away.
 - **Cross-workspace federation** — multiple hubs connect through external references. A management hub can depend on a projects hub without either owning the other.
 
 The hub-spoke model isn't a universal standard — it's a deliberate implementation choice for workspaces where structured context matters more than ad-hoc discovery.
 
-## What Contexgin Does
+## What ContexGin Does
 
-Agent harnesses (Claude Code, Cursor, Codex CLI) solve tool calling and user experience — and those are genuinely hard problems. Contexgin doesn't replace any of that. It solves a complementary problem: **what context does the agent receive, and how do you keep it honest?**
+Agent harnesses (Claude Code, Cursor, Codex CLI) solve tool calling and user experience — and those are genuinely hard problems. ContexGin doesn't replace any of that. It solves a complementary problem: **what context does the agent receive, and how do you keep it honest?**
 
 A well-contexted agent session starts closer to understanding. It doesn't ask questions the workspace already answers, doesn't violate conventions it wasn't told about, doesn't waste tokens rediscovering what could have been stated. The gap between a bare session and a context-compiled session is immediately measurable in tokens spent to reach a correct result.
 
-Contexgin automates the discipline: parse constitutions, rank sections by relevance, trim to a token budget, validate that declared structure matches reality, and serve it all over an API.
+ContexGin automates the discipline: parse constitutions, rank sections by relevance, trim to a token budget, validate that declared structure matches reality, and serve it all over an API.
 
 ## Agent Definitions
 
-Centaur defines agents as **tools + compiled context + governance + output conventions**. Contexgin compiles the context portion — it reads the hub-spoke topology but does not parse agent definition files directly. Agent definition schemas (YAML configs describing context sources, budgets, modes, and governance boundaries) live in the [Centaur repo](https://github.com/dimakis/centaur/tree/main/schemas/agent/).
+Standard agent frameworks define agents as **tools + prompt**. Centaur defines agents as **tools + compiled context + governance + output conventions**. The difference is that context is not a flat prompt string — it's a structured compilation from hubs, spokes, profiles, and memory, assembled within a token budget.
+
+An agent definition is a config file that describes what context an agent should receive. The schema is defined in the [Centaur repo](https://github.com/dimakis/centaur) under `schemas/agent/`. ContexGin does not consume these configs yet — this is the target integration point where the compiler will read agent definitions to assemble context payloads automatically.
+
+```yaml
+kind: AgentDefinition
+version: '0.1'
+
+identity:
+  name: pr-reviewer
+  description: Reviews PRs against architecture docs and writing guidelines
+  mode: narrow # static context, single purpose
+
+context:
+  budget: 12000 # token ceiling
+  sources:
+    hubs:
+      - path: ~/redhat/mgmt
+        spokes: [architecture]
+  priority:
+    - architecture/discussions/**
+  exclude:
+    - memory/**
+    - career/**
+
+output:
+  conventions:
+    commit_style: conventional
+  guides:
+    - docs/review-criteria.md
+
+governance:
+  boundaries:
+    - spoke: career
+      access: none
+
+memory:
+  scope: none # narrow agents don't persist memory
+```
+
+Two modes from the same schema:
+
+- **Narrow agents** — static context, single purpose. Every session compiles the same payload. A PR reviewer, a code auditor, a doc linter. The value is composability: define a config, point ContexGin at it, get a purpose-built agent.
+- **Dynamic agents** — growing context over sessions. Memory scope is read-write, the vault accumulates observations and decisions, the compiler includes relevant vault content ranked by recency. A workspace assistant that learns over time.
+
+**What's enforceable and what isn't**: Context selection (which hubs, spokes, budget) is fully enforceable — the compiler controls the payload. Governance boundaries are enforceable at both compiler level (won't include inaccessible content) and harness level (can reject tool calls). Output conventions (writing style, commit format) are injected as context instructions — a strong nudge, not a runtime guarantee. LLMs can drift past injected instructions. The schema acknowledges this enforcement gap rather than pretending it's solved.
 
 ## Install
 
@@ -155,18 +200,6 @@ Builds a structural graph from parsed constitutions. Nodes are hubs and spokes; 
 ### Server (Daemon)
 
 HTTP daemon built on Fastify. Holds the structural graph in memory, watches for constitution changes, and serves compilation and validation over a REST API.
-
-### Tools
-
-Registry for managing available tools in an agent session. Tools are registered by name and looked up at runtime during context compilation.
-
-Source: `src/tools/registry.ts`
-
-### Permissions
-
-Policy engine for tool-level access control. Evaluates permission requests against a rule set (with glob matching) — first matching rule wins, with a configurable default decision.
-
-Source: `src/permissions/policy.ts`
 
 ### Navigation
 
@@ -322,15 +355,73 @@ For integration examples (Claude Code hooks, Cursor rules, custom agent snippets
 
 ## Context Files
 
-Contexgin discovers these files when scanning a workspace:
+Add to your project's `CLAUDE.md`:
 
-| File                  | Kind         | Description                                 |
-| --------------------- | ------------ | ------------------------------------------- |
-| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture |
-| `CLAUDE.md`           | reference    | AI session instructions                     |
-| `SERVICES.md`         | service      | Service registry                            |
-| `memory/Profile/*.md` | profile      | User/workspace profile files                |
-| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                   |
+```markdown
+## Workspace Health
+
+ContexGin daemon runs at http://127.0.0.1:4195. Before starting work:
+
+- `curl http://127.0.0.1:4195/health` — check for structural errors
+- `curl -X POST http://127.0.0.1:4195/compile -H 'Content-Type: application/json' -d '{"spoke":"<spoke>","task":"<your task>"}'` — get compiled context for the spoke you're working in
+```
+
+#### Cursor (.cursor/rules/)
+
+Create `.cursor/rules/contexgin.mdc`:
+
+```markdown
+---
+description: ContexGin workspace context
+alwaysApply: false
+globs: ['**/CONSTITUTION.md', '**/CLAUDE.md']
+---
+
+When editing constitution or context files, validate changes:
+\`\`\`bash
+curl -X POST http://127.0.0.1:4195/validate -H 'Content-Type: application/json' -d '{}'
+\`\`\`
+
+Check for structural drift before committing governance changes.
+```
+
+#### Mitzo / Custom Agents
+
+```typescript
+// Fetch compiled context for a task
+const res = await fetch('http://127.0.0.1:4195/compile', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    spoke: 'command_center',
+    task: 'add new briefing type',
+    budget: 6000,
+  }),
+});
+const { context, tokens, sources } = await res.json();
+// Inject `context` into your agent's system prompt
+```
+
+```typescript
+// Monitor for drift in an agent loop
+const health = await fetch('http://127.0.0.1:4195/health').then((r) => r.json());
+if (health.violations.errors > 0) {
+  console.warn(`Structural drift: ${health.violations.errors} errors`);
+}
+```
+
+## Context Files
+
+ContexGin discovers these files when scanning a workspace:
+
+| File                  | Kind         | Description                                                    |
+| --------------------- | ------------ | -------------------------------------------------------------- |
+| `CONSTITUTION.md`     | constitution | Workspace/spoke governance and architecture                    |
+| `CLAUDE.md`           | reference    | AI session instructions                                        |
+| `SERVICES.md`         | service      | Service registry                                               |
+| `memory/Profile/*.md` | profile      | User/workspace profile files                                   |
+| `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                                      |
+| `.centaurignore`      | ignore       | Exclude directories from graph traversal (`.gitignore` syntax) |
 
 ## Constitution Templates
 

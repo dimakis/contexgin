@@ -8,5 +8,7 @@ export { diffTrees } from './tree-diff.js';
 export type { TreeDiffResult } from './tree-diff.js';
 export { validateFederated } from './federated.js';
 export type { FederatedDriftReport, FederatedOptions } from './federated.js';
+export { extractDocContracts, extractDocClaims } from './doc-claims.js';
+export { validateDocClaims } from './doc-validator.js';
 export * from './types.js';
 export * from './drift.js';

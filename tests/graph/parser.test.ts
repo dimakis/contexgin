@@ -198,38 +198,33 @@ Path | What belongs here
   });
 
   describe('Dependencies extraction', () => {
-    it('extracts backtick references from bullet list', () => {
+    it('ignores bullet-list dependencies (no backtick mining)', () => {
       const content = `## Dependencies
 
 - \`auth/\` — needs token validation
 - \`db/\` — stores data
 `;
       const result = parseConstitutionContent(content, '/test.md', 'api');
-      expect(result.dependencies).toHaveLength(2);
-      expect(result.dependencies[0].from).toBe('api');
-      expect(result.dependencies[0].to).toBe('auth/');
-      expect(result.dependencies[0].description).toBe('needs token validation');
-      expect(result.dependencies[0].kind).toBe('depends_on');
+      // Bullet lists are not extracted — only table format is supported
+      expect(result.dependencies).toHaveLength(0);
     });
 
-    it('extracts from prose-style bullet with backtick ref', () => {
+    it('ignores prose-style bullets (no backtick mining)', () => {
       const content = `## Dependencies
 
 - Reads from \`jira_process/\` for pipeline data
 `;
       const result = parseConstitutionContent(content, '/test.md', 'api');
-      expect(result.dependencies).toHaveLength(1);
-      expect(result.dependencies[0].to).toBe('jira_process/');
+      expect(result.dependencies).toHaveLength(0);
     });
 
-    it('handles bullet list with no backticks as raw text', () => {
+    it('ignores bullet list with no backticks (no backtick mining)', () => {
       const content = `## Dependencies
 
 - auth service for tokens
 `;
       const result = parseConstitutionContent(content, '/test.md', 'api');
-      expect(result.dependencies).toHaveLength(1);
-      expect(result.dependencies[0].to).toBe('auth service for tokens');
+      expect(result.dependencies).toHaveLength(0);
     });
 
     it('extracts from table format', () => {
@@ -469,7 +464,7 @@ describe('parseConstitution (fixture files)', () => {
       expect(result.boundaries[0].level).toBe('hard');
     });
 
-    it('extracts backtick refs from prose dependencies', async () => {
+    it('extracts dependencies from table format', async () => {
       const result = await parseConstitution(
         path.join(FIXTURES, 'spoke-with-boundaries.md'),
         'internal',
