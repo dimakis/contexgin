@@ -50,6 +50,49 @@ Service spoke for testing.
   return root;
 }
 
+/**
+ * Creates a test workspace with Documentation Contracts that will
+ * produce doc-consistency violations (claimed count doesn't match reality).
+ */
+async function createDocContractWorkspace(tmpDir: string): Promise<string> {
+  const root = path.join(tmpDir, 'doc-workspace');
+  await fs.mkdir(root, { recursive: true });
+
+  // CONSTITUTION.md with a Documentation Contracts table
+  await fs.writeFile(
+    path.join(root, 'CONSTITUTION.md'),
+    `# Doc Contract Hub
+
+## Purpose
+
+A workspace for testing doc-consistency via /validate.
+
+## Documentation Contracts
+
+| Document  | Section | Claim | Strategy | Pattern        | Path |
+| --------- | ------- | ----- | -------- | -------------- | ---- |
+| README.md | Tools   | count | glob     | src/tools/*.ts | .    |
+`,
+  );
+
+  // README.md claims 5 scripts, but we only create 2
+  await fs.writeFile(
+    path.join(root, 'README.md'),
+    `# Doc Contract Hub
+
+## Tools
+
+This workspace ships 5 scripts for automation.
+`,
+  );
+
+  await fs.mkdir(path.join(root, 'src', 'tools'), { recursive: true });
+  await fs.writeFile(path.join(root, 'src', 'tools', 'lint.ts'), '');
+  await fs.writeFile(path.join(root, 'src', 'tools', 'fmt.ts'), '');
+
+  return root;
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 describe('ContexGin Server', () => {
@@ -163,6 +206,26 @@ describe('ContexGin Server', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().summary.hubs).toBe(1);
+    });
+
+    it('includes doc-consistency violations when contracts are present', async () => {
+      const root = await createDocContractWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/validate',
+        payload: { roots: [root] },
+      });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      // The README claims 5 scripts but only 2 exist → should produce a warning
+      expect(body.summary.warnings).toBeGreaterThanOrEqual(1);
+      const docViolation = body.violations.find(
+        (v: { message: string }) => v.message.includes('claims 5') && v.message.includes('found 2'),
+      );
+      expect(docViolation).toBeDefined();
     });
 
     it('returns 400 when no roots available', async () => {

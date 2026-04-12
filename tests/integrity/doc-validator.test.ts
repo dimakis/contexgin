@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { validateDocClaims, findByGlob, extractStem } from '../../src/integrity/doc-validator.js';
+import {
+  validateDocClaims,
+  findByGlob,
+  findByGrep,
+  extractStem,
+} from '../../src/integrity/doc-validator.js';
 import type { CountClaim, ListClaim } from '../../src/integrity/types.js';
 
 const FIXTURE_ROOT = path.resolve(import.meta.dirname, '../fixtures/doc-consistency');
@@ -34,6 +39,33 @@ describe('findByGlob', () => {
   });
 });
 
+describe('findByGrep', () => {
+  it('finds files whose content matches a regex', async () => {
+    const matches = await findByGrep('MODULE_', FIXTURE_ROOT);
+    expect(matches).toHaveLength(3);
+    expect(matches).toContain('src/modules/alpha.ts');
+    expect(matches).toContain('src/modules/beta.ts');
+    expect(matches).toContain('src/modules/gamma.ts');
+  });
+
+  it('finds files matching a word-boundary regex', async () => {
+    const matches = await findByGrep('AGENT_SCOUT', FIXTURE_ROOT);
+    expect(matches).toHaveLength(1);
+    expect(matches).toContain('src/agents/scout.ts');
+  });
+
+  it('returns empty for non-matching patterns', async () => {
+    const matches = await findByGrep('NONEXISTENT_MARKER', FIXTURE_ROOT);
+    expect(matches).toHaveLength(0);
+  });
+
+  it('matches across all files with a broad pattern', async () => {
+    const matches = await findByGrep('MARKER', FIXTURE_ROOT);
+    // All 5 .ts fixture files have MARKER
+    expect(matches).toHaveLength(5);
+  });
+});
+
 describe('extractStem', () => {
   it('extracts filename without extension', () => {
     expect(extractStem('src/modules/alpha.ts')).toBe('alpha');
@@ -57,6 +89,7 @@ describe('validateDocClaims', () => {
           line: 5,
           expectedCount: 3,
           noun: 'modules',
+          strategy: 'glob',
         },
       ];
 
@@ -76,6 +109,7 @@ describe('validateDocClaims', () => {
           line: 5,
           expectedCount: 5,
           noun: 'modules',
+          strategy: 'glob',
         },
       ];
 
@@ -98,6 +132,7 @@ describe('validateDocClaims', () => {
           target: 'src/modules/*.ts',
           line: 5,
           listedItems: ['alpha', 'beta', 'gamma'],
+          strategy: 'glob',
         },
       ];
 
@@ -116,6 +151,7 @@ describe('validateDocClaims', () => {
           target: 'src/modules/*.ts',
           line: 5,
           listedItems: ['alpha', 'beta', 'gamma', 'delta'],
+          strategy: 'glob',
         },
       ];
 
@@ -135,6 +171,7 @@ describe('validateDocClaims', () => {
           target: 'src/modules/*.ts',
           line: 5,
           listedItems: ['alpha', 'beta'],
+          strategy: 'glob',
         },
       ];
 
@@ -154,6 +191,7 @@ describe('validateDocClaims', () => {
           target: 'src/modules/*.ts',
           line: 5,
           listedItems: ['alpha', 'beta', 'delta'],
+          strategy: 'glob',
         },
       ];
 
@@ -162,6 +200,87 @@ describe('validateDocClaims', () => {
       expect(results[0].valid).toBe(false);
       expect(results[0].message).toContain('delta');
       expect(results[0].message).toContain('gamma');
+    });
+  });
+
+  describe('grep strategy', () => {
+    it('validates count via grep', async () => {
+      const claims: CountClaim[] = [
+        {
+          source: 'README.md',
+          assertion: 'test grep count',
+          kind: 'count_matches',
+          target: 'MODULE_',
+          line: 1,
+          expectedCount: 3,
+          noun: 'modules',
+          strategy: 'grep',
+        },
+      ];
+
+      const results = await validateDocClaims(claims, FIXTURE_ROOT);
+      expect(results).toHaveLength(1);
+      expect(results[0].valid).toBe(true);
+    });
+
+    it('validates list via grep', async () => {
+      const claims: ListClaim[] = [
+        {
+          source: 'README.md',
+          assertion: 'test grep list',
+          kind: 'list_complete',
+          target: 'AGENT_',
+          line: 1,
+          listedItems: ['scout', 'builder'],
+          strategy: 'grep',
+        },
+      ];
+
+      const results = await validateDocClaims(claims, FIXTURE_ROOT);
+      expect(results).toHaveLength(1);
+      expect(results[0].valid).toBe(true);
+    });
+
+    it('reports incorrect grep count', async () => {
+      const claims: CountClaim[] = [
+        {
+          source: 'README.md',
+          assertion: 'test grep count mismatch',
+          kind: 'count_matches',
+          target: 'MODULE_',
+          line: 1,
+          expectedCount: 10,
+          noun: 'modules',
+          strategy: 'grep',
+        },
+      ];
+
+      const results = await validateDocClaims(claims, FIXTURE_ROOT);
+      expect(results).toHaveLength(1);
+      expect(results[0].valid).toBe(false);
+      expect(results[0].actual).toBe('3');
+    });
+  });
+
+  describe('searchPath', () => {
+    it('restricts search to sub-root', async () => {
+      const claims: CountClaim[] = [
+        {
+          source: 'README.md',
+          assertion: 'test searchPath',
+          kind: 'count_matches',
+          target: '*.ts',
+          line: 1,
+          expectedCount: 3,
+          noun: 'modules',
+          strategy: 'glob',
+          searchPath: 'src/modules',
+        },
+      ];
+
+      const results = await validateDocClaims(claims, FIXTURE_ROOT);
+      expect(results).toHaveLength(1);
+      expect(results[0].valid).toBe(true);
     });
   });
 

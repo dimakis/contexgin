@@ -202,6 +202,59 @@ describe('extractDocClaims', () => {
     expect(claims).toHaveLength(0);
   });
 
+  it('propagates grep strategy to count claims', async () => {
+    const contracts: DocContract[] = [
+      {
+        document: 'README.md',
+        section: 'Modules',
+        claim: 'count',
+        verification: { strategy: 'grep', pattern: 'MODULE_' },
+      },
+    ];
+
+    const claims = await extractDocClaims(contracts, FIXTURE_ROOT);
+    expect(claims.length).toBeGreaterThanOrEqual(1);
+
+    const countClaim = claims[0] as CountClaim;
+    expect(countClaim.kind).toBe('count_matches');
+    expect(countClaim.strategy).toBe('grep');
+  });
+
+  it('propagates grep strategy to list claims', async () => {
+    const contracts: DocContract[] = [
+      {
+        document: 'README.md',
+        section: 'Agents',
+        claim: 'list_complete',
+        verification: { strategy: 'grep', pattern: 'AGENT_' },
+      },
+    ];
+
+    const claims = await extractDocClaims(contracts, FIXTURE_ROOT);
+    expect(claims.length).toBeGreaterThanOrEqual(1);
+
+    const listClaim = claims[0] as ListClaim;
+    expect(listClaim.kind).toBe('list_complete');
+    expect(listClaim.strategy).toBe('grep');
+  });
+
+  it('propagates searchPath from contract verification.path', async () => {
+    const contracts: DocContract[] = [
+      {
+        document: 'README.md',
+        section: 'Modules',
+        claim: 'count',
+        verification: { strategy: 'glob', pattern: '*.ts', path: 'src/modules' },
+      },
+    ];
+
+    const claims = await extractDocClaims(contracts, FIXTURE_ROOT);
+    expect(claims.length).toBeGreaterThanOrEqual(1);
+
+    const countClaim = claims[0] as CountClaim;
+    expect(countClaim.searchPath).toBe('src/modules');
+  });
+
   it('reads entire document when no section specified', async () => {
     const contracts: DocContract[] = [
       {
