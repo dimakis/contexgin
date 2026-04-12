@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { SchemaProvider, SchemaSource } from '../provider.js';
 import type { Schema, Declaration, Validator, ValidationResult } from '../types.js';
@@ -185,7 +186,7 @@ export class WorkspaceProvider implements SchemaProvider {
       .map((r) => path.resolve(r))
       .sort()
       .join(':');
-    const cachedKey = this.cachedRoots.sort().join(':');
+    const cachedKey = [...this.cachedRoots].sort().join(':');
 
     if (this.cachedGraph && rootsKey === cachedKey) {
       return this.cachedGraph;
@@ -347,7 +348,7 @@ const externalReferenceValidator: Validator = {
   kind: 'external_reference',
   async validate(declaration): Promise<ValidationResult> {
     const refPath = declaration.target.startsWith('~')
-      ? path.join(process.env.HOME || '', declaration.target.slice(1))
+      ? path.join(os.homedir(), declaration.target.slice(1))
       : path.resolve(declaration.target);
 
     try {
