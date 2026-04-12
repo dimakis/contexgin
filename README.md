@@ -164,10 +164,161 @@ interface DriftReport {
 }
 ```
 
+## Daemon
+
+ContexGin includes a long-lived HTTP daemon that serves the library's capabilities over a REST API. It watches your workspace for constitution changes and auto-rebuilds the structural graph.
+
+### Quick Start (Daemon)
+
+```bash
+# Build
+npm run build
+
+# Start serving one or more workspace roots
+npx contexgin serve ~/my-workspace --port 4195
+
+# With SQLite persistence (survives restarts)
+npx contexgin serve ~/my-workspace --db ~/.local/share/contexgin/graph.db
+
+# Disable file watching
+npx contexgin serve ~/my-workspace --no-watch
+```
+
+### API Endpoints
+
+| Method | Path            | Description                                        |
+| ------ | --------------- | -------------------------------------------------- |
+| `GET`  | `/health`       | Status, hub/spoke count, violation summary, uptime |
+| `POST` | `/compile`      | Compile context for a spoke                        |
+| `POST` | `/validate`     | Full structural validation                         |
+| `GET`  | `/graph`        | Full graph topology                                |
+| `GET`  | `/graph/:hubId` | Single hub detail                                  |
+
+### Examples
+
+```bash
+# Health check
+curl http://127.0.0.1:4195/health
+# → {"status":"ok","hubs":3,"spokes":15,"violations":{"errors":4,"warnings":18,"info":12},...}
+
+# Compile context for a spoke
+curl -X POST http://127.0.0.1:4195/compile \
+  -H 'Content-Type: application/json' \
+  -d '{"spoke": "command_center", "task": "fix morning briefing", "budget": 8000}'
+
+# Validate all workspaces
+curl -X POST http://127.0.0.1:4195/validate \
+  -H 'Content-Type: application/json' -d '{}'
+
+# Get graph topology
+curl http://127.0.0.1:4195/graph
+```
+
+### Production Deployment (launchd)
+
+1. Create the start script at `scripts/start.sh`:
+
+```bash
+#!/bin/bash
+export PATH="/opt/homebrew/bin:$PATH"
+cd /path/to/contexgin
+exec node dist/cli.js serve \
+  ~/my-workspace \
+  --db ~/.local/share/contexgin/graph.db \
+  --port 4195
+```
+
+2. Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.contexgin.server</string>
+    <key>ProgramArguments</key><array>
+        <string>/bin/bash</string>
+        <string>/path/to/contexgin/scripts/start.sh</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/path/to/contexgin/logs/stdout.log</string>
+    <key>StandardErrorPath</key><string>/path/to/contexgin/logs/stderr.log</string>
+</dict>
+</plist>
+```
+
+3. Load and start:
+
+```bash
+mkdir -p ~/.local/share/contexgin logs
+launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
+curl http://127.0.0.1:4195/health  # verify
+```
+
+### Integration Examples
+
+#### Claude Code (CLAUDE.md hook)
+
+Add to your project's `CLAUDE.md`:
+
+```markdown
+## Workspace Health
+
+ContexGin daemon runs at http://127.0.0.1:4195. Before starting work:
+
+- `curl http://127.0.0.1:4195/health` — check for structural errors
+- `curl -X POST http://127.0.0.1:4195/compile -H 'Content-Type: application/json' -d '{"spoke":"<spoke>","task":"<your task>"}'` — get compiled context for the spoke you're working in
+```
+
+#### Cursor (.cursor/rules/)
+
+Create `.cursor/rules/contexgin.mdc`:
+
+```markdown
+---
+description: ContexGin workspace context
+alwaysApply: false
+globs: ['**/CONSTITUTION.md', '**/CLAUDE.md']
+---
+
+When editing constitution or context files, validate changes:
+\`\`\`bash
+curl -X POST http://127.0.0.1:4195/validate -H 'Content-Type: application/json' -d '{}'
+\`\`\`
+
+Check for structural drift before committing governance changes.
+```
+
+#### Mitzo / Custom Agents
+
+```typescript
+// Fetch compiled context for a task
+const res = await fetch('http://127.0.0.1:4195/compile', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    spoke: 'command_center',
+    task: 'add new briefing type',
+    budget: 6000,
+  }),
+});
+const { context, tokens, sources } = await res.json();
+// Inject `context` into your agent's system prompt
+```
+
+```typescript
+// Monitor for drift in an agent loop
+const health = await fetch('http://127.0.0.1:4195/health').then((r) => r.json());
+if (health.violations.errors > 0) {
+  console.warn(`Structural drift: ${health.violations.errors} errors`);
+}
+```
+
 ## Development
 
 ```bash
-npm test           # Vitest — 54 tests
+npm test           # Vitest — 235 tests across 23 files
 npm run build      # tsup (ESM + declarations)
 npm run lint       # ESLint + Prettier
 npm run check      # TypeScript type check
@@ -186,6 +337,14 @@ Contexgin looks for these files when discovering context sources:
 | `SERVICES.md`         | service      | Service registry                            |
 | `memory/Profile/*.md` | profile      | User/workspace profile files                |
 | `*/CONSTITUTION.md`   | constitution | Spoke-level constitutions                   |
+
+## Constitution Templates
+
+See `examples/` for constitution templates:
+
+- `hub-constitution.md` — Root workspace with sub-repo charters
+- `spoke-constitution.md` — Leaf spoke with full sections
+- `minimal-constitution.md` — Bare minimum to be valid
 
 ## License
 
