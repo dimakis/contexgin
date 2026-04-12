@@ -4,6 +4,10 @@ import * as path from 'node:path';
 import { buildGraph } from './graph/builder.js';
 import { validateGraph } from './graph/validate.js';
 import type { Violation, ViolationSeverity } from './graph/types.js';
+import { createServer } from './server/app.js';
+import { startListeners } from './server/listener.js';
+import { startWatcher } from './server/watcher.js';
+import { DEFAULT_CONFIG, type ServerConfig } from './server/types.js';
 
 // ── Color helpers (no dependency — ANSI codes) ───────────────────
 
@@ -45,6 +49,15 @@ async function main() {
       process.exit(1);
     }
     await runGraph(roots);
+  } else if (command === 'serve') {
+    const roots = args.filter((a) => !a.startsWith('--')).slice(1);
+    if (roots.length === 0) {
+      console.error(
+        'Usage: contexgin serve <root> [root2] ... [--port N] [--socket PATH] [--no-watch]',
+      );
+      process.exit(1);
+    }
+    await runServe(roots, args);
   } else {
     console.error(`Unknown command: ${command}`);
     printUsage();
@@ -54,16 +67,24 @@ async function main() {
 
 function printUsage() {
   console.log(`
-${bold('contexgin')} — structural graph validation for workspaces
+${bold('contexgin')} — structural graph engine for workspaces
 
 ${bold('Commands:')}
   validate <root> [root2] ...   Validate workspace structure
   graph <root> [root2] ...      Print graph summary
+  serve <root> [root2] ...      Start daemon with HTTP API
+
+${bold('Serve options:')}
+  --port N        TCP port (default: 4195)
+  --socket PATH   Unix socket path
+  --no-watch      Disable file watching
+  --db PATH       SQLite database path (default: in-memory)
 
 ${bold('Examples:')}
   npx contexgin validate ~/redhat/mgmt
-  npx contexgin validate ~/redhat/mgmt ~/projects
   npx contexgin graph ~/redhat/mgmt
+  npx contexgin serve ~/redhat/mgmt --port 4195
+  npx contexgin serve ~/redhat/mgmt --socket /tmp/contexgin.sock
 `);
 }
 
@@ -209,6 +230,77 @@ async function runGraph(roots: string[]) {
       console.log(`  ${fromName} → ${toName}${edge.description ? ` (${edge.description})` : ''}`);
     }
   }
+}
+
+// ── Serve Command ───────────────────────────────────────────────
+
+function parseFlag(args: string[], flag: string): string | null {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx + 1 >= args.length) return null;
+  return args[idx + 1];
+}
+
+async function runServe(roots: string[], args: string[]) {
+  const resolvedRoots = roots.map((r) => path.resolve(r.replace(/^~/, process.env.HOME || '')));
+
+  const config: ServerConfig = {
+    ...DEFAULT_CONFIG,
+    roots: resolvedRoots,
+    port: Number(parseFlag(args, '--port')) || DEFAULT_CONFIG.port,
+    socketPath: parseFlag(args, '--socket'),
+    dbPath: parseFlag(args, '--db') ?? DEFAULT_CONFIG.dbPath,
+    watch: !args.includes('--no-watch'),
+  };
+
+  console.log(dim('Starting ContexGin daemon...'));
+
+  const server = await createServer(config);
+
+  // Initial build
+  console.log(dim('Building initial graph...'));
+  const buildStart = Date.now();
+  await server.rebuild();
+  const buildTime = Date.now() - buildStart;
+
+  const graph = server.state.graph!;
+  const spokeCount = graph.hubs.reduce((n, h) => n + h.spokes.length, 0);
+  console.log(
+    green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
+  );
+
+  // Start listeners
+  const listener = await startListeners(server, config);
+  console.log(green(`✓ Listening on ${listener.tcp}`));
+  if (listener.socket) {
+    console.log(green(`✓ Unix socket: ${listener.socket}`));
+  }
+
+  // Start file watcher
+  if (config.watch) {
+    const watcher = startWatcher(server, config);
+    console.log(dim(`  Watching ${watcher.watchCount} roots for constitution changes`));
+
+    // Cleanup on shutdown
+    const cleanup = async () => {
+      console.log(dim('\nShutting down...'));
+      watcher.close();
+      await server.shutdown();
+      process.exit(0);
+    };
+
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+  }
+
+  console.log('');
+  console.log(bold('API endpoints:'));
+  console.log(`  GET  ${listener.tcp}/health`);
+  console.log(`  POST ${listener.tcp}/compile`);
+  console.log(`  POST ${listener.tcp}/validate`);
+  console.log(`  GET  ${listener.tcp}/graph`);
+  console.log(`  GET  ${listener.tcp}/graph/:hubId`);
+  console.log('');
+  console.log(dim('Press Ctrl+C to stop'));
 }
 
 // ── Run ──────────────────────────────────────────────────────────
