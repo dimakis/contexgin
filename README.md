@@ -44,56 +44,7 @@ Contexgin automates the discipline: parse constitutions, rank sections by releva
 
 ## Agent Definitions
 
-Standard agent frameworks define agents as **tools + prompt**. Centaur defines agents as **tools + compiled context + governance + output conventions**. The difference is that context is not a flat prompt string — it's a structured compilation from hubs, spokes, profiles, and memory, assembled within a token budget.
-
-> **Note:** Agent definitions are defined in the Centaur ecosystem — Contexgin reads the hub-spoke topology but does not currently parse agent definition files directly. This section documents the format for reference.
-
-An agent definition is a config file that describes context compilation requirements for an agent session:
-
-```yaml
-kind: AgentDefinition
-version: '0.1'
-
-identity:
-  name: pr-reviewer
-  description: Reviews PRs against architecture docs and writing guidelines
-  mode: narrow # static context, single purpose
-
-context:
-  budget: 12000 # token ceiling
-  sources:
-    hubs:
-      - path: ~/redhat/mgmt
-        spokes: [architecture]
-  priority:
-    - architecture/discussions/**
-  exclude:
-    - memory/**
-    - career/**
-
-output:
-  conventions:
-    commit_style: conventional
-  guides:
-    - docs/review-criteria.md
-
-governance:
-  boundaries:
-    - spoke: career
-      access: none
-
-memory:
-  scope: none # narrow agents don't persist memory
-```
-
-Two modes from the same schema:
-
-- **Narrow agents** — static context, single purpose. Every session compiles the same payload. A PR reviewer, a code auditor, a doc linter. The value is composability: define a config, point Contexgin at it, get a purpose-built agent.
-- **Dynamic agents** — growing context over sessions. Memory scope is read-write, the vault accumulates observations and decisions, the compiler includes relevant vault content ranked by recency. A workspace assistant that learns over time.
-
-**What's enforceable and what isn't**: Context selection (which hubs, spokes, budget) is fully enforceable — the compiler controls the payload. Governance boundaries are enforceable at both compiler level (won't include inaccessible content) and harness level (can reject tool calls). Output conventions (writing style, commit format) are injected as context instructions — a strong nudge, not a runtime guarantee. LLMs can drift past injected instructions. The schema acknowledges this enforcement gap rather than pretending it's solved.
-
-Agent definition schemas live in the [Centaur repo](https://github.com/dimakis/centaur) under `schemas/agent/`.
+Centaur defines agents as **tools + compiled context + governance + output conventions**. Contexgin compiles the context portion — it reads the hub-spoke topology but does not parse agent definition files directly. Agent definition schemas (YAML configs describing context sources, budgets, modes, and governance boundaries) live in the [Centaur repo](https://github.com/dimakis/centaur/tree/main/schemas/agent/).
 
 ## Install
 
@@ -205,6 +156,18 @@ Builds a structural graph from parsed constitutions. Nodes are hubs and spokes; 
 
 HTTP daemon built on Fastify. Holds the structural graph in memory, watches for constitution changes, and serves compilation and validation over a REST API.
 
+### Tools
+
+Registry for managing available tools in an agent session. Tools are registered by name and looked up at runtime during context compilation.
+
+Source: `src/tools/registry.ts`
+
+### Permissions
+
+Policy engine for tool-level access control. Evaluates permission requests against a rule set (with glob matching) — first matching rule wins, with a configurable default decision.
+
+Source: `src/permissions/policy.ts`
+
 ### Navigation
 
 Indexes constitutions across workspace roots and generates task-relevant reading lists.
@@ -299,6 +262,18 @@ curl -X POST http://127.0.0.1:4195/validate \
 
 # Get graph topology
 curl http://127.0.0.1:4195/graph
+```
+
+Sample health response:
+
+```json
+{
+  "status": "ok",
+  "uptime": 3621,
+  "hubs": 2,
+  "spokes": 9,
+  "violations": { "total": 1, "drift": 1, "missing": 0 }
+}
 ```
 
 ### Production Deployment (launchd)
