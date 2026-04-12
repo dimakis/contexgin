@@ -1,4 +1,7 @@
-import type { Claim } from './types.js';
+import type { Claim, TreeStructureClaim } from './types.js';
+import { buildDeclaredTree } from './tree-parser.js';
+import type { ExternalRef } from './tree-parser.js';
+import { extractDirectorySemantics } from '../navigation/constitution-index.js';
 
 /** Patterns that look like shell commands, not file paths */
 const COMMAND_PATTERNS = [
@@ -126,4 +129,44 @@ export function extractClaims(content: string, sourcePath: string): Claim[] {
   }
 
   return claims;
+}
+
+/**
+ * Extract a tree structure claim from a constitution file.
+ * Parses both ASCII tree diagrams and directory semantics tables,
+ * merges them into a declared tree, and returns a single claim
+ * representing the full tree contract.
+ *
+ * Also returns external reference claims for [external] paths.
+ *
+ * Returns null if the constitution has neither a tree nor a table.
+ */
+export function extractTreeStructureClaim(
+  content: string,
+  sourcePath: string,
+): { treeClaim: TreeStructureClaim | null; externalClaims: Claim[] } {
+  const semantics = extractDirectorySemantics(content);
+  const { nodes, externals } = buildDeclaredTree(semantics, content);
+
+  const treeClaim: TreeStructureClaim | null =
+    nodes.length > 0
+      ? {
+          source: sourcePath,
+          assertion: `Filesystem matches declared tree structure (${nodes.length} nodes)`,
+          kind: 'tree_structure',
+          target: `tree:${nodes.length} nodes`,
+          line: 0,
+          declaredTree: nodes,
+        }
+      : null;
+
+  const externalClaims: Claim[] = externals.map((ext: ExternalRef) => ({
+    source: sourcePath,
+    assertion: `External repo ${ext.path} exists`,
+    kind: 'external_exists' as const,
+    target: ext.path,
+    line: 0,
+  }));
+
+  return { treeClaim, externalClaims };
 }

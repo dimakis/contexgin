@@ -14,15 +14,30 @@ export type {
 } from './compiler/types.js';
 
 // Integrity
-export { extractClaims } from './integrity/claims.js';
+export { extractClaims, extractTreeStructureClaim } from './integrity/claims.js';
 export { validateClaim, validateAll } from './integrity/validator.js';
-export type { Claim, ClaimResult, DriftReport } from './integrity/types.js';
+export { parseAsciiTree, buildDeclaredTree } from './integrity/tree-parser.js';
+export type { DeclaredNode, ExternalRef } from './integrity/tree-parser.js';
+export { walkFilesystem } from './integrity/tree-walker.js';
+export type { ActualNode, WalkOptions } from './integrity/tree-walker.js';
+export { diffTrees } from './integrity/tree-diff.js';
+export type { TreeDiffResult } from './integrity/tree-diff.js';
+export { validateFederated } from './integrity/federated.js';
+export type { FederatedDriftReport, FederatedOptions } from './integrity/federated.js';
+export type {
+  Claim,
+  ClaimResult,
+  DriftReport,
+  TreeStructureClaim,
+  TreeClaimResult,
+} from './integrity/types.js';
 
 // Navigation
 export {
   indexConstitutions,
   extractPurpose,
   extractEntryPoints,
+  extractDirectorySemantics,
 } from './navigation/constitution-index.js';
 export { generateReadingList } from './navigation/reading-list.js';
 export { isAccessAllowed, getAccessibleSpokes } from './navigation/boundaries.js';

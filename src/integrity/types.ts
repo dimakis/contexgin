@@ -5,7 +5,14 @@ export interface Claim {
   /** What is being claimed */
   assertion: string;
   /** Type of claim determines validation strategy */
-  kind: 'file_exists' | 'directory_exists' | 'entry_point' | 'boundary' | 'structural';
+  kind:
+    | 'file_exists'
+    | 'directory_exists'
+    | 'entry_point'
+    | 'boundary'
+    | 'structural'
+    | 'tree_structure'
+    | 'external_exists';
   /** The specific value to validate (path, name, etc.) */
   target: string;
   /** Line number in source file */
@@ -20,6 +27,17 @@ export interface ClaimResult {
   actual?: string;
   /** Human-readable explanation */
   message: string;
+}
+
+/** A tree structure claim with its declared tree attached */
+export interface TreeStructureClaim extends Claim {
+  kind: 'tree_structure';
+  declaredTree: import('./tree-parser.js').DeclaredNode[];
+}
+
+/** Result of tree structure validation, includes the full diff */
+export interface TreeClaimResult extends ClaimResult {
+  diff?: import('./tree-diff.js').TreeDiffResult;
 }
 
 /** A drift report for a workspace */

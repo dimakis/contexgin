@@ -68,7 +68,7 @@ export function extractEntryPoints(content: string): string[] {
  * Extract directory semantics from a constitution.
  * Looks for directory descriptions in tables or lists.
  */
-function extractDirectorySemantics(content: string): Map<string, string> {
+export function extractDirectorySemantics(content: string): Map<string, string> {
   const semantics = new Map<string, string>();
   const lines = content.split('\n');
   let inDirectorySection = false;
@@ -91,7 +91,15 @@ function extractDirectorySemantics(content: string): Map<string, string> {
       if (cells.length >= 2) {
         const dir = cells[0].replace(/`/g, '').trim();
         const desc = cells[1].replace(/`/g, '').trim();
-        if (dir && desc && !dir.match(/^-+$/) && dir !== 'Directory') {
+        if (
+          dir &&
+          desc &&
+          !dir.match(/^-+$/) &&
+          dir !== 'Directory' &&
+          dir !== 'Path' &&
+          dir !== 'Sub-Repo' &&
+          dir !== 'Spoke'
+        ) {
           semantics.set(dir, desc);
         }
       }

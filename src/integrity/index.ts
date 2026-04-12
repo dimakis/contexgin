@@ -1,4 +1,12 @@
-export { extractClaims } from './claims.js';
+export { extractClaims, extractTreeStructureClaim } from './claims.js';
 export { validateClaim, validateAll } from './validator.js';
+export { parseAsciiTree, buildDeclaredTree } from './tree-parser.js';
+export type { DeclaredNode, ExternalRef } from './tree-parser.js';
+export { walkFilesystem } from './tree-walker.js';
+export type { ActualNode, WalkOptions } from './tree-walker.js';
+export { diffTrees } from './tree-diff.js';
+export type { TreeDiffResult } from './tree-diff.js';
+export { validateFederated } from './federated.js';
+export type { FederatedDriftReport, FederatedOptions } from './federated.js';
 export * from './types.js';
 export * from './drift.js';
