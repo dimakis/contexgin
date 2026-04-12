@@ -66,13 +66,18 @@ export function extractDocContracts(constitutionContent: string): DocContract[] 
         const strategyType = strategy.toLowerCase().trim();
         if (strategyType !== 'glob' && strategyType !== 'grep') continue;
 
+        // Only strip backslashes for glob patterns (markdown escapes \* to \*)
+        // Grep patterns need backslashes preserved (e.g. \bfoo\b)
+        const rawPattern = pattern.trim();
+        const cleanPattern = strategyType === 'glob' ? rawPattern.replace(/\\/g, '') : rawPattern;
+
         contracts.push({
           document: document.trim(),
           section: section.trim() || undefined,
           claim: claimType as 'count' | 'list_complete',
           verification: {
             strategy: strategyType as 'glob' | 'grep',
-            pattern: pattern.trim().replace(/\\/g, ''),
+            pattern: cleanPattern,
             path: searchPath?.trim() || undefined,
           },
         });
@@ -167,6 +172,8 @@ function extractCountClaims(
         line: sectionStartLine + i,
         expectedCount: count,
         noun,
+        strategy: contract.verification.strategy,
+        searchPath: contract.verification.path,
       });
     }
   }
@@ -273,6 +280,8 @@ function extractListClaims(
       target: contract.verification.pattern,
       line: sectionStartLine,
       listedItems: items,
+      strategy: contract.verification.strategy,
+      searchPath: contract.verification.path,
     },
   ];
 }

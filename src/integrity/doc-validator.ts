@@ -140,11 +140,10 @@ function extractStem(filePath: string): string {
  * Validate a count_matches claim.
  */
 async function validateCountClaim(claim: CountClaim, workspaceRoot: string): Promise<ClaimResult> {
-  const searchRoot = claim.target.includes('/') ? workspaceRoot : workspaceRoot;
+  const searchRoot = claim.searchPath ? path.join(workspaceRoot, claim.searchPath) : workspaceRoot;
 
-  // Determine search strategy from the original contract pattern
-  // The target IS the pattern (glob or grep)
-  const matches = await findByGlob(claim.target, searchRoot);
+  const finder = claim.strategy === 'grep' ? findByGrep : findByGlob;
+  const matches = await finder(claim.target, searchRoot);
   const actualCount = matches.length;
 
   if (actualCount === claim.expectedCount) {
@@ -167,7 +166,10 @@ async function validateCountClaim(claim: CountClaim, workspaceRoot: string): Pro
  * Validate a list_complete claim.
  */
 async function validateListClaim(claim: ListClaim, workspaceRoot: string): Promise<ClaimResult> {
-  const matches = await findByGlob(claim.target, workspaceRoot);
+  const searchRoot = claim.searchPath ? path.join(workspaceRoot, claim.searchPath) : workspaceRoot;
+
+  const finder = claim.strategy === 'grep' ? findByGrep : findByGlob;
+  const matches = await finder(claim.target, searchRoot);
   const actualItems = matches.map(extractStem);
   const actualSet = new Set(actualItems);
   const listedSet = new Set(claim.listedItems);

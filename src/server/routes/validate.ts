@@ -62,8 +62,15 @@ export function validateRoute(app: FastifyInstance, config: ServerConfig): void 
     const violations = await validateGraph(graph);
 
     // Run doc-consistency validation for each root
-    const docViolations = await Promise.all(roots.map(runDocConsistencyValidation));
-    const allDocViolations = docViolations.flat();
+    const docResults = await Promise.allSettled(roots.map(runDocConsistencyValidation));
+    const allDocViolations: Violation[] = [];
+    for (const result of docResults) {
+      if (result.status === 'fulfilled') {
+        allDocViolations.push(...result.value);
+      } else {
+        app.log.warn(`Doc-consistency validation failed for a root: ${result.reason}`);
+      }
+    }
 
     const allViolations = [...graph.violations, ...violations, ...allDocViolations];
 
