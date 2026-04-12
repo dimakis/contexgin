@@ -126,6 +126,10 @@ describe('ContexGin Server', () => {
       expect(body.hubs).toBe(1);
       expect(body.spokes).toBeGreaterThanOrEqual(1);
       expect(body.lastBuild).toBeTruthy();
+      expect(body.violations).toBeDefined();
+      expect(typeof body.violations.errors).toBe('number');
+      expect(typeof body.violations.warnings).toBe('number');
+      expect(typeof body.violations.info).toBe('number');
     });
   });
 

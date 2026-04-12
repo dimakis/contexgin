@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { buildGraph } from '../graph/builder.js';
+import { validateGraph } from '../graph/validate.js';
 import { GraphStore } from './store.js';
 import type { ServerConfig, ServerState } from './types.js';
 import { healthRoute } from './routes/health.js';
@@ -24,6 +25,7 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
     lastBuild: null,
     startedAt: new Date(),
     rebuilding: false,
+    violations: { errors: 0, warnings: 0, info: 0 },
   };
 
   // Restore from latest snapshot if available
@@ -63,6 +65,16 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
     try {
       state.graph = await buildGraph(config.roots);
       state.lastBuild = new Date();
+
+      // Post-rebuild validation — surface drift on /health
+      const validationViolations = await validateGraph(state.graph);
+      const allViolations = [...state.graph.violations, ...validationViolations];
+      state.violations = {
+        errors: allViolations.filter((v) => v.severity === 'error').length,
+        warnings: allViolations.filter((v) => v.severity === 'warning').length,
+        info: allViolations.filter((v) => v.severity === 'info').length,
+      };
+
       const duration = Date.now() - start;
       store.saveSnapshot(state.graph);
       store.recordBuild(duration, 'rebuild', true);

@@ -12,6 +12,7 @@ export function healthRoute(app: FastifyInstance, state: ServerState): void {
       hubs: graph?.hubs.length ?? 0,
       spokes: graph?.hubs.reduce((n, h) => n + h.spokes.length, 0) ?? 0,
       lastBuild: state.lastBuild?.toISOString() ?? null,
+      violations: state.violations,
     };
   });
 }

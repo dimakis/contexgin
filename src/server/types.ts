@@ -40,6 +40,8 @@ export interface ServerState {
   startedAt: Date;
   /** Whether a rebuild is in progress */
   rebuilding: boolean;
+  /** Violation counts from last validation */
+  violations: { errors: number; warnings: number; info: number };
 }
 
 // ── API Types ───────────────────────────────────────────────────
@@ -50,6 +52,7 @@ export interface HealthResponse {
   hubs: number;
   spokes: number;
   lastBuild: string | null;
+  violations: { errors: number; warnings: number; info: number };
 }
 
 export interface CompileRequest {
