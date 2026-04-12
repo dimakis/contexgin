@@ -36,10 +36,12 @@ export function extractDocContracts(constitutionContent: string): DocContract[] 
 
     // Detect table rows (contain pipes)
     if (line.includes('|')) {
-      const cells = line
-        .split('|')
-        .map((c) => c.trim())
-        .filter((c) => c.length > 0);
+      // Split by pipe, drop first/last empty segments from leading/trailing pipes
+      const rawCells = line.split('|').map((c) => c.trim());
+      const cells =
+        rawCells.length >= 2 && rawCells[0] === '' && rawCells[rawCells.length - 1] === ''
+          ? rawCells.slice(1, -1)
+          : rawCells.filter((c) => c.length > 0);
 
       // Skip separator row (---|---|---...)
       if (cells.every((c) => /^[-:]+$/.test(c))) {
@@ -64,13 +66,18 @@ export function extractDocContracts(constitutionContent: string): DocContract[] 
         const strategyType = strategy.toLowerCase().trim();
         if (strategyType !== 'glob' && strategyType !== 'grep') continue;
 
+        // Only strip backslashes for glob patterns (markdown escapes \* to \*)
+        // Grep patterns need backslashes preserved (e.g. \bfoo\b)
+        const rawPattern = pattern.trim();
+        const cleanPattern = strategyType === 'glob' ? rawPattern.replace(/\\/g, '') : rawPattern;
+
         contracts.push({
           document: document.trim(),
           section: section.trim() || undefined,
           claim: claimType as 'count' | 'list_complete',
           verification: {
             strategy: strategyType as 'glob' | 'grep',
-            pattern: pattern.trim(),
+            pattern: cleanPattern,
             path: searchPath?.trim() || undefined,
           },
         });
@@ -165,6 +172,8 @@ function extractCountClaims(
         line: sectionStartLine + i,
         expectedCount: count,
         noun,
+        strategy: contract.verification.strategy,
+        searchPath: contract.verification.path,
       });
     }
   }
@@ -271,6 +280,8 @@ function extractListClaims(
       target: contract.verification.pattern,
       line: sectionStartLine,
       listedItems: items,
+      strategy: contract.verification.strategy,
+      searchPath: contract.verification.path,
     },
   ];
 }

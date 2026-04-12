@@ -71,6 +71,10 @@ export interface CountClaim extends Claim {
   expectedCount: number;
   /** The noun being counted (e.g. "modules", "agents") */
   noun: string;
+  /** How to find matching files: glob or grep */
+  strategy: 'glob' | 'grep';
+  /** Sub-root to search within (relative to workspace root) */
+  searchPath?: string;
 }
 
 /** A list completeness claim with the listed items attached */
@@ -78,6 +82,10 @@ export interface ListClaim extends Claim {
   kind: 'list_complete';
   /** Items listed in the documentation */
   listedItems: string[];
+  /** How to find matching files: glob or grep */
+  strategy: 'glob' | 'grep';
+  /** Sub-root to search within (relative to workspace root) */
+  searchPath?: string;
 }
 
 /** A drift report for a workspace */
