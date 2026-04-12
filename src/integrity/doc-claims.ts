@@ -36,10 +36,12 @@ export function extractDocContracts(constitutionContent: string): DocContract[] 
 
     // Detect table rows (contain pipes)
     if (line.includes('|')) {
-      const cells = line
-        .split('|')
-        .map((c) => c.trim())
-        .filter((c) => c.length > 0);
+      // Split by pipe, drop first/last empty segments from leading/trailing pipes
+      const rawCells = line.split('|').map((c) => c.trim());
+      const cells =
+        rawCells.length >= 2 && rawCells[0] === '' && rawCells[rawCells.length - 1] === ''
+          ? rawCells.slice(1, -1)
+          : rawCells.filter((c) => c.length > 0);
 
       // Skip separator row (---|---|---...)
       if (cells.every((c) => /^[-:]+$/.test(c))) {
@@ -70,7 +72,7 @@ export function extractDocContracts(constitutionContent: string): DocContract[] 
           claim: claimType as 'count' | 'list_complete',
           verification: {
             strategy: strategyType as 'glob' | 'grep',
-            pattern: pattern.trim(),
+            pattern: pattern.trim().replace(/\\/g, ''),
             path: searchPath?.trim() || undefined,
           },
         });
