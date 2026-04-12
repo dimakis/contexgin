@@ -1,14 +1,14 @@
-# ContexGin
+# Contexgin
 
 Context infrastructure for the [Centaur](https://github.com/dimakis/centaur) agent ecosystem. Compiles, validates, and maintains structured context payloads that agents consume at boot and throughout their lifecycle.
 
-ContexGin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, ContexGin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, ContexGin isn't the right tool.
+Contexgin is opinionated. It works with the primitives defined in the Centaur ecosystem — hubs, spokes, constitutions, boundaries. If your workspace follows this topology, Contexgin can compile context for it, validate its structural integrity, and serve it over an API. If it doesn't, Contexgin isn't the right tool.
 
 **Provider-agnostic** — context compilation is independent of which LLM runs the agent loop.
 
 ## The Hub-Spoke Model
 
-ContexGin organises workspaces as a **hub-spoke topology**. This is the foundational pattern everything else builds on.
+Contexgin organises workspaces as a **hub-spoke topology**. This is the foundational pattern everything else builds on.
 
 A **hub** is a workspace root — a directory with a `CONSTITUTION.md` at its root that declares its purpose, architecture, principles, and structural contract. A hub contains **spokes** — bounded sub-contexts, each with their own constitution, governance, and directory tree.
 
@@ -29,24 +29,26 @@ Why this topology:
 
 - **Bounded contexts** — each spoke has its own governance. A PR review agent doesn't need access to career notes. Boundaries are declared, not implied.
 - **Composable context** — the compiler pulls from specific hubs and spokes to assemble a payload. Different agents get different slices of the same workspace.
-- **Structural validation** — constitutions declare what should exist. ContexGin checks whether reality matches. Drift is detected, not assumed away.
+- **Structural validation** — constitutions declare what should exist. Contexgin checks whether reality matches. Drift is detected, not assumed away.
 - **Cross-workspace federation** — multiple hubs connect through external references. A management hub can depend on a projects hub without either owning the other.
 
 The hub-spoke model isn't a universal standard — it's a deliberate implementation choice for workspaces where structured context matters more than ad-hoc discovery.
 
-## What ContexGin Does
+## What Contexgin Does
 
-Agent harnesses (Claude Code, Cursor, Codex CLI) solve tool calling and user experience — and those are genuinely hard problems. ContexGin doesn't replace any of that. It solves a complementary problem: **what context does the agent receive, and how do you keep it honest?**
+Agent harnesses (Claude Code, Cursor, Codex CLI) solve tool calling and user experience — and those are genuinely hard problems. Contexgin doesn't replace any of that. It solves a complementary problem: **what context does the agent receive, and how do you keep it honest?**
 
 A well-contexted agent session starts closer to understanding. It doesn't ask questions the workspace already answers, doesn't violate conventions it wasn't told about, doesn't waste tokens rediscovering what could have been stated. The gap between a bare session and a context-compiled session is immediately measurable in tokens spent to reach a correct result.
 
-ContexGin automates the discipline: parse constitutions, rank sections by relevance, trim to a token budget, validate that declared structure matches reality, and serve it all over an API.
+Contexgin automates the discipline: parse constitutions, rank sections by relevance, trim to a token budget, validate that declared structure matches reality, and serve it all over an API.
 
 ## Agent Definitions
 
 Standard agent frameworks define agents as **tools + prompt**. Centaur defines agents as **tools + compiled context + governance + output conventions**. The difference is that context is not a flat prompt string — it's a structured compilation from hubs, spokes, profiles, and memory, assembled within a token budget.
 
-An agent definition is a config file that ContexGin reads when compiling context for an agent session:
+> **Note:** Agent definitions are defined in the Centaur ecosystem — Contexgin reads the hub-spoke topology but does not currently parse agent definition files directly. This section documents the format for reference.
+
+An agent definition is a config file that describes context compilation requirements for an agent session:
 
 ```yaml
 kind: AgentDefinition
@@ -86,7 +88,7 @@ memory:
 
 Two modes from the same schema:
 
-- **Narrow agents** — static context, single purpose. Every session compiles the same payload. A PR reviewer, a code auditor, a doc linter. The value is composability: define a config, point ContexGin at it, get a purpose-built agent.
+- **Narrow agents** — static context, single purpose. Every session compiles the same payload. A PR reviewer, a code auditor, a doc linter. The value is composability: define a config, point Contexgin at it, get a purpose-built agent.
 - **Dynamic agents** — growing context over sessions. Memory scope is read-write, the vault accumulates observations and decisions, the compiler includes relevant vault content ranked by recency. A workspace assistant that learns over time.
 
 **What's enforceable and what isn't**: Context selection (which hubs, spokes, budget) is fully enforceable — the compiler controls the payload. Governance boundaries are enforceable at both compiler level (won't include inaccessible content) and harness level (can reject tool calls). Output conventions (writing style, commit format) are injected as context instructions — a strong nudge, not a runtime guarantee. LLMs can drift past injected instructions. The schema acknowledges this enforcement gap rather than pretending it's solved.
@@ -213,10 +215,47 @@ Indexes constitutions across workspace roots and generates task-relevant reading
 | `generateReadingList(task, index)`    | Task-relevant reading list (max 10 items) |
 | `isAccessAllowed(spoke, entry)`       | Check boundary access                     |
 | `getAccessibleSpokes(entry, entries)` | List accessible spokes                    |
+| `extractPurpose(content)`             | Extract purpose from constitution         |
+| `extractEntryPoints(content)`         | Extract entry points                      |
+
+## Key Types
+
+```typescript
+interface CompileOptions {
+  workspaceRoot: string; // Workspace root directory
+  tokenBudget: number; // Max tokens for boot payload
+  sources?: ContextSource[]; // Override auto-discovery
+  required?: string[][]; // Always-include section paths
+  excluded?: string[][]; // Never-include section paths
+  taskHint?: string; // Boost task-relevant sections
+}
+
+interface CompiledContext {
+  bootPayload: string; // System prompt content
+  contextBlocks: Map<string, string>; // Per-turn injections
+  navigationHints: string[]; // Reading order suggestions
+  bootTokens: number; // Token count
+  sources: ContextSource[]; // Contributing sources
+  trimmed: ExtractedSection[]; // Dropped sections
+}
+
+interface DriftReport {
+  timestamp: Date;
+  workspaceRoot: string;
+  results: ClaimResult[];
+  drift: ClaimResult[];
+  summary: {
+    total: number;
+    valid: number;
+    invalid: number;
+    byKind: Record<string, { total: number; invalid: number }>;
+  };
+}
+```
 
 ## Daemon
 
-ContexGin runs as a long-lived HTTP daemon that serves the library's capabilities over a REST API. It watches your workspace for constitution changes and auto-rebuilds the structural graph.
+Contexgin runs as a long-lived HTTP daemon that serves the library's capabilities over a REST API. It watches your workspace for constitution changes and auto-rebuilds the structural graph.
 
 ### Quick Start
 
@@ -264,11 +303,51 @@ curl http://127.0.0.1:4195/graph
 
 ### Production Deployment (launchd)
 
-Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist` and load with `launchctl load`. See `scripts/start.sh` for the start script pattern.
+1. Create the start script at `scripts/start.sh`:
+
+```bash
+#!/bin/bash
+export PATH="/opt/homebrew/bin:$PATH"
+cd /path/to/contexgin
+exec node dist/cli.js serve \
+  ~/my-workspace \
+  --db ~/.local/share/contexgin/graph.db \
+  --port 4195
+```
+
+2. Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.contexgin.server</string>
+    <key>ProgramArguments</key><array>
+        <string>/bin/bash</string>
+        <string>/path/to/contexgin/scripts/start.sh</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/path/to/contexgin/logs/stdout.log</string>
+    <key>StandardErrorPath</key><string>/path/to/contexgin/logs/stderr.log</string>
+</dict>
+</plist>
+```
+
+3. Load and start:
+
+```bash
+mkdir -p ~/.local/share/contexgin logs
+launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
+curl http://127.0.0.1:4195/health  # verify
+```
+
+For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).
 
 ## Context Files
 
-ContexGin discovers these files when scanning a workspace:
+Contexgin discovers these files when scanning a workspace:
 
 | File                  | Kind         | Description                                 |
 | --------------------- | ------------ | ------------------------------------------- |
