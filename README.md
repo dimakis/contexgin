@@ -50,7 +50,7 @@ An agent definition is a config file that describes what context an agent should
 
 ```yaml
 kind: AgentDefinition
-version: "0.1"
+version: '0.1'
 
 identity:
   name: pr-reviewer
@@ -214,10 +214,6 @@ Indexes constitutions across workspace roots and generates task-relevant reading
 | `extractPurpose(content)`             | Extract purpose from constitution         |
 | `extractEntryPoints(content)`         | Extract entry points                      |
 
-### Provider / Tools / Permissions
-
-Type definitions and interfaces only — no runtime implementation yet. These define the contracts for future LLM provider adapters, tool registries, and permission engines.
-
 ## Key Types
 
 ```typescript
@@ -255,12 +251,11 @@ interface DriftReport {
 
 ## Daemon
 
-ContexGin includes a long-lived HTTP daemon that serves the library's capabilities over a REST API. It watches your workspace for constitution changes and auto-rebuilds the structural graph.
+Contexgin runs as a long-lived HTTP daemon that serves the library's capabilities over a REST API. It watches your workspace for constitution changes and auto-rebuilds the structural graph.
 
-### Quick Start (Daemon)
+### Quick Start
 
 ```bash
-# Build
 npm run build
 
 # Start serving one or more workspace roots
@@ -288,7 +283,6 @@ npx contexgin serve ~/my-workspace --no-watch
 ```bash
 # Health check
 curl http://127.0.0.1:4195/health
-# → {"status":"ok","hubs":3,"spokes":15,"violations":{"errors":4,"warnings":18,"info":12},...}
 
 # Compile context for a spoke
 curl -X POST http://127.0.0.1:4195/compile \
@@ -301,6 +295,18 @@ curl -X POST http://127.0.0.1:4195/validate \
 
 # Get graph topology
 curl http://127.0.0.1:4195/graph
+```
+
+Sample health response:
+
+```json
+{
+  "status": "ok",
+  "uptime": 3621,
+  "hubs": 2,
+  "spokes": 9,
+  "violations": { "total": 1, "drift": 1, "missing": 0 }
+}
 ```
 
 ### Production Deployment (launchd)
@@ -345,9 +351,9 @@ launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
 curl http://127.0.0.1:4195/health  # verify
 ```
 
-### Integration Examples
+For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).
 
-#### Claude Code (CLAUDE.md hook)
+## Context Files
 
 Add to your project's `CLAUDE.md`:
 
@@ -398,9 +404,7 @@ const { context, tokens, sources } = await res.json();
 
 ```typescript
 // Monitor for drift in an agent loop
-const health = await fetch('http://127.0.0.1:4195/health').then((r) =>
-  r.json(),
-);
+const health = await fetch('http://127.0.0.1:4195/health').then((r) => r.json());
 if (health.violations.errors > 0) {
   console.warn(`Structural drift: ${health.violations.errors} errors`);
 }
