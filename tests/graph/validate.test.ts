@@ -327,7 +327,9 @@ Auth.
 
 ## Dependencies
 
-- nonexistent_spoke — needs something that doesn't exist
+| Dependency | Purpose |
+|------------|---------|
+| \`nonexistent_spoke\` | Needs something that doesn't exist |
 
 ## Directory Semantics
 

@@ -20,9 +20,11 @@ Internal tooling and automation scripts for the core team.
 
 ## Dependencies
 
-- `auth/` — needs token validation
-- `lib/` — shared utilities
-- Reads from `api/` for status data
+| Dependency | Purpose                |
+| ---------- | ---------------------- |
+| `auth/`    | Needs token validation |
+| `lib/`     | Shared utilities       |
+| `api/`     | Reads for status data  |
 
 ## Confidentiality
 

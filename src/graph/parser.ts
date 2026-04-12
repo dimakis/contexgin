@@ -231,32 +231,6 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
     return deps;
   }
 
-  // Fall back to list format — first backtick ref per bullet is the target
-  for (const line of section) {
-    const match = /^\s*[-*]\s+(.+)/.exec(line);
-    if (match) {
-      const text = match[1];
-      const firstRef = /`([^`]+)`/.exec(text);
-      if (firstRef) {
-        const target = firstRef[1].trim();
-        if (target) {
-          const description =
-            text
-              .replace(/`[^`]+`/g, '')
-              .replace(/[-—,]/g, '')
-              .trim() || undefined;
-          deps.push({ from: nodeId, to: target, kind: 'depends_on', description });
-        }
-      } else {
-        // No backtick references — use raw text
-        const rawText = stripBackticks(text).trim();
-        if (rawText) {
-          deps.push({ from: nodeId, to: rawText, kind: 'depends_on' });
-        }
-      }
-    }
-  }
-
   return deps;
 }
 
