@@ -131,10 +131,9 @@ export async function validateGraph(graph: HubGraph): Promise<Violation[]> {
       if (/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s/i.test(ep.command)) continue;
       // Skip function-style exports like "compile()"
       if (baseCmd.endsWith(')')) continue;
-      // Only validate relative paths (./script, ../tool, script.sh)
+      // Only validate explicit relative paths (./script, ../tool)
       // Skip system commands (npm, docker, node, python, etc.)
-      if (!baseCmd.startsWith('./') && !baseCmd.startsWith('../') && !baseCmd.includes('.'))
-        continue;
+      if (!baseCmd.startsWith('./') && !baseCmd.startsWith('../')) continue;
 
       const cmdPath = path.join(resolveRoot, baseCmd);
       if (!(await pathExists(cmdPath))) {

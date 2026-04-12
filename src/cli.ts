@@ -105,7 +105,15 @@ async function runValidate(roots: string[]) {
   // Group by hub/spoke
   const grouped = new Map<string, Violation[]>();
   for (const v of allViolations) {
-    const key = v.location.split('/').slice(0, 2).join('/');
+    let loc = v.location;
+    // Normalize absolute paths — use hub-relative path if possible
+    for (const hub of graph.hubs) {
+      if (hub.path && loc.startsWith(hub.path)) {
+        loc = hub.name + loc.slice(hub.path.length);
+        break;
+      }
+    }
+    const key = loc.split('/').slice(0, 2).join('/');
     const list = grouped.get(key) || [];
     list.push(v);
     grouped.set(key, list);
