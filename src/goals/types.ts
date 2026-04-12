@@ -107,15 +107,3 @@ export interface UsageSummary {
   achievedGoals: number;
   totals: GoalUsageTotals;
 }
-
-export const EMPTY_TOTALS: GoalUsageTotals = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  cacheCreationTokens: 0,
-  costUsd: 0,
-  turns: 0,
-  toolCalls: 0,
-  durationMs: 0,
-  durationApiMs: 0,
-};
