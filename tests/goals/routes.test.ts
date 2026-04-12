@@ -202,6 +202,45 @@ describe('Goal Routes', () => {
       expect(response.statusCode).toBe(400);
       expect(response.json().error).toContain('Invalid contextCondition');
     });
+
+    it('returns 400 for invalid description type', async () => {
+      const goal = registry.createGoal('Test Goal');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/goals/${goal.id}`,
+        payload: { description: 123 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid description');
+    });
+
+    it('returns 400 for invalid bootPayloadTokens type', async () => {
+      const goal = registry.createGoal('Test Goal');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/goals/${goal.id}`,
+        payload: { bootPayloadTokens: 'not-a-number' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid bootPayloadTokens');
+    });
+
+    it('returns 400 for invalid achievedAt type', async () => {
+      const goal = registry.createGoal('Test Goal');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/goals/${goal.id}`,
+        payload: { achievedAt: 'not-a-number' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid achievedAt');
+    });
   });
 
   // ── DELETE /api/goals/:id ───────────────────────────────────
@@ -295,6 +334,16 @@ describe('Goal Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toHaveLength(1);
     });
+
+    it('returns 404 for nonexistent goal', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/goals/nonexistent/contributions',
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe('Goal not found');
+    });
   });
 
   // ── POST /api/goals/:id/artifacts ───────────────────────────
@@ -352,6 +401,16 @@ describe('Goal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toHaveLength(1);
+    });
+
+    it('returns 404 for nonexistent goal', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/goals/nonexistent/artifacts',
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toBe('Goal not found');
     });
   });
 });

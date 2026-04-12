@@ -95,6 +95,39 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
       });
     }
 
+    // Validate description type if provided
+    if (
+      body?.description !== undefined &&
+      body.description !== null &&
+      typeof body.description !== 'string'
+    ) {
+      return reply.status(400).send({
+        error: 'Invalid description. Must be a string or null',
+      });
+    }
+
+    // Validate bootPayloadTokens type if provided
+    if (
+      body?.bootPayloadTokens !== undefined &&
+      body.bootPayloadTokens !== null &&
+      typeof body.bootPayloadTokens !== 'number'
+    ) {
+      return reply.status(400).send({
+        error: 'Invalid bootPayloadTokens. Must be a number or null',
+      });
+    }
+
+    // Validate achievedAt type if provided
+    if (
+      body?.achievedAt !== undefined &&
+      body.achievedAt !== null &&
+      typeof body.achievedAt !== 'number'
+    ) {
+      return reply.status(400).send({
+        error: 'Invalid achievedAt. Must be a number or null',
+      });
+    }
+
     const updated = registry.updateGoal(request.params.id, {
       title: typeof body?.title === 'string' ? body.title : undefined,
       description:
@@ -169,7 +202,11 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
 
   // ── GET /api/goals/:id/contributions ──────────────────────
 
-  app.get<{ Params: { id: string } }>('/api/goals/:id/contributions', async (request) => {
+  app.get<{ Params: { id: string } }>('/api/goals/:id/contributions', async (request, reply) => {
+    const goal = registry.getGoal(request.params.id);
+    if (!goal) {
+      return reply.status(404).send({ error: 'Goal not found' });
+    }
     return registry.getContributions(request.params.id);
   });
 
@@ -199,7 +236,11 @@ export function goalRoutes(app: FastifyInstance, registry: GoalRegistry): void {
 
   // ── GET /api/goals/:id/artifacts ──────────────────────────
 
-  app.get<{ Params: { id: string } }>('/api/goals/:id/artifacts', async (request) => {
+  app.get<{ Params: { id: string } }>('/api/goals/:id/artifacts', async (request, reply) => {
+    const goal = registry.getGoal(request.params.id);
+    if (!goal) {
+      return reply.status(404).send({ error: 'Goal not found' });
+    }
     return registry.getArtifacts(request.params.id);
   });
 }

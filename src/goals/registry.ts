@@ -173,6 +173,11 @@ export class GoalRegistry {
     return this.getGoal(id);
   }
 
+  /**
+   * Soft-delete a goal by setting its status to 'abandoned'.
+   * Goals that are already 'achieved' or 'abandoned' will not be modified.
+   * @returns true if the goal was updated, false otherwise
+   */
   deleteGoal(id: string): boolean {
     const result = this.store.run(
       "UPDATE goals SET status = 'abandoned' WHERE id = ? AND status NOT IN ('achieved', 'abandoned')",
@@ -293,7 +298,16 @@ export class GoalRegistry {
       now,
     );
 
-    return this.getArtifacts(goalId).find((a) => a.id === id)!;
+    // Query by id directly instead of fetching all and filtering
+    const row = this.store.get('SELECT * FROM artifacts WHERE id = ?', id) as ArtifactRow;
+    return {
+      id: row.id,
+      goalId: row.goal_id,
+      type: row.type,
+      ref: row.ref,
+      repo: row.repo,
+      linkedAt: row.linked_at,
+    };
   }
 
   getArtifacts(goalId: string): GoalArtifact[] {
