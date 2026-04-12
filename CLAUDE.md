@@ -31,6 +31,7 @@ Core modules:
 - `npm run build` — build with tsup
 - `npm run lint` — ESLint + Prettier check
 - Conventional commits: `<type>(scope): description`
+- **Never commit directly to main.** All changes go through feature branches and PRs. This is enforced by a pre-commit hook (`.husky/pre-commit`) that rejects commits on `main`.
 - Feature branches: `feat/<name>`, `fix/<name>` — PR to main
 
 ## Key Concepts
