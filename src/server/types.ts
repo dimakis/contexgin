@@ -13,6 +13,8 @@ export interface ServerConfig {
   roots: string[];
   /** SQLite database path */
   dbPath: string;
+  /** Goals SQLite database path */
+  goalsDbPath: string;
   /** File watcher debounce interval in ms */
   debounceMs: number;
   /** Enable file watching */
@@ -25,6 +27,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   socketPath: null,
   roots: [],
   dbPath: ':memory:',
+  goalsDbPath: ':memory:',
   debounceMs: 500,
   watch: true,
 };
