@@ -109,6 +109,29 @@ export {
   type GraphResponse,
 } from './server/types.js';
 
+// Registry
+export type {
+  Schema,
+  Declaration,
+  Validator,
+  ValidationContext,
+  ValidationResult,
+  DriftReport as RegistryDriftReport,
+  DriftSummary,
+  DriftDelta,
+  WatchConfig,
+  NotifyConfig,
+  CompatibilityMode,
+  DeclarationSeverity,
+  WatchMode,
+  SchemaVersion,
+  CompatibilityResult,
+  BreakingChange,
+  SchemaProvider,
+  SchemaSource,
+} from './registry/index.js';
+export { WorkspaceProvider } from './registry/index.js';
+
 // Permissions
 export { evaluatePermission } from './permissions/policy.js';
 export type {
