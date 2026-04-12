@@ -2,13 +2,9 @@ import * as path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { buildGraph } from '../../graph/builder.js';
 import { validateGraph } from '../../graph/validate.js';
-import type { ServerConfig, ServerState, ValidateRequest, ValidateResponse } from '../types.js';
+import type { ServerConfig, ValidateRequest, ValidateResponse } from '../types.js';
 
-export function validateRoute(
-  app: FastifyInstance,
-  state: ServerState,
-  config: ServerConfig,
-): void {
+export function validateRoute(app: FastifyInstance, config: ServerConfig): void {
   app.post<{ Body: ValidateRequest }>('/validate', async (request, reply) => {
     const rawRoots = request.body?.roots ?? config.roots;
     if (rawRoots.length === 0) {
@@ -17,14 +13,10 @@ export function validateRoute(
 
     const roots = rawRoots.map((r) => path.resolve(r.replace(/^~/, process.env.HOME || '')));
 
-    // Build fresh graph and validate
+    // Build fresh graph and validate (does not mutate server state)
     const graph = await buildGraph(roots);
     const violations = await validateGraph(graph);
     const allViolations = [...graph.violations, ...violations];
-
-    // Update server state with fresh graph
-    state.graph = graph;
-    state.lastBuild = new Date();
 
     const response: ValidateResponse = {
       violations: allViolations,

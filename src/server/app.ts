@@ -36,11 +36,28 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   // Register routes
   healthRoute(app, state);
   compileRoute(app, state);
-  validateRoute(app, state, config);
+  validateRoute(app, config);
   graphRoutes(app, state);
+
+  // Serialize rebuilds — if one is in flight, the next caller waits for it
+  let rebuildInFlight: Promise<void> | null = null;
 
   async function rebuild(): Promise<void> {
     if (config.roots.length === 0) return;
+    if (rebuildInFlight) {
+      // A rebuild is already running — wait for it instead of starting a second
+      await rebuildInFlight;
+      return;
+    }
+    rebuildInFlight = doRebuild();
+    try {
+      await rebuildInFlight;
+    } finally {
+      rebuildInFlight = null;
+    }
+  }
+
+  async function doRebuild(): Promise<void> {
     state.rebuilding = true;
     const start = Date.now();
     try {

@@ -243,10 +243,11 @@ function parseFlag(args: string[], flag: string): string | null {
 async function runServe(roots: string[], args: string[]) {
   const resolvedRoots = roots.map((r) => path.resolve(r.replace(/^~/, process.env.HOME || '')));
 
+  const portFlag = parseFlag(args, '--port');
   const config: ServerConfig = {
     ...DEFAULT_CONFIG,
     roots: resolvedRoots,
-    port: Number(parseFlag(args, '--port')) || DEFAULT_CONFIG.port,
+    port: portFlag !== null ? Number(portFlag) : DEFAULT_CONFIG.port,
     socketPath: parseFlag(args, '--socket'),
     dbPath: parseFlag(args, '--db') ?? DEFAULT_CONFIG.dbPath,
     watch: !args.includes('--no-watch'),
@@ -276,21 +277,22 @@ async function runServe(roots: string[], args: string[]) {
   }
 
   // Start file watcher
+  let watcher: ReturnType<typeof startWatcher> | null = null;
   if (config.watch) {
-    const watcher = startWatcher(server, config);
+    watcher = startWatcher(server, config);
     console.log(dim(`  Watching ${watcher.watchCount} roots for constitution changes`));
-
-    // Cleanup on shutdown
-    const cleanup = async () => {
-      console.log(dim('\nShutting down...'));
-      watcher.close();
-      await server.shutdown();
-      process.exit(0);
-    };
-
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
   }
+
+  // Cleanup on shutdown — always register, even without watcher
+  const cleanup = async () => {
+    console.log(dim('\nShutting down...'));
+    watcher?.close();
+    await server.shutdown();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 
   console.log('');
   console.log(bold('API endpoints:'));

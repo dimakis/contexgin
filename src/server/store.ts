@@ -11,6 +11,9 @@ export interface GraphSnapshot {
   graph: HubGraph;
 }
 
+/** Maximum number of snapshots to retain */
+const MAX_SNAPSHOTS = 50;
+
 export class GraphStore {
   private db: Database.Database;
 
@@ -57,7 +60,20 @@ export class GraphStore {
       graph.violations.length,
       JSON.stringify(graph),
     );
-    return result.lastInsertRowid as number;
+    const id = result.lastInsertRowid as number;
+    this.pruneSnapshots();
+    return id;
+  }
+
+  /** Remove old snapshots beyond the retention limit */
+  private pruneSnapshots(): void {
+    this.db
+      .prepare(
+        `DELETE FROM snapshots WHERE id NOT IN (
+          SELECT id FROM snapshots ORDER BY id DESC LIMIT ?
+        )`,
+      )
+      .run(MAX_SNAPSHOTS);
   }
 
   /** Get the latest snapshot */

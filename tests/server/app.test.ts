@@ -85,6 +85,19 @@ describe('ContexGin Server', () => {
       expect(server.state.graph!.hubs.length).toBe(1);
       expect(server.state.lastBuild).toBeInstanceOf(Date);
     });
+
+    it('serializes concurrent rebuild calls', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Fire two rebuilds concurrently — both should resolve without error
+      const [r1, r2] = await Promise.allSettled([server.rebuild(), server.rebuild()]);
+
+      expect(r1.status).toBe('fulfilled');
+      expect(r2.status).toBe('fulfilled');
+      expect(server.state.graph).not.toBeNull();
+      expect(server.state.rebuilding).toBe(false);
+    });
   });
 
   describe('GET /health', () => {

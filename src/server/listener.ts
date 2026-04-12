@@ -11,7 +11,8 @@ export interface ListenerInfo {
 
 /**
  * Start the server on TCP and optionally a Unix socket.
- * Returns the bound addresses.
+ * Returns the bound addresses. If the Unix socket bind fails,
+ * the TCP listener is closed before re-throwing.
  */
 export async function startListeners(
   server: ContexGinServer,
@@ -31,8 +32,14 @@ export async function startListeners(
       // Doesn't exist — fine
     }
 
-    await server.app.listen({ path: config.socketPath });
-    socket = config.socketPath;
+    try {
+      await server.app.listen({ path: config.socketPath });
+      socket = config.socketPath;
+    } catch (err) {
+      // Socket bind failed — close the TCP listener so we don't leave it dangling
+      await server.app.close();
+      throw err;
+    }
   }
 
   return { tcp: tcpAddress, socket };

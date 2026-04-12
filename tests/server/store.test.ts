@@ -106,4 +106,24 @@ describe('GraphStore', () => {
     const builds = store.getBuilds(5);
     expect(builds).toHaveLength(5);
   });
+
+  it('prunes snapshots beyond retention limit', () => {
+    store = new GraphStore(':memory:');
+
+    // Insert 60 snapshots (limit is 50)
+    for (let i = 0; i < 60; i++) {
+      store.saveSnapshot(makeGraph(1));
+    }
+
+    // Should have pruned to 50
+    const count = (
+      store['db'].prepare('SELECT COUNT(*) as cnt FROM snapshots').get() as { cnt: number }
+    ).cnt;
+    expect(count).toBe(50);
+
+    // Latest snapshot should still be retrievable
+    const latest = store.getLatestSnapshot();
+    expect(latest).not.toBeNull();
+    expect(latest!.id).toBe(60);
+  });
 });
