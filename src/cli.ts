@@ -269,11 +269,12 @@ async function runServe(roots: string[], args: string[]) {
     green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
   );
 
-  // Start listeners
+  // Start listener
   const listener = await startListeners(server, config);
-  console.log(green(`✓ Listening on ${listener.tcp}`));
-  if (listener.socket) {
-    console.log(green(`✓ Unix socket: ${listener.socket}`));
+  if (listener.isSocket) {
+    console.log(green(`✓ Listening on Unix socket: ${listener.address}`));
+  } else {
+    console.log(green(`✓ Listening on ${listener.address}`));
   }
 
   // Start file watcher
@@ -294,13 +295,14 @@ async function runServe(roots: string[], args: string[]) {
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
 
+  const base = listener.isSocket ? `unix:${listener.address}` : listener.address;
   console.log('');
   console.log(bold('API endpoints:'));
-  console.log(`  GET  ${listener.tcp}/health`);
-  console.log(`  POST ${listener.tcp}/compile`);
-  console.log(`  POST ${listener.tcp}/validate`);
-  console.log(`  GET  ${listener.tcp}/graph`);
-  console.log(`  GET  ${listener.tcp}/graph/:hubId`);
+  console.log(`  GET  ${base}/health`);
+  console.log(`  POST ${base}/compile`);
+  console.log(`  POST ${base}/validate`);
+  console.log(`  GET  ${base}/graph`);
+  console.log(`  GET  ${base}/graph/:hubId`);
   console.log('');
   console.log(dim('Press Ctrl+C to stop'));
 }

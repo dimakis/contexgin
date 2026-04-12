@@ -10,5 +10,4 @@ exec node dist/cli.js serve \
   /Users/dsaridak/projects/contexgin \
   /Users/dsaridak/projects/centaur \
   --db /Users/dsaridak/.local/share/contexgin/graph.db \
-  --socket /tmp/contexgin.sock \
   --port 4195
