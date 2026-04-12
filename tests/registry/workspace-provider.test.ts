@@ -314,6 +314,79 @@ describe('WorkspaceProvider', () => {
       expect(result.message).toContain('ghost');
     });
 
+    it('file_exists: resolves relative path against workspaceRoot', async () => {
+      const provider = new WorkspaceProvider();
+      const validators = provider.createValidators();
+      const fileValidator = validators.find((v) => v.kind === 'file_exists')!;
+
+      const result = await fileValidator.validate(
+        { kind: 'file_exists', target: 'start.sh', severity: 'error' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.message).toContain('start.sh');
+    });
+
+    it('directory_exists: invalid when target is a file', async () => {
+      const provider = new WorkspaceProvider();
+      const validators = provider.createValidators();
+      const dirValidator = validators.find((v) => v.kind === 'directory_exists')!;
+
+      const result = await dirValidator.validate(
+        { kind: 'directory_exists', target: path.join(root, 'start.sh'), severity: 'error' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.actual).toBe('file');
+      expect(result.remediation).toContain('file_exists');
+    });
+
+    it('external_reference: valid for existing path', async () => {
+      const provider = new WorkspaceProvider();
+      const validators = provider.createValidators();
+      const extValidator = validators.find((v) => v.kind === 'external_reference')!;
+
+      // Use the tmpDir itself as a known-existing external path
+      const result = await extValidator.validate(
+        { kind: 'external_reference', target: tmpDir, severity: 'warning' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.message).toContain('External reference exists');
+    });
+
+    it('external_reference: invalid for missing path', async () => {
+      const provider = new WorkspaceProvider();
+      const validators = provider.createValidators();
+      const extValidator = validators.find((v) => v.kind === 'external_reference')!;
+
+      const result = await extValidator.validate(
+        { kind: 'external_reference', target: '/nonexistent/path/nowhere', severity: 'warning' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('does not exist');
+      expect(result.remediation).toBeDefined();
+    });
+
+    it('external_reference: expands tilde paths', async () => {
+      const provider = new WorkspaceProvider();
+      const validators = provider.createValidators();
+      const extValidator = validators.find((v) => v.kind === 'external_reference')!;
+
+      // ~ should resolve to home directory, which exists
+      const result = await extValidator.validate(
+        { kind: 'external_reference', target: '~', severity: 'warning' },
+        { workspaceRoot: root, schema: STUB_SCHEMA },
+      );
+
+      expect(result.valid).toBe(true);
+    });
+
     it('entry_point: valid for existing script', async () => {
       const provider = new WorkspaceProvider();
       const validators = provider.createValidators();
