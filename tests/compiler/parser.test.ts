@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdown, stripFrontmatter, type HeadingNode } from '../../src/compiler/parser.js';
+import { parseMarkdown, stripFrontmatter } from '../../src/compiler/parser.js';
 
 describe('parseMarkdown', () => {
   it('parses flat heading list', () => {

@@ -31,10 +31,7 @@ function scoreEntry(entry: ConstitutionEntry, taskTerms: string[]): number {
  * 3. Include specific sections where possible
  * 4. Cap at 10 items
  */
-export function generateReadingList(
-  task: string,
-  index: ConstitutionEntry[],
-): ReadingList {
+export function generateReadingList(task: string, index: ConstitutionEntry[]): ReadingList {
   const taskTerms = task
     .toLowerCase()
     .split(/\s+/)

@@ -1,4 +1,4 @@
-import type { PermissionPolicy, PermissionEvaluation, PermissionRule } from './types.js';
+import type { PermissionPolicy, PermissionEvaluation } from './types.js';
 
 /**
  * Evaluate a permission request against a policy.

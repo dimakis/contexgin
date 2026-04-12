@@ -21,10 +21,13 @@ const NAVIGATIONAL_HEADINGS = [
 ];
 
 /** Heading keywords that indicate constitutional content */
-const CONSTITUTIONAL_HEADINGS = ['purpose', 'principles', 'boundaries', 'constitution', 'governance'];
-
-/** Heading keywords that indicate identity content */
-const IDENTITY_HEADINGS = ['profile', 'communication', 'style', 'identity', 'preferences'];
+const CONSTITUTIONAL_HEADINGS = [
+  'purpose',
+  'principles',
+  'boundaries',
+  'constitution',
+  'governance',
+];
 
 /** Heading keywords that indicate historical content */
 const HISTORICAL_HEADINGS = ['session', 'history', 'decisions', 'log', 'journal'];

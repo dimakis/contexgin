@@ -1,7 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ConstitutionEntry } from './types.js';
-import { parseMarkdown } from '../compiler/parser.js';
 
 /**
  * Extract purpose from a constitution (first paragraph after "## Purpose").
@@ -85,7 +84,10 @@ function extractDirectorySemantics(content: string): Map<string, string> {
     }
 
     if (inDirectorySection && line.includes('|')) {
-      const cells = line.split('|').map((c) => c.trim()).filter((c) => c.length > 0);
+      const cells = line
+        .split('|')
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
       if (cells.length >= 2) {
         const dir = cells[0].replace(/`/g, '').trim();
         const desc = cells[1].replace(/`/g, '').trim();

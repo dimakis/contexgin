@@ -55,7 +55,11 @@ export async function validateClaim(claim: Claim, workspaceRoot: string): Promis
     case 'boundary':
     case 'structural': {
       // Structural and boundary claims require more context to validate
-      return { claim, valid: true, message: `${claim.kind} claim — skipped (requires manual review)` };
+      return {
+        claim,
+        valid: true,
+        message: `${claim.kind} claim — skipped (requires manual review)`,
+      };
     }
 
     default: {

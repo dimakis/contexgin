@@ -7,7 +7,11 @@ function makeRankedSection(
   content: string,
   name: string = 'Section',
 ): RankedSection {
-  const source: ContextSource = { path: '/test/file.md', kind: 'constitution', relativePath: 'file.md' };
+  const source: ContextSource = {
+    path: '/test/file.md',
+    kind: 'constitution',
+    relativePath: 'file.md',
+  };
   return {
     source,
     headingPath: [name],

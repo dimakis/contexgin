@@ -100,7 +100,8 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
         section.content = cleanContent(section.content);
         // Include heading markup + separator overhead (~2 newlines + heading chars)
         const headingOverhead = section.headingPath[section.headingPath.length - 1].length + 10;
-        section.tokenEstimate = estimateTokens(section.content) + estimateTokens(' '.repeat(headingOverhead));
+        section.tokenEstimate =
+          estimateTokens(section.content) + estimateTokens(' '.repeat(headingOverhead));
       }
 
       allSections.push(...sections);
@@ -128,10 +129,12 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
   const { included, trimmed } = trimToBudget(filtered, tokenBudget);
 
   // Step 6: Assemble
-  const bootPayload = included.map((s) => {
-    const heading = '#'.repeat(s.level) + ' ' + s.headingPath[s.headingPath.length - 1];
-    return heading + '\n\n' + s.content;
-  }).join('\n\n');
+  const bootPayload = included
+    .map((s) => {
+      const heading = '#'.repeat(s.level) + ' ' + s.headingPath[s.headingPath.length - 1];
+      return heading + '\n\n' + s.content;
+    })
+    .join('\n\n');
 
   const navigationHints = included.map((s) => s.headingPath.join(' > '));
 

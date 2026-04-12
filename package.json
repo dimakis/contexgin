@@ -16,6 +16,9 @@
     "llm",
     "orchestration"
   ],
+  "bin": {
+    "contexgin": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -45,5 +48,8 @@
     "*.{json,md}": [
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "ignore": "^7.0.5"
   }
 }

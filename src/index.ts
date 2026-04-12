@@ -19,21 +19,17 @@ export { validateClaim, validateAll } from './integrity/validator.js';
 export type { Claim, ClaimResult, DriftReport } from './integrity/types.js';
 
 // Navigation
-export { indexConstitutions, extractPurpose, extractEntryPoints } from './navigation/constitution-index.js';
+export {
+  indexConstitutions,
+  extractPurpose,
+  extractEntryPoints,
+} from './navigation/constitution-index.js';
 export { generateReadingList } from './navigation/reading-list.js';
 export { isAccessAllowed, getAccessibleSpokes } from './navigation/boundaries.js';
-export type {
-  ConstitutionEntry,
-  ReadingList,
-  ReadingItem,
-} from './navigation/types.js';
+export type { ConstitutionEntry, ReadingList, ReadingItem } from './navigation/types.js';
 
 // Provider (types only)
-export type {
-  SessionOptions,
-  AgentProvider,
-  AgentSession,
-} from './provider/interface.js';
+export type { SessionOptions, AgentProvider, AgentSession } from './provider/interface.js';
 export type {
   TokenUsage,
   SessionInfo,
@@ -44,11 +40,42 @@ export type {
 
 // Tools
 export { ToolRegistry } from './tools/registry.js';
+export type { ToolDefinition, ToolResult, McpServerConfig } from './tools/types.js';
+
+// Graph
+export {
+  buildGraph,
+  parseConstitution,
+  parseConstitutionContent,
+  resolveReference,
+  traverseDependencies,
+  isAccessible,
+  findSpoke,
+  getExternals,
+  validateGraph,
+  loadIgnorePatterns,
+  shouldIgnore,
+  VIOLATION_KINDS,
+} from './graph/index.js';
 export type {
-  ToolDefinition,
-  ToolResult,
-  McpServerConfig,
-} from './tools/types.js';
+  Hub,
+  Spoke,
+  Constitution,
+  Dependency,
+  DependencyKind,
+  Boundary,
+  EntryPoint as GraphEntryPoint,
+  ExternalRef as GraphExternalRef,
+  DeclaredNode as GraphDeclaredNode,
+  SpokeDeclaration,
+  ConfidentialityLevel,
+  Violation,
+  ViolationKind,
+  ViolationSeverity,
+  HubGraph,
+  ResolvedPath,
+  IgnorePatterns,
+} from './graph/index.js';
 
 // Permissions
 export { evaluatePermission } from './permissions/policy.js';

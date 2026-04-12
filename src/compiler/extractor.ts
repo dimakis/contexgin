@@ -49,7 +49,8 @@ export function extractSection(
 function collectFullContent(node: HeadingNode): string {
   let content = node.content;
   for (const child of node.children) {
-    content += '\n' + '#'.repeat(child.level) + ' ' + child.title + '\n' + collectFullContent(child);
+    content +=
+      '\n' + '#'.repeat(child.level) + ' ' + child.title + '\n' + collectFullContent(child);
   }
   return content;
 }

@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        id: lint
+        run: npm run lint
+
+      - name: Format check
+        id: format
+        if: always()
+        run: npx prettier --check 'src/**/*.ts' 'tests/**/*.ts'
+
+      - name: Type check
+        id: typecheck
+        if: always()
+        run: npm run check
+
+      - name: Test
+        id: test
+        if: always()
+        run: npm test 2>&1 | tee test-output.txt
+
+      - name: Test count guard
+        id: test-count
+        if: always()
+        run: |
+          COUNT=$(grep 'Tests' test-output.txt | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
+          echo "Test count: $COUNT"
+          if [ -z "$COUNT" ] || [ "$COUNT" -lt 160 ]; then
+            echo "::error::Test count dropped below 160 (got ${COUNT:-0}). Did you accidentally delete tests?"
+            exit 1
+          fi
+
+      - name: Build
+        id: build
+        if: always()
+        run: npm run build
+
+      - name: Verify dist exports
+        id: verify-dist
+        if: always()
+        run: node -e "import('./dist/index.js').then(m => { const keys = Object.keys(m); console.log('Exports:', keys.length); if (keys.length < 5) { process.exit(1); } })"
+
+      - name: Audit
+        id: audit
+        if: always()
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # ── Future: server phase ──────────────────────────────────
+      # When ContexGin becomes a daemon/API server, add:
+      # - name: Integration tests
+      #   run: npm run test:integration
+      #
+      # - name: Docker build
+      #   run: docker build -t contexgin .
+      #
+      # - name: Health check
+      #   run: |
+      #     docker run -d --name contexgin-test -p 3000:3000 contexgin
+      #     sleep 2
+      #     curl -f http://localhost:3000/health
+      #     docker stop contexgin-test
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### CI Results (Node ${{ matrix.node-version }})" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ steps.lint.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Format | ${{ steps.format.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Type check | ${{ steps.typecheck.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | ${{ steps.test.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test count | ${{ steps.test-count.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ steps.build.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dist exports | ${{ steps.verify-dist.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Audit | ${{ steps.audit.outcome }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.lint.outcome }}" = "failure" ] || \
+             [ "${{ steps.format.outcome }}" = "failure" ] || \
+             [ "${{ steps.typecheck.outcome }}" = "failure" ] || \
+             [ "${{ steps.test.outcome }}" = "failure" ] || \
+             [ "${{ steps.test-count.outcome }}" = "failure" ] || \
+             [ "${{ steps.build.outcome }}" = "failure" ] || \
+             [ "${{ steps.verify-dist.outcome }}" = "failure" ]; then
+            echo "::error::One or more CI steps failed."
+            exit 1
+          fi
