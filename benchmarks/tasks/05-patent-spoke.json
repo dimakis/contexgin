@@ -1,0 +1,14 @@
+{
+  "id": "05-patent-spoke",
+  "title": "Create patent tracking spoke",
+  "prompt": "Create a new spoke for patent tracking with its own constitution",
+  "difficulty": "complex",
+  "successCriteria": [
+    "Creates directory following spoke conventions",
+    "Writes constitution following existing spoke patterns",
+    "Updates root CONSTITUTION.md architecture table",
+    "Includes appropriate .gitignore entries if needed"
+  ],
+  "workspace": "~/redhat/mgmt",
+  "expectedArtifacts": [{ "type": "file", "pattern": "patent_tracking/CONSTITUTION.md" }]
+}

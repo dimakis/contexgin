@@ -1,0 +1,14 @@
+{
+  "id": "02-jira-spoke",
+  "title": "Identify Jira spoke architecture",
+  "prompt": "Which spoke handles Jira data and where does the canonical code live?",
+  "difficulty": "simple",
+  "successCriteria": [
+    "Distinguishes mgmt/jira_process (data workspace) from team_home/jira_process (canonical code)",
+    "Identifies team_home as a sibling repo, not vendored subtree",
+    "Mentions that team_home ships to GitLab",
+    "Does not conflate the two directories"
+  ],
+  "workspace": "~/redhat/mgmt",
+  "expectedArtifacts": []
+}
