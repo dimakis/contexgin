@@ -1,0 +1,14 @@
+{
+  "id": "03-new-agent",
+  "title": "Create a service sync agent",
+  "prompt": "Add a new agent that checks if SERVICES.md is in sync with launchd plists",
+  "difficulty": "moderate",
+  "successCriteria": [
+    "Creates valid MgmtAgent subclass",
+    "Follows the agent contract from mgmt_lib/agents/base.py",
+    "Writes proposals to mgmt_lib/inbox/ rather than acting directly",
+    "Includes journal logging"
+  ],
+  "workspace": "~/redhat/mgmt",
+  "expectedArtifacts": [{ "type": "file", "pattern": "mgmt_lib/agents/*.py" }]
+}

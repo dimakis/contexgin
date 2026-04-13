@@ -1,0 +1,14 @@
+{
+  "id": "01-entry-points",
+  "title": "Identify workspace entry points",
+  "prompt": "What are the entry points for this workspace?",
+  "difficulty": "simple",
+  "successCriteria": [
+    "Lists ./mgmt CLI with description",
+    "Lists refresh.sh with description",
+    "Lists status.py with description",
+    "Does not hallucinate non-existent entry points"
+  ],
+  "workspace": "~/redhat/mgmt",
+  "expectedArtifacts": []
+}

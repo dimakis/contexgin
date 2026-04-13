@@ -1,0 +1,14 @@
+{
+  "id": "04-troubadour-fix",
+  "title": "Fix troubadour TF-IDF heading weight",
+  "prompt": "The troubadour agent's TF-IDF scoring doesn't account for heading weight — fix it",
+  "difficulty": "moderate",
+  "successCriteria": [
+    "Modifies troubadour.py correctly",
+    "Understands the existing TF-IDF algorithm",
+    "Adds heading weight without breaking existing scoring",
+    "Does not introduce regressions in other scoring paths"
+  ],
+  "workspace": "~/redhat/mgmt",
+  "expectedArtifacts": [{ "type": "file", "pattern": "mgmt_lib/agents/troubadour.py" }]
+}
