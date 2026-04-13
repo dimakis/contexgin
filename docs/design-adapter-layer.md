@@ -152,6 +152,78 @@ The adapter layer model separates three concerns that graph frameworks tangle:
 
 The onboarding story becomes: "write a YAML definition, point at your context sources, deploy." No graph to author, no framework to learn.
 
+## Platform Integration: ContexGin as Init Layer
+
+ContexGin is not orchestration. It's a **pre-boot step** — an init container, not a sidecar.
+
+### Lifecycle
+
+```
+Agent definition (CRD) created
+        │
+        ▼
+ContexGin compiles context for this agent
+        │  (reads sources via adapters)
+        │  (ranks, trims to budget)
+        │  (validates structural claims)
+        │
+        ▼
+Compiled payload injected as system prompt / env
+        │
+        ▼
+Platform starts the agent container
+        │  (OpenClaw claw / Cogenti workload)
+        │
+        ▼
+Agent runs with full context from first token
+```
+
+No ongoing coupling. ContexGin runs before the agent boots, produces a context payload, and gets out of the way.
+
+### OpenClaw Integration
+
+- Each claw definition gets a `context` field pointing at sources
+- Platform calls ContexGin API to compile before starting the claw
+- Payload goes in as system prompt or mounted config
+- ContexGin is an optional init step — claws get smarter without changing their code
+
+### Cogenti Differentiation
+
+Without ContexGin, both OpenClaw and Cogenti are **dumb runtimes** — they run agents but don't help them be smarter. Every agent discovers its own context at runtime, burning tokens.
+
+With ContexGin as a native platform service, Cogenti becomes **context-aware**: agents boot pre-compiled with the right context. That's the value-add over OpenClaw — not just "deploy agents on OpenShift" but "deploy agents that already know what they need to know."
+
+### Agent Category Mapping
+
+Three categories of "agents" exist — ContexGin helps all of them:
+
+| Category      | Examples                              | What it provides                         | ContexGin role                                |
+| ------------- | ------------------------------------- | ---------------------------------------- | --------------------------------------------- |
+| **Framework** | LangGraph, LangChain, CrewAI, AutoGen | Orchestration logic (graph/chain)        | Compile context for each node's LLM call      |
+| **Harness**   | Claude Code, Codex, Devin, Cline      | Runtime environment (tools, permissions) | Compile boot payload for autonomous decisions |
+| **Platform**  | OpenClaw, Cogenti                     | Deployment + lifecycle on K8s            | Init container — compile before agent starts  |
+
+ContexGin is orthogonal to all three. It's infrastructure, not a framework or a harness.
+
+### Benchmark Grid
+
+To prove the value, test across categories:
+
+|                           | No context | ContexGin compiled                           |
+| ------------------------- | ---------- | -------------------------------------------- |
+| **LangGraph** (framework) | Baseline   | Does context help a scripted agent?          |
+| **Claude Code** (harness) | Baseline   | Does context help an autonomous agent?       |
+| **OpenClaw** (platform)   | Baseline   | Does context help a platform-deployed agent? |
+
+If ContexGin reduces tokens-to-goal across all three, the pitch is: **context compilation is orthogonal to how you build or deploy agents.**
+
+Benchmark tasks (ordered by wiring effort):
+
+1. **PR review agent** — direct quality comparison, easy to ground-truth
+2. **Bug localization** — given a bug report, find the right files. Test at three context levels (none / Level 0 adapter-ingested / Level 2 constitutions) to prove the maturity model
+3. **Codebase Q&A** — 10 architecture questions, measure tokens + accuracy. Zero setup.
+4. **Non-SWE task** (compliance audit or RFP response) — proves the pattern is domain-agnostic
+
 ## Open Questions
 
 - **Adapter discovery** — how does ContexGin know which sidecar adapters are available? Service registry? Convention?
@@ -159,3 +231,5 @@ The onboarding story becomes: "write a YAML definition, point at your context so
 - **Conflict resolution** — if CLAUDE.md and CONSTITUTION.md say contradictory things about the same scope, which wins? (Probably: constitution > operational, with a drift warning.)
 - **Output adapters** — the diagram shows output formatting per consumer. Is that also pluggable, or is it a fixed set?
 - **Multi-tenant isolation** — in Cogenti, how do adapter-pushed nodes respect namespace/hub boundaries?
+- **Init vs sidecar trade-off** — init container means context is static for the agent's lifetime. Should there be a refresh mechanism for long-running agents, or is recompile-on-restart sufficient?
+- **OpenClaw integration surface** — what's the minimal API contract for OpenClaw to call ContexGin as an init step? Is a single `/compile` endpoint enough?
