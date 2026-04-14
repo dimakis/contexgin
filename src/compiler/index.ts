@@ -329,7 +329,7 @@ export async function compileWithAdapters(options: CompileOptions): Promise<Comp
     : ranked;
 
   // Step 4: Trim to budget
-  const { included } = trimNodesToBudget(filtered, tokenBudget);
+  const { included, trimmed } = trimNodesToBudget(filtered, tokenBudget);
 
   // Step 5: Assemble grouped payload
   const bootPayload = assembleGroupedPayload(included);
@@ -355,8 +355,9 @@ export async function compileWithAdapters(options: CompileOptions): Promise<Comp
     navigationHints,
     bootTokens: estimateTokens(bootPayload),
     sources,
-    trimmed: [], // ExtractedSection[] — empty for adapter pipeline
+    trimmed: [], // ExtractedSection[] — empty for adapter pipeline (legacy field)
     nodes: included.map(nodeToSerialized),
+    trimmedNodes: trimmed.map(nodeToSerialized),
   };
 }
 

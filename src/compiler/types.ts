@@ -61,6 +61,8 @@ export interface CompiledContext {
   trimmed: ExtractedSection[];
   /** Typed context nodes (present when compiled via adapter pipeline) */
   nodes?: SerializedNode[];
+  /** Nodes trimmed due to budget (present when compiled via adapter pipeline) */
+  trimmedNodes?: SerializedNode[];
 }
 
 /** Configuration for a compilation */
