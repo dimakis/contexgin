@@ -4,7 +4,9 @@ import { parseMarkdown, stripFrontmatter } from './parser.js';
 import { extractAllLevel2, cleanContent } from './extractor.js';
 import { rankSections } from './ranker.js';
 import { trimToBudget, estimateTokens } from './trimmer.js';
-import type { CompileOptions, CompiledContext, ContextSource } from './types.js';
+import type { CompileOptions, CompiledContext, ContextSource, SerializedNode } from './types.js';
+import { discoverAndAdapt } from '../adapter/index.js';
+import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
 
 /**
  * Auto-discover context sources in a workspace.
@@ -164,6 +166,176 @@ async function dirExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Adapter-based compilation ───────────────────────────────────
+
+/** Payload group ordering */
+const TYPE_GROUP_ORDER = [
+  'governance',
+  'structural',
+  'operational',
+  'identity',
+  'reference',
+] as const;
+
+const TYPE_GROUP_HEADINGS: Record<string, string> = {
+  governance: 'Governance',
+  structural: 'Architecture',
+  operational: 'Conventions',
+  identity: 'Identity',
+  reference: 'Reference',
+};
+
+/**
+ * Rank context nodes by tier weight + optional task boost.
+ */
+function rankNodes(nodes: ContextNode[], taskHint?: string): RankedNode[] {
+  return nodes
+    .map((node) => {
+      const weight = TIER_WEIGHTS[node.tier] ?? 0.5;
+      const boost = taskHint ? getNodeTaskBoost(node, taskHint) : 0;
+      const relevance = Math.min(weight + boost, 1.0);
+      const reason = boost > 0 ? `${node.tier} + task boost` : node.tier;
+      return { ...node, relevance, reason };
+    })
+    .sort((a, b) => b.relevance - a.relevance);
+}
+
+function getNodeTaskBoost(node: ContextNode, taskHint: string): number {
+  const taskTerms = taskHint
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+  if (taskTerms.length === 0) return 0;
+
+  const text = [node.id, node.content].join(' ').toLowerCase();
+  let matches = 0;
+  for (const term of taskTerms) {
+    if (text.includes(term)) matches++;
+  }
+  return (matches / taskTerms.length) * 0.2;
+}
+
+/**
+ * Assemble ranked nodes into a grouped payload.
+ * Groups by node type with section headers.
+ */
+function assembleGroupedPayload(nodes: RankedNode[]): string {
+  const groups = new Map<string, RankedNode[]>();
+
+  for (const node of nodes) {
+    const existing = groups.get(node.type) ?? [];
+    existing.push(node);
+    groups.set(node.type, existing);
+  }
+
+  const sections: string[] = [];
+
+  for (const type of TYPE_GROUP_ORDER) {
+    const group = groups.get(type);
+    if (!group || group.length === 0) continue;
+
+    const heading = TYPE_GROUP_HEADINGS[type] || type;
+    const content = group.map((n) => n.content).join('\n\n');
+    sections.push(`## ${heading}\n\n${content}`);
+  }
+
+  return sections.join('\n\n');
+}
+
+function trimNodesToBudget(
+  nodes: RankedNode[],
+  budget: number,
+): { included: RankedNode[]; trimmed: RankedNode[] } {
+  const included: RankedNode[] = [];
+  const trimmed: RankedNode[] = [];
+  let used = 0;
+
+  for (const node of nodes) {
+    if (used + node.tokenEstimate <= budget) {
+      included.push(node);
+      used += node.tokenEstimate;
+    } else {
+      trimmed.push(node);
+    }
+  }
+
+  return { included, trimmed };
+}
+
+function nodeToSerialized(node: ContextNode): SerializedNode {
+  return {
+    id: node.id,
+    type: node.type,
+    tier: node.tier,
+    content: node.content,
+    origin: {
+      source: node.origin.source,
+      relativePath: node.origin.relativePath,
+      format: node.origin.format,
+      ...(node.origin.headingPath ? { headingPath: node.origin.headingPath } : {}),
+    },
+    tokenEstimate: node.tokenEstimate,
+  };
+}
+
+/**
+ * Compile context using the adapter pipeline.
+ * Format-aware parsing → typed nodes → rank → trim → grouped payload.
+ */
+export async function compileWithAdapters(options: CompileOptions): Promise<CompiledContext> {
+  const { workspaceRoot, tokenBudget, taskHint } = options;
+
+  // Step 1: Discover and adapt all sources
+  const allNodes = await discoverAndAdapt(workspaceRoot);
+
+  // Step 2: Rank
+  const ranked = rankNodes(allNodes, taskHint);
+
+  // Step 3: Filter excluded (match by heading path prefix OR single-element match against node ID)
+  const filtered = options.excluded
+    ? ranked.filter(
+        (n) =>
+          !options.excluded!.some((excl) => {
+            // Single-element exclusion: also check node ID
+            if (excl.length === 1 && n.id === excl[0]) return true;
+            const hp = n.origin.headingPath ?? [n.id];
+            return excl.length <= hp.length && excl.every((seg, i) => hp[i] === seg);
+          }),
+      )
+    : ranked;
+
+  // Step 4: Trim to budget
+  const { included } = trimNodesToBudget(filtered, tokenBudget);
+
+  // Step 5: Assemble grouped payload
+  const bootPayload = assembleGroupedPayload(included);
+  const navigationHints = included.map((n) => (n.origin.headingPath ?? [n.id]).join(' > '));
+
+  // Build sources list for backwards compat
+  const sourceSet = new Set<string>();
+  const sources: ContextSource[] = [];
+  for (const node of allNodes) {
+    if (!sourceSet.has(node.origin.source)) {
+      sourceSet.add(node.origin.source);
+      sources.push({
+        path: node.origin.source,
+        kind: 'reference',
+        relativePath: node.origin.relativePath,
+      });
+    }
+  }
+
+  return {
+    bootPayload,
+    contextBlocks: new Map(),
+    navigationHints,
+    bootTokens: estimateTokens(bootPayload),
+    sources,
+    trimmed: [], // ExtractedSection[] — empty for adapter pipeline
+    nodes: included.map(nodeToSerialized),
+  };
 }
 
 // Re-exports
