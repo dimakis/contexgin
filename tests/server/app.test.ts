@@ -312,6 +312,19 @@ describe('ContexGin Server', () => {
       expect(response.statusCode).toBe(200);
       expect(body.spoke).toContain('svc');
       expect(body.tokens).toBeGreaterThanOrEqual(0);
+
+      // Adapter pipeline returns typed nodes
+      expect(body.nodes).toBeDefined();
+      expect(Array.isArray(body.nodes)).toBe(true);
+      if (body.nodes.length > 0) {
+        const node = body.nodes[0];
+        expect(node).toHaveProperty('id');
+        expect(node).toHaveProperty('type');
+        expect(node).toHaveProperty('tier');
+        expect(node).toHaveProperty('content');
+        expect(node).toHaveProperty('origin');
+        expect(node).toHaveProperty('tokenEstimate');
+      }
     });
 
     it('returns 404 for unknown spoke', async () => {

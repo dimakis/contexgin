@@ -20,7 +20,7 @@ export const constitutionAdapter: ContextAdapter = {
     const constitution = await parseConstitution(filePath);
     const nodes: ContextNode[] = [];
 
-    const origin = (id: string, headingPath?: string[]) => ({
+    const origin = (headingPath?: string[]) => ({
       source: filePath,
       relativePath,
       format: 'constitution' as const,
@@ -34,7 +34,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'identity',
         tier: 'constitutional',
         content: constitution.purpose,
-        origin: origin('purpose', ['Purpose']),
+        origin: origin(['Purpose']),
         tokenEstimate: estimateTokens(constitution.purpose),
       });
     }
@@ -49,7 +49,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'structural',
         tier: 'navigational',
         content: treeContent,
-        origin: origin('directory-semantics', ['Directory Semantics']),
+        origin: origin(['Directory Semantics']),
         tokenEstimate: estimateTokens(treeContent),
       });
     }
@@ -64,7 +64,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'operational',
         tier: 'navigational',
         content: epContent,
-        origin: origin('entry-points', ['Entry Points']),
+        origin: origin(['Entry Points']),
         tokenEstimate: estimateTokens(epContent),
       });
     }
@@ -79,7 +79,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'structural',
         tier: 'navigational',
         content: depContent,
-        origin: origin('dependencies', ['Dependencies']),
+        origin: origin(['Dependencies']),
         tokenEstimate: estimateTokens(depContent),
       });
     }
@@ -94,7 +94,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'governance',
         tier: 'constitutional',
         content: boundContent,
-        origin: origin('boundaries', ['Boundaries']),
+        origin: origin(['Boundaries']),
         tokenEstimate: estimateTokens(boundContent),
       });
     }
@@ -107,7 +107,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'governance',
         tier: 'constitutional',
         content: prinContent,
-        origin: origin('principles', ['Principles']),
+        origin: origin(['Principles']),
         tokenEstimate: estimateTokens(prinContent),
       });
     }
@@ -122,7 +122,7 @@ export const constitutionAdapter: ContextAdapter = {
         type: 'structural',
         tier: 'navigational',
         content: spokeContent,
-        origin: origin('spoke-charters', ['Spoke Charters']),
+        origin: origin(['Spoke Charters']),
         tokenEstimate: estimateTokens(spokeContent),
       });
     }

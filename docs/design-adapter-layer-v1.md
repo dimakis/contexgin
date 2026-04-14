@@ -3,7 +3,7 @@
 **Status:** Decision
 **Date:** 2026-04-14
 **Origin:** [design-adapter-layer.md](design-adapter-layer.md) (Thought), conversation about wiring structured context into Centaur reviewer
-**Depends on:** Phase 1 (Structural Graph) — complete
+**Depends on:** Phase 1 (Structural Graph) — complete (see [PLAN.md](../PLAN.md) for phase definitions)
 
 ## Goal
 
@@ -65,6 +65,12 @@ interface ContextNode {
 | `identity`    | Who/what this workspace is                | Purpose, profile, communication style                    |
 | `governance`  | What must/must not happen                 | Boundaries, access rules, principles, confidentiality    |
 | `reference`   | Pointers to other resources               | Service URLs, external docs, memory observations         |
+
+### Why both `type` and `tier`?
+
+`type` answers **what** the context is about (architecture vs rules vs identity). `tier` answers **how important** it is for the agent's first impression. They're orthogonal: a governance rule can be constitutional (hard boundary — always include) or reference-tier (soft guidance — trim under budget pressure). An architectural description can be navigational (key for orientation) or historical (old decision log). The compiler groups output by `type` and ranks within groups by `tier`. Consumers filter by `type` (e.g., "show me only governance nodes") and the ranker uses `tier` weights for budget decisions.
+
+The naming overlap (`identity` appears in both) is intentional: identity-type content at identity-tier is the common case, but identity content could also be constitutional-tier (e.g., a non-negotiable mission statement).
 
 ## Adapter Interface
 
@@ -155,7 +161,7 @@ async function discoverSources(workspaceRoot: string): Promise<AdaptedSource[]> 
 }
 ```
 
-Order matters — constitution_adapter checked before markdown_adapter so CONSTITUTION.md doesn't fall through to generic markdown.
+Order matters — constitution_adapter checked before markdown_adapter so CONSTITUTION.md doesn't fall through to generic markdown. The registry array is ordered by specificity (most specific first, markdown fallback last). A test guards this ordering to prevent silent degradation if someone reorders the array.
 
 ### Compilation Pipeline
 
@@ -207,8 +213,8 @@ interface CompiledContext {
   navigationHints: string[];
   bootTokens: number;
   sources: ContextSource[]; // keep for backwards compat
-  trimmed: ContextNode[]; // was ExtractedSection[]
-  nodes: ContextNode[]; // NEW: all included nodes, typed
+  trimmed: ExtractedSection[]; // unchanged type — empty [] in adapter pipeline
+  nodes?: SerializedNode[]; // NEW: typed nodes included in compilation
 }
 ```
 

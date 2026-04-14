@@ -13,13 +13,7 @@ import type { ContextAdapter, ContextNode, ContextNodeType, ContextTier } from '
 import { slugify } from './types.js';
 
 /** Heading keywords → type + tier classification */
-const CONSTITUTIONAL_KEYWORDS = [
-  'purpose',
-  'principles',
-  'boundaries',
-  'constitution',
-  'governance',
-];
+const CONSTITUTIONAL_KEYWORDS = ['principles', 'boundaries', 'constitution', 'governance'];
 const NAVIGATIONAL_KEYWORDS = [
   'architecture',
   'directory',

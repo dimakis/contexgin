@@ -5,7 +5,7 @@ import { extractAllLevel2, cleanContent } from './extractor.js';
 import { rankSections } from './ranker.js';
 import { trimToBudget, estimateTokens } from './trimmer.js';
 import type { CompileOptions, CompiledContext, ContextSource, SerializedNode } from './types.js';
-import { discoverAndAdapt } from '../adapter/index.js';
+import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
 import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
 
 /**
@@ -252,8 +252,21 @@ function trimNodesToBudget(
   const trimmed: RankedNode[] = [];
   let used = 0;
 
+  // Reserve budget for group heading overhead (## Heading\n\n per unique type)
+  const seenTypes = new Set<string>();
+
   for (const node of nodes) {
-    if (used + node.tokenEstimate <= budget) {
+    let overhead = 0;
+    if (!seenTypes.has(node.type)) {
+      const heading = TYPE_GROUP_HEADINGS[node.type] || node.type;
+      overhead = estimateTokens(`## ${heading}\n\n`);
+    }
+
+    if (used + node.tokenEstimate + overhead <= budget) {
+      if (!seenTypes.has(node.type)) {
+        seenTypes.add(node.type);
+        used += overhead;
+      }
       included.push(node);
       used += node.tokenEstimate;
     } else {
@@ -288,7 +301,16 @@ export async function compileWithAdapters(options: CompileOptions): Promise<Comp
   const { workspaceRoot, tokenBudget, taskHint } = options;
 
   // Step 1: Discover and adapt all sources
-  const allNodes = await discoverAndAdapt(workspaceRoot);
+  // Respect options.sources if provided (same contract as compile())
+  let allNodes: ContextNode[];
+  if (options.sources) {
+    const nodeArrays = await Promise.all(
+      options.sources.map((s) => adaptFile(s.path, workspaceRoot)),
+    );
+    allNodes = nodeArrays.flat();
+  } else {
+    allNodes = await discoverAndAdapt(workspaceRoot);
+  }
 
   // Step 2: Rank
   const ranked = rankNodes(allNodes, taskHint);

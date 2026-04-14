@@ -55,12 +55,15 @@ function parseFrontmatter(raw: string): { frontmatter: MdcFrontmatter; body: str
     return { frontmatter: {}, body: raw };
   }
 
-  const fmBlock = raw.slice(4, endIndex); // skip opening ---\n
-  const body = raw.slice(endIndex + 4).replace(/^\n/, '');
+  // Skip opening "---\n" or "---\r\n"
+  const fmStart = raw.indexOf('\n', 0) + 1;
+  const fmBlock = raw.slice(fmStart, endIndex);
+  const body = raw.slice(endIndex + 4).replace(/^\r?\n/, '');
 
   const fm: MdcFrontmatter = {};
 
-  for (const line of fmBlock.split('\n')) {
+  for (const rawLine of fmBlock.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();

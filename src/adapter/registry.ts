@@ -30,10 +30,18 @@ export function findAdapter(filePath: string): ContextAdapter | undefined {
 
 /**
  * Adapt a single file using the appropriate adapter.
- * Returns empty array if no adapter matches.
+ * Returns empty array if no adapter matches or if the adapter throws.
+ * Error isolation: one bad file never fails the whole pipeline.
  */
 export async function adaptFile(filePath: string, workspaceRoot: string): Promise<ContextNode[]> {
   const adapter = findAdapter(filePath);
   if (!adapter) return [];
-  return adapter.adapt(filePath, workspaceRoot);
+  try {
+    return await adapter.adapt(filePath, workspaceRoot);
+  } catch (err) {
+    // Log but don't propagate — same resilience as the original compile() pipeline
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[contexgin] adapter ${adapter.format} failed for ${filePath}: ${msg}`);
+    return [];
+  }
 }
