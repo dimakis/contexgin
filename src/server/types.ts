@@ -67,11 +67,27 @@ export interface CompileRequest {
   budget?: number;
 }
 
+export interface CompileResponseNode {
+  id: string;
+  type: string;
+  tier: string;
+  content: string;
+  origin: {
+    source: string;
+    relativePath: string;
+    format: string;
+    headingPath?: string[];
+  };
+  tokenEstimate: number;
+}
+
 export interface CompileResponse {
   context: string;
   tokens: number;
   sources: number;
   spoke: string;
+  /** Typed context nodes (adapter pipeline) */
+  nodes?: CompileResponseNode[];
 }
 
 export interface ValidateRequest {

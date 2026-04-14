@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { compile } from '../../compiler/index.js';
+import { compileWithAdapters } from '../../compiler/index.js';
 import { findSpoke } from '../../graph/query.js';
 import type { ServerState, CompileRequest, CompileResponse } from '../types.js';
 
@@ -20,8 +20,8 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
       return reply.status(404).send({ error: `Spoke not found: ${spokeQuery}` });
     }
 
-    // Compile context rooted at the spoke
-    const compiled = await compile({
+    // Compile context using adapter pipeline
+    const compiled = await compileWithAdapters({
       workspaceRoot: spoke.path,
       tokenBudget: budget,
       taskHint: task,
@@ -32,6 +32,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
       tokens: compiled.bootTokens,
       sources: compiled.sources.length,
       spoke: spoke.id,
+      nodes: compiled.nodes,
     };
 
     return response;
