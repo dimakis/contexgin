@@ -21,20 +21,26 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
     }
 
     // Compile context using adapter pipeline
-    const compiled = await compileWithAdapters({
-      workspaceRoot: spoke.path,
-      tokenBudget: budget,
-      taskHint: task,
-    });
+    try {
+      const compiled = await compileWithAdapters({
+        workspaceRoot: spoke.path,
+        tokenBudget: budget,
+        taskHint: task,
+      });
 
-    const response: CompileResponse = {
-      context: compiled.bootPayload,
-      tokens: compiled.bootTokens,
-      sources: compiled.sources.length,
-      spoke: spoke.id,
-      nodes: compiled.nodes,
-    };
+      const response: CompileResponse = {
+        context: compiled.bootPayload,
+        tokens: compiled.bootTokens,
+        sources: compiled.sources.length,
+        spoke: spoke.id,
+        nodes: compiled.nodes,
+      };
 
-    return response;
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      request.log.error({ err, spoke: spokeQuery }, 'Adapter compilation failed');
+      return reply.status(500).send({ error: `Compilation failed: ${message}` });
+    }
   });
 }
