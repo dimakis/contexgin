@@ -42,8 +42,48 @@ const OPERATIONAL_KEYWORDS = [
 ];
 
 /**
- * Parse YAML-like frontmatter from .mdc content.
- * Handles the simple key: value format used by Cursor rules.
+ * Strip surrounding quotes (single or double) from a YAML value.
+ */
+function unquote(value: string): string {
+  if (value.length >= 2) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
+/**
+ * Parse a YAML value that may be a JSON-style array (e.g. ["*.ts", "*.tsx"])
+ * into a comma-separated string, or return the scalar value unquoted.
+ */
+function parseGlobsValue(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map(String).join(', ');
+      }
+    } catch {
+      // Not valid JSON array — strip brackets and split manually
+      const inner = trimmed.slice(1, trimmed.endsWith(']') ? -1 : undefined);
+      return inner
+        .split(',')
+        .map((s) => unquote(s.trim()))
+        .filter(Boolean)
+        .join(', ');
+    }
+  }
+  return unquote(trimmed);
+}
+
+/**
+ * Parse YAML frontmatter from .mdc content.
+ * Handles quoted values, JSON-style arrays for globs, and CRLF line endings.
  */
 function parseFrontmatter(raw: string): { frontmatter: MdcFrontmatter; body: string } {
   if (!raw.startsWith('---')) {
@@ -70,11 +110,11 @@ function parseFrontmatter(raw: string): { frontmatter: MdcFrontmatter; body: str
     const value = line.slice(colonIdx + 1).trim();
 
     if (key === 'description') {
-      fm.description = value;
+      fm.description = unquote(value);
     } else if (key === 'alwaysApply') {
-      fm.alwaysApply = value === 'true';
+      fm.alwaysApply = unquote(value) === 'true';
     } else if (key === 'globs') {
-      fm.globs = value;
+      fm.globs = parseGlobsValue(value);
     }
   }
 

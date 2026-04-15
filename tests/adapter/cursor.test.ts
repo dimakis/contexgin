@@ -68,7 +68,7 @@ Use type hints everywhere.
 `;
       await withMdcFile(mdc, 'python-rules.mdc', async (filePath, dir) => {
         const nodes = await cursorAdapter.adapt(filePath, dir);
-        expect(nodes[0].origin.headingPath).toEqual(['globs:"*.py"']);
+        expect(nodes[0].origin.headingPath).toEqual(['globs:*.py']);
       });
     });
 

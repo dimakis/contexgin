@@ -66,6 +66,8 @@ export interface CompileRequest {
   task?: string;
   /** Token budget */
   budget?: number;
+  /** Use legacy compile pipeline instead of adapters (default: false) */
+  legacy?: boolean;
 }
 
 export interface CompileResponse {

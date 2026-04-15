@@ -315,15 +315,18 @@ export async function compileWithAdapters(options: CompileOptions): Promise<Comp
   // Step 2: Rank
   const ranked = rankNodes(allNodes, taskHint);
 
-  // Step 3: Filter excluded (match by heading path prefix OR single-element match against node ID)
+  // Step 3: Filter excluded (case-insensitive, match heading path prefix OR node ID)
   const filtered = options.excluded
     ? ranked.filter(
         (n) =>
           !options.excluded!.some((excl) => {
-            // Single-element exclusion: also check node ID
-            if (excl.length === 1 && n.id === excl[0]) return true;
+            // Single-element exclusion: also check node ID (case-insensitive)
+            if (excl.length === 1 && n.id.toLowerCase() === excl[0].toLowerCase()) return true;
             const hp = n.origin.headingPath ?? [n.id];
-            return excl.length <= hp.length && excl.every((seg, i) => hp[i] === seg);
+            return (
+              excl.length <= hp.length &&
+              excl.every((seg, i) => hp[i].toLowerCase() === seg.toLowerCase())
+            );
           }),
       )
     : ranked;
@@ -335,10 +338,10 @@ export async function compileWithAdapters(options: CompileOptions): Promise<Comp
   const bootPayload = assembleGroupedPayload(included);
   const navigationHints = included.map((n) => (n.origin.headingPath ?? [n.id]).join(' > '));
 
-  // Build sources list for backwards compat
+  // Build sources list from included nodes only (after exclusion + trimming)
   const sourceSet = new Set<string>();
   const sources: ContextSource[] = [];
-  for (const node of allNodes) {
+  for (const node of included) {
     if (!sourceSet.has(node.origin.source)) {
       sourceSet.add(node.origin.source);
       sources.push({

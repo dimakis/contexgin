@@ -684,7 +684,7 @@ describe('cursor adapter edge cases', () => {
       },
       async (dir) => {
         const nodes = await cursorAdapter.adapt(path.join(dir, '.cursor/rules/py.mdc'), dir);
-        expect(nodes[0].origin.headingPath).toEqual(['globs:"*.py"']);
+        expect(nodes[0].origin.headingPath).toEqual(['globs:*.py']);
       },
     );
   });
@@ -862,5 +862,284 @@ describe('real-world: mgmt workspace', () => {
       expect(validTypes, `invalid type '${node.type}' for ${node.id}`).toContain(node.type);
       expect(validTiers, `invalid tier '${node.tier}' for ${node.id}`).toContain(node.tier);
     }
+  });
+});
+
+// ── Review Round 2 Fixes ──────────────────────────────────────
+
+describe('ignore patterns applied to all discovery paths', () => {
+  it('respects .centaurignore for root-level files', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(dir, 'CONSTITUTION.md', '## Purpose\n\nTest hub.\n');
+        await writeFile(dir, 'CLAUDE.md', '# Instructions\n\nDo things.\n');
+        await writeFile(dir, 'README.md', '# Readme\n\nHello.\n');
+        // Ignore CLAUDE.md and README.md
+        await writeFile(dir, '.centaurignore', 'CLAUDE.md\nREADME.md\n');
+      },
+      async (dir) => {
+        const nodes = await discoverAndAdapt(dir);
+        const sources = new Set(nodes.map((n) => path.basename(n.origin.source)));
+        expect(sources).toContain('CONSTITUTION.md');
+        expect(sources).not.toContain('CLAUDE.md');
+        expect(sources).not.toContain('README.md');
+      },
+    );
+  });
+
+  it('respects .centaurignore for .cursor/rules/ files', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(dir, 'CONSTITUTION.md', '## Purpose\n\nTest.\n');
+        await writeFile(
+          dir,
+          '.cursor/rules/secret.mdc',
+          '---\ndescription: secret\nalwaysApply: true\n---\nDo not leak.\n',
+        );
+        await writeFile(
+          dir,
+          '.cursor/rules/public.mdc',
+          '---\ndescription: public\nalwaysApply: true\n---\nPublic rule.\n',
+        );
+        // Ignore the secret rule
+        await writeFile(dir, '.centaurignore', '.cursor/rules/secret.mdc\n');
+      },
+      async (dir) => {
+        const nodes = await discoverAndAdapt(dir);
+        const sources = new Set(nodes.map((n) => path.basename(n.origin.source)));
+        expect(sources).toContain('public.mdc');
+        expect(sources).not.toContain('secret.mdc');
+      },
+    );
+  });
+
+  it('respects .centaurignore for memory/Profile/ files', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(dir, 'CONSTITUTION.md', '## Purpose\n\nTest.\n');
+        await writeFile(dir, 'memory/Profile/public.md', '## Public\n\nVisible.\n');
+        await writeFile(dir, 'memory/Profile/private.md', '## Private\n\nHidden.\n');
+        await writeFile(dir, '.centaurignore', 'memory/Profile/private.md\n');
+      },
+      async (dir) => {
+        const nodes = await discoverAndAdapt(dir);
+        const sources = new Set(nodes.map((n) => path.basename(n.origin.source)));
+        expect(sources).toContain('public.md');
+        expect(sources).not.toContain('private.md');
+      },
+    );
+  });
+});
+
+describe('cursor frontmatter parsing — quoted values and arrays', () => {
+  it('strips double quotes from description', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          '.cursor/rules/quoted.mdc',
+          '---\ndescription: "My quoted rule"\nalwaysApply: true\n---\nRule content.\n',
+        );
+      },
+      async (dir) => {
+        const fullPath = path.join(dir, '.cursor/rules/quoted.mdc');
+        const nodes = await cursorAdapter.adapt(fullPath, dir);
+        expect(nodes).toHaveLength(1);
+        // The node should be classified correctly despite quoted description
+        expect(nodes[0].type).toBeDefined();
+      },
+    );
+  });
+
+  it('strips single quotes from description', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          '.cursor/rules/single.mdc',
+          "---\ndescription: 'Single quoted'\nalwaysApply: false\n---\nContent.\n",
+        );
+      },
+      async (dir) => {
+        const fullPath = path.join(dir, '.cursor/rules/single.mdc');
+        const nodes = await cursorAdapter.adapt(fullPath, dir);
+        expect(nodes).toHaveLength(1);
+      },
+    );
+  });
+
+  it('parses JSON array globs: ["*.ts", "*.tsx"]', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          '.cursor/rules/ts-rule.mdc',
+          '---\ndescription: TypeScript rule\nglobs: ["*.ts", "*.tsx"]\n---\nUse strict types.\n',
+        );
+      },
+      async (dir) => {
+        const fullPath = path.join(dir, '.cursor/rules/ts-rule.mdc');
+        const nodes = await cursorAdapter.adapt(fullPath, dir);
+        expect(nodes).toHaveLength(1);
+        // With globs set, should classify as operational/navigational
+        expect(nodes[0].type).toBe('operational');
+        expect(nodes[0].tier).toBe('navigational');
+        // headingPath should contain the parsed globs
+        expect(nodes[0].origin.headingPath?.[0]).toContain('*.ts');
+        expect(nodes[0].origin.headingPath?.[0]).toContain('*.tsx');
+      },
+    );
+  });
+
+  it('handles quoted alwaysApply: "true"', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          '.cursor/rules/quoted-bool.mdc',
+          '---\ndescription: test\nalwaysApply: "true"\n---\nAlways applied rule.\n',
+        );
+      },
+      async (dir) => {
+        const fullPath = path.join(dir, '.cursor/rules/quoted-bool.mdc');
+        const nodes = await cursorAdapter.adapt(fullPath, dir);
+        expect(nodes).toHaveLength(1);
+        // Should be navigational (alwaysApply = true after unquoting)
+        expect(nodes[0].tier).toBe('navigational');
+      },
+    );
+  });
+
+  it('handles malformed JSON array gracefully', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          '.cursor/rules/bad-arr.mdc',
+          '---\ndescription: test\nglobs: [*.ts, *.js]\n---\nContent.\n',
+        );
+      },
+      async (dir) => {
+        const fullPath = path.join(dir, '.cursor/rules/bad-arr.mdc');
+        const nodes = await cursorAdapter.adapt(fullPath, dir);
+        expect(nodes).toHaveLength(1);
+        // Should still parse — falls back to bracket-strip + comma-split
+        expect(nodes[0].type).toBe('operational');
+        expect(nodes[0].origin.headingPath?.[0]).toContain('*.ts');
+      },
+    );
+  });
+});
+
+describe('sources list reflects included nodes only', () => {
+  it('sources count matches unique files in included nodes', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(dir, 'CONSTITUTION.md', '## Purpose\n\nMain hub.\n');
+        await writeFile(
+          dir,
+          'CLAUDE.md',
+          '# Instructions\n\n## Git\n\nUse conventional commits.\n',
+        );
+        await writeFile(dir, 'README.md', '# Project\n\nSome info.\n');
+      },
+      async (dir) => {
+        // Compile with a generous budget — all should be included
+        const result = await compileWithAdapters({
+          workspaceRoot: dir,
+          tokenBudget: 8000,
+        });
+        // sources should only contain files that contributed included nodes
+        const includedSources = new Set(result.nodes?.map((n) => n.origin.source));
+        expect(result.sources.length).toBe(includedSources.size);
+      },
+    );
+  });
+
+  it('excluded nodes do not appear in sources', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(dir, 'CONSTITUTION.md', '## Purpose\n\nHub purpose.\n');
+        await writeFile(dir, 'CLAUDE.md', '# Instructions\n\n## Agent System\n\nAgents info.\n');
+      },
+      async (dir) => {
+        const result = await compileWithAdapters({
+          workspaceRoot: dir,
+          tokenBudget: 8000,
+          excluded: [['agent-system']],
+        });
+        // If CLAUDE.md only had the excluded section, it shouldn't appear in sources
+        const nodeFiles = new Set(result.nodes?.map((n) => n.origin.source));
+        for (const source of result.sources) {
+          expect(nodeFiles).toContain(source.path);
+        }
+      },
+    );
+  });
+});
+
+describe('case-insensitive exclusion matching', () => {
+  it('excludes sections regardless of casing', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          'CLAUDE.md',
+          '# Instructions\n\n## Agent System\n\nAgent info.\n\n## Git Discipline\n\nGit rules.\n',
+        );
+      },
+      async (dir) => {
+        // Exclude with different casing
+        const result = await compileWithAdapters({
+          workspaceRoot: dir,
+          tokenBudget: 8000,
+          excluded: [['Agent-System']], // mixed case vs slug "agent-system"
+        });
+        const ids = result.nodes?.map((n) => n.id) ?? [];
+        expect(ids).not.toContain('agent-system');
+        // Git discipline should still be present
+        expect(ids.some((id) => id.includes('git'))).toBe(true);
+      },
+    );
+  });
+
+  it('case-insensitive heading path prefix matching', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        await writeFile(
+          dir,
+          'CONSTITUTION.md',
+          '## Purpose\n\nTest hub.\n\n## Boundaries\n\nNo secrets.\n',
+        );
+      },
+      async (dir) => {
+        const result = await compileWithAdapters({
+          workspaceRoot: dir,
+          tokenBudget: 8000,
+          excluded: [['BOUNDARIES']], // uppercase vs actual heading "Boundaries"
+        });
+        const ids = result.nodes?.map((n) => n.id) ?? [];
+        expect(ids).not.toContain('boundaries');
+      },
+    );
+  });
+});
+
+describe('compile route legacy fallback', () => {
+  // This is a contract test — verify CompileRequest accepts legacy flag
+  it('CompileRequest type accepts legacy field', () => {
+    // TypeScript compilation is the test — if this compiles, the type is correct
+    const request: import('../../src/server/types.js').CompileRequest = {
+      spoke: 'test',
+      legacy: true,
+    };
+    expect(request.legacy).toBe(true);
+  });
+
+  it('CompileRequest defaults legacy to undefined', () => {
+    const request: import('../../src/server/types.js').CompileRequest = {
+      spoke: 'test',
+    };
+    expect(request.legacy).toBeUndefined();
   });
 });

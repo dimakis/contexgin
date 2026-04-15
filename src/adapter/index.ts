@@ -27,6 +27,7 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
 
   // 1. Root-level files
   for (const file of ROOT_FILES) {
+    if (shouldIgnore(file, ignorePatterns)) continue;
     const fullPath = path.join(root, file);
     if (await fileExists(fullPath)) {
       const nodes = await adaptFile(fullPath, root);
@@ -40,6 +41,8 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
     const files = await fs.readdir(cursorRulesDir);
     for (const file of files) {
       if (!file.endsWith('.mdc')) continue;
+      const relPath = path.join('.cursor', 'rules', file);
+      if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(cursorRulesDir, file);
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
@@ -74,6 +77,8 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
     const files = await fs.readdir(profileDir);
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
+      const relPath = path.join('memory', 'Profile', file);
+      if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(profileDir, file);
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
