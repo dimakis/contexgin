@@ -30,6 +30,21 @@ export interface RankedSection extends ExtractedSection {
   reason: string;
 }
 
+/** Serializable context node for API responses */
+export interface SerializedNode {
+  id: string;
+  type: string;
+  tier: string;
+  content: string;
+  origin: {
+    source: string;
+    relativePath: string;
+    format: string;
+    headingPath?: string[];
+  };
+  tokenEstimate: number;
+}
+
 /** The compiled output */
 export interface CompiledContext {
   /** System prompt / boot payload */
@@ -44,6 +59,10 @@ export interface CompiledContext {
   sources: ContextSource[];
   /** Sections that were trimmed due to budget */
   trimmed: ExtractedSection[];
+  /** Typed context nodes (present when compiled via adapter pipeline) */
+  nodes?: SerializedNode[];
+  /** Nodes trimmed due to budget (present when compiled via adapter pipeline) */
+  trimmedNodes?: SerializedNode[];
 }
 
 /** Configuration for a compilation */

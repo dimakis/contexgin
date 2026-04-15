@@ -1,4 +1,5 @@
 import type { HubGraph, Violation } from '../graph/types.js';
+import type { SerializedNode } from '../compiler/types.js';
 
 // ── Server Configuration ────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export interface CompileRequest {
   task?: string;
   /** Token budget */
   budget?: number;
+  /** Use legacy compile pipeline instead of adapters (default: false) */
+  legacy?: boolean;
 }
 
 export interface CompileResponse {
@@ -72,6 +75,8 @@ export interface CompileResponse {
   tokens: number;
   sources: number;
   spoke: string;
+  /** Typed context nodes (adapter pipeline) */
+  nodes?: SerializedNode[];
 }
 
 export interface ValidateRequest {
