@@ -38,7 +38,7 @@ const RULES: ClassificationRule[] = [
     type: 'structural',
     tier: 'navigational',
   },
-  // Operational — how to work
+  // Operational — how to work (these are essential session instructions)
   {
     keywords: ['git', 'commit', 'branch', 'workflow', 'remote'],
     type: 'operational',
@@ -50,13 +50,23 @@ const RULES: ClassificationRule[] = [
     tier: 'navigational',
   },
   {
-    keywords: ['jira', 'context', 'workspace', 'environment', 'tool'],
+    keywords: ['worktree', 'session', 'closeout', 'boot'],
+    type: 'operational',
+    tier: 'navigational',
+  },
+  {
+    keywords: ['memory', 'agent', 'integration'],
+    type: 'operational',
+    tier: 'navigational',
+  },
+  {
+    keywords: ['jira', 'context', 'workspace', 'environment', 'tool', 'google'],
     type: 'operational',
     tier: 'reference',
   },
   // Reference — pointers to other things
   {
-    keywords: ['memory', 'agent', 'session', 'service', 'health'],
+    keywords: ['service', 'health'],
     type: 'reference',
     tier: 'reference',
   },
@@ -71,8 +81,8 @@ function classifyClaude(headingPath: string[]): { type: ContextNodeType; tier: C
     }
   }
 
-  // Default: operational reference (CLAUDE.md is primarily operational)
-  return { type: 'operational', tier: 'reference' };
+  // Default: operational navigational (CLAUDE.md is primarily operational instructions)
+  return { type: 'operational', tier: 'navigational' };
 }
 
 export const claudeAdapter: ContextAdapter = {
