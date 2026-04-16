@@ -24,6 +24,9 @@ const NAVIGATIONAL_HEADINGS = [
   'layout',
 ];
 
+/** Root constitution headings that are reference-tier (detailed catalogues) */
+const ROOT_REFERENCE_HEADINGS = ['sub-repo charter', 'external project', 'spoke charter'];
+
 /** Heading keywords that indicate constitutional content */
 const CONSTITUTIONAL_HEADINGS = [
   'purpose',
@@ -69,6 +72,12 @@ function getTierWeight(section: ExtractedSection): { weight: number; reason: str
   if (section.source.kind === 'constitution') {
     const spoke = isSpoke(section);
     const penalty = spoke ? SPOKE_PENALTY : 0;
+
+    // Root constitution catalogues (Sub-Repo Charters, External Projects) are
+    // detailed reference material — demote so operational content wins budget
+    if (!spoke && ROOT_REFERENCE_HEADINGS.some((kw) => headingText.includes(kw))) {
+      return { weight: TIER_WEIGHTS.reference, reason: 'root catalogue' };
+    }
 
     if (CONSTITUTIONAL_HEADINGS.some((kw) => headingText.includes(kw))) {
       const w = TIER_WEIGHTS.constitutional - penalty;
