@@ -9,7 +9,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
       return reply.status(503).send({ error: 'Graph not built yet' });
     }
 
-    const { spoke: spokeQuery, task, budget = 8000, legacy = false } = request.body;
+    const { spoke: spokeQuery, task, budget = 12000, legacy = false } = request.body;
     if (!spokeQuery) {
       return reply.status(400).send({ error: 'Missing required field: spoke' });
     }

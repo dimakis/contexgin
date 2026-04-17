@@ -19,10 +19,10 @@ describe('compile against mgmt workspace', () => {
   it('compiles to roughly equivalent output as build_boot_context.py', async () => {
     const result = await compile({
       workspaceRoot: MGMT_ROOT,
-      tokenBudget: 8000,
+      tokenBudget: 12000,
     });
     expect(result.bootPayload.length).toBeGreaterThan(0);
-    expect(result.bootTokens).toBeLessThan(8000);
+    expect(result.bootTokens).toBeLessThan(12000);
     expect(result.sources.length).toBeGreaterThan(0);
   });
 
