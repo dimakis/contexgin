@@ -86,6 +86,15 @@ A test workspace for CLI validation.
     });
   });
 
+  describe('serve arg parsing', () => {
+    it('does not treat flag values as roots', async () => {
+      // serve with only flag values (no real roots) should error
+      const { stderr, code } = await run('serve', '--port', '4195', '--db', '/tmp/graph.db');
+      expect(code).not.toBe(0);
+      expect(stderr).toContain('Usage:');
+    });
+  });
+
   describe('graph command', () => {
     let tmpDir: string;
 

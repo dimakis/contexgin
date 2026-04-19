@@ -24,6 +24,27 @@ const SEVERITY_ICON: Record<ViolationSeverity, string> = {
   info: dim('ℹ'),
 };
 
+// ── Arg helpers ─────────────────────────────────────────────────
+
+/** Flags that consume the next argument as a value. */
+const VALUE_FLAGS = new Set(['--port', '--socket', '--db', '--goals-db']);
+
+/**
+ * Extract positional arguments from an args list, skipping flags and
+ * their values.  Boolean flags (e.g. --no-watch) are stripped too.
+ */
+function extractPositionals(args: string[]): string[] {
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith('--')) {
+      if (VALUE_FLAGS.has(args[i])) i++; // skip the value too
+      continue;
+    }
+    positionals.push(args[i]);
+  }
+  return positionals;
+}
+
 // ── Main ─────────────────────────────────────────────────────────
 
 async function main() {
@@ -50,7 +71,7 @@ async function main() {
     }
     await runGraph(roots);
   } else if (command === 'serve') {
-    const roots = args.filter((a) => !a.startsWith('--')).slice(1);
+    const roots = extractPositionals(args).slice(1);
     if (roots.length === 0) {
       console.error(
         'Usage: contexgin serve <root> [root2] ... [--port N] [--socket PATH] [--no-watch]',
