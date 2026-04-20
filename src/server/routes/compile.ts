@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { compile, compileWithAdapters } from '../../compiler/index.js';
 import { findSpoke } from '../../graph/query.js';
+import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerState, CompileRequest, CompileResponse } from '../types.js';
 
 export function compileRoute(app: FastifyInstance, state: ServerState): void {
@@ -9,7 +10,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
       return reply.status(503).send({ error: 'Graph not built yet' });
     }
 
-    const { spoke: spokeQuery, task, budget = 12000, legacy = false } = request.body;
+    const { spoke: spokeQuery, task, budget = DEFAULT_COMPILE_BUDGET, legacy = false } = request.body;
     if (!spokeQuery) {
       return reply.status(400).send({ error: 'Missing required field: spoke' });
     }
