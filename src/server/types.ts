@@ -1,6 +1,11 @@
 import type { HubGraph, Violation } from '../graph/types.js';
 import type { SerializedNode } from '../compiler/types.js';
 
+// ── Defaults ───────────────────────────────────────────────────
+
+/** Default token budget for the /compile endpoint when none is specified. */
+export const DEFAULT_COMPILE_BUDGET = 12_000;
+
 // ── Server Configuration ────────────────────────────────────────
 
 export interface ServerConfig {

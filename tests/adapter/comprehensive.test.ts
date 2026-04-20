@@ -834,14 +834,14 @@ describe('real-world: mgmt workspace', () => {
 
     const result = await compileWithAdapters({
       workspaceRoot: mgmtRoot,
-      tokenBudget: 8000,
+      tokenBudget: 12000,
       taskHint: 'Review PR for convention violations',
     });
 
     expect(result.bootPayload).toBeTruthy();
     expect(result.nodes).toBeDefined();
     expect(result.nodes!.length).toBeGreaterThan(5);
-    expect(result.bootTokens).toBeLessThanOrEqual(8000);
+    expect(result.bootTokens).toBeLessThanOrEqual(12000);
 
     // Should have type groups
     expect(result.bootPayload).toContain('##');

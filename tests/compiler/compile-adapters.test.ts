@@ -239,7 +239,7 @@ describe('compileWithAdapters', () => {
 
       const result = await compileWithAdapters({
         workspaceRoot: mgmtRoot,
-        tokenBudget: 8000,
+        tokenBudget: 12000,
         taskHint: 'Review PR for git discipline violations',
       });
 

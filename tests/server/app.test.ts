@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { createServer } from '../../src/server/app.js';
-import { DEFAULT_CONFIG } from '../../src/server/types.js';
+import { DEFAULT_CONFIG, DEFAULT_COMPILE_BUDGET } from '../../src/server/types.js';
 import type { ContexGinServer } from '../../src/server/app.js';
 
 // ── Fixture ─────────────────────────────────────────────────────
@@ -325,6 +325,22 @@ describe('ContexGin Server', () => {
         expect(node).toHaveProperty('origin');
         expect(node).toHaveProperty('tokenEstimate');
       }
+    });
+
+    it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: 'svc' },
+      });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.tokens).toBeLessThanOrEqual(DEFAULT_COMPILE_BUDGET);
     });
 
     it('returns 404 for unknown spoke', async () => {

@@ -106,7 +106,7 @@ import { compile } from 'contexgin';
 
 const result = await compile({
   workspaceRoot: '/path/to/your/project',
-  tokenBudget: 8000,
+  tokenBudget: 12000,
 });
 
 console.log(result.bootPayload); // Compiled system prompt
@@ -295,7 +295,7 @@ curl http://127.0.0.1:4195/health
 # Compile context for a spoke
 curl -X POST http://127.0.0.1:4195/compile \
   -H 'Content-Type: application/json' \
-  -d '{"spoke": "command_center", "task": "fix morning briefing", "budget": 8000}'
+  -d '{"spoke": "command_center", "task": "fix morning briefing", "budget": 12000}'
 
 # Validate all workspaces
 curl -X POST http://127.0.0.1:4195/validate \
