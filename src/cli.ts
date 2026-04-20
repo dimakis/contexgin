@@ -100,6 +100,7 @@ ${bold('Serve options:')}
   --socket PATH   Unix socket path
   --no-watch      Disable file watching
   --db PATH       SQLite database path (default: in-memory)
+  --goals-db PATH Goals SQLite database path (default: in-memory)
 
 ${bold('Examples:')}
   npx contexgin validate ~/redhat/mgmt
