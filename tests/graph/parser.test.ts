@@ -136,7 +136,7 @@ Path | What belongs here
       expect(result.tree[1].path).toBe('tests/');
     });
 
-    it('handles paths without backticks', () => {
+    it('handles paths without backticks and skips bare "Root" entries', () => {
       const content = `## Directory Semantics
 
 | Path | What belongs here |
@@ -145,9 +145,25 @@ Path | What belongs here
 | src/ | Source code |
 `;
       const result = parseConstitutionContent(content, '/test.md', 'test');
-      expect(result.tree).toHaveLength(2);
-      expect(result.tree[0].path).toBe('Root');
-      expect(result.tree[1].path).toBe('src/');
+      expect(result.tree).toHaveLength(1);
+      expect(result.tree[0].path).toBe('src/');
+    });
+
+    it('splits compound paths like ".env / .env.example" into separate entries', () => {
+      const content = `## Directory Semantics
+
+| Path | What belongs here |
+|------|------------------|
+| \`.env / .env.example\` | Secrets and environment config |
+| \`src/\` | Source code |
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.tree).toHaveLength(3);
+      expect(result.tree[0].path).toBe('.env');
+      expect(result.tree[0].type).toBe('file');
+      expect(result.tree[1].path).toBe('.env.example');
+      expect(result.tree[1].type).toBe('file');
+      expect(result.tree[2].path).toBe('src/');
     });
   });
 
