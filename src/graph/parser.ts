@@ -173,7 +173,7 @@ function extractDirectoryTree(content: string): DeclaredNode[] {
 
     // Skip self-referencing root entries like "professional/ (root)" or bare "Root"
     if (/\(root\)/i.test(rawPath)) continue;
-    if (/^root$/i.test(rawPath.trim())) continue;
+    if (/^root$/i.test(rawPath)) continue;
 
     // Strip other annotations from path
     const cleanPath = rawPath.replace(/\s*\(.*?\)\s*$/, '').trim();

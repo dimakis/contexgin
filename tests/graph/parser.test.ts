@@ -142,11 +142,15 @@ Path | What belongs here
 | Path | What belongs here |
 |------|------------------|
 | Root | This constitution |
+| rootfs/ | Root filesystem |
+| root-config.yml | Root config |
 | src/ | Source code |
 `;
       const result = parseConstitutionContent(content, '/test.md', 'test');
-      expect(result.tree).toHaveLength(1);
-      expect(result.tree[0].path).toBe('src/');
+      expect(result.tree).toHaveLength(3);
+      expect(result.tree[0].path).toBe('rootfs/');
+      expect(result.tree[1].path).toBe('root-config.yml');
+      expect(result.tree[2].path).toBe('src/');
     });
 
     it('splits compound paths like ".env / .env.example" into separate entries', () => {
