@@ -171,18 +171,28 @@ function extractDirectoryTree(content: string): DeclaredNode[] {
     const rawPath = stripBackticks(row.cells[0]);
     if (!rawPath) continue;
 
-    // Skip self-referencing root entries like "professional/ (root)"
+    // Skip self-referencing root entries like "professional/ (root)" or bare "Root"
     if (/\(root\)/i.test(rawPath)) continue;
+    if (/^root$/i.test(rawPath)) continue;
 
     // Strip other annotations from path
     const cleanPath = rawPath.replace(/\s*\(.*?\)\s*$/, '').trim();
     if (!cleanPath) continue;
 
     const description = row.cells[1];
-    const type: 'file' | 'directory' = cleanPath.endsWith('/') ? 'directory' : 'file';
-    const name = cleanPath.replace(/\/$/, '').split('/').pop() || cleanPath;
 
-    nodes.push({ path: cleanPath, name, type, description });
+    // Split compound entries like ".env / .env.example" into separate paths
+    const subPaths = cleanPath.includes(' / ')
+      ? cleanPath.split(' / ').map((p) => p.trim())
+      : [cleanPath];
+
+    for (const subPath of subPaths) {
+      if (!subPath) continue;
+      const type: 'file' | 'directory' = subPath.endsWith('/') ? 'directory' : 'file';
+      const name = subPath.replace(/\/$/, '').split('/').pop() || subPath;
+
+      nodes.push({ path: subPath, name, type, description });
+    }
   }
 
   return nodes;
