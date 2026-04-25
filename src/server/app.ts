@@ -9,6 +9,8 @@ import { validateRoute } from './routes/validate.js';
 import { graphRoutes } from './routes/graph.js';
 import { GoalRegistry } from '../goals/registry.js';
 import { goalRoutes } from '../goals/routes.js';
+import { AgentLoader } from '../agents/loader.js';
+import { agentRoutes } from '../agents/routes.js';
 
 export interface ContexGinServer {
   app: FastifyInstance;
@@ -46,6 +48,11 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   // Goal registry
   const goalRegistry = new GoalRegistry(config.goalsDbPath);
   goalRoutes(app, goalRegistry);
+
+  // Agent definitions
+  const agentLoader = new AgentLoader(config.agentDefinitionPaths);
+  await agentLoader.load();
+  agentRoutes(app, agentLoader);
 
   // Serialize rebuilds — if one is in flight, the next caller waits for it
   let rebuildInFlight: Promise<void> | null = null;
