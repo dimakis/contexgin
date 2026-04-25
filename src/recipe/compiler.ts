@@ -1,0 +1,205 @@
+/**
+ * Agent recipe compiler — compile agent definitions into ready-to-serve context.
+ */
+
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { compileWithAdapters, estimateTokens } from '../compiler/index.js';
+import type {
+  AgentDefinition,
+  CompiledAgentContext,
+  BootContextConfig,
+  ContextBlockConfig,
+} from './types.js';
+
+/**
+ * Compile an agent definition into ready-to-serve context.
+ * @param def - Agent definition to compile
+ * @param workspaceRoot - Workspace root directory
+ * @returns Compiled agent context ready for serving
+ */
+export async function compileAgent(
+  def: AgentDefinition,
+  workspaceRoot: string,
+): Promise<CompiledAgentContext> {
+  const root = path.resolve(workspaceRoot);
+
+  // Layer 1: Boot context
+  const bootContext = await compileBootContext(def.context.boot, root);
+
+  // Layer 2: Context blocks
+  const contextBlocks = await compileContextBlocks(def.context.blocks ?? [], root);
+
+  // Layer 3: Operational context
+  const operational = def.context.operational
+    ? await compileOperationalContext(def.context.operational.files, root, def.context.operational.delivery)
+    : undefined;
+
+  // Layer 4: Memory context
+  const memory = def.context.memory?.enabled
+    ? await compileMemoryContext(def.context.memory.path!, def.context.memory.types)
+    : undefined;
+
+  return {
+    identity: def.identity,
+    bootContext,
+    contextBlocks,
+    operational,
+    memory,
+    governance: def.governance,
+    skills: def.skills ?? [],
+    provider: def.provider,
+  };
+}
+
+/**
+ * Compile boot context from configuration.
+ */
+async function compileBootContext(
+  config: BootContextConfig | undefined,
+  workspaceRoot: string,
+): Promise<CompiledAgentContext['bootContext']> {
+  if (!config) {
+    return { content: '', tokens: 0, sources: [] };
+  }
+
+  const budget = config.tokenBudget ?? 8000;
+
+  // Build exclusion list from boot config
+  const excluded: string[][] = [];
+
+  if (config.constitution === false) {
+    excluded.push(['constitution']);
+  } else if (Array.isArray(config.constitution)) {
+    // Exclude all constitution sections NOT in the list
+    // This requires knowing all sections first — simplified: exclude nothing
+    // Full implementation would need to discover all sections and invert the filter
+  }
+
+  if (config.claudeMd === false) {
+    excluded.push(['claude-md']);
+  }
+
+  if (config.profile === false) {
+    excluded.push(['profile']);
+  }
+
+  if (config.cursorRules === false) {
+    excluded.push(['cursor-rules']);
+  }
+
+  const result = await compileWithAdapters({
+    workspaceRoot,
+    tokenBudget: budget,
+    excluded,
+  });
+
+  return {
+    content: result.bootPayload,
+    tokens: result.bootTokens,
+    sources: result.sources.map((s) => s.relativePath),
+  };
+}
+
+/**
+ * Compile context blocks from configuration.
+ */
+async function compileContextBlocks(
+  blocks: ContextBlockConfig[],
+  workspaceRoot: string,
+): Promise<CompiledAgentContext['contextBlocks']> {
+  const compiled = new Map<string, { content: string; tokens: number; source: string }>();
+
+  for (const block of blocks) {
+    try {
+      const fullPath = path.resolve(workspaceRoot, block.source);
+      const content = await fs.readFile(fullPath, 'utf-8');
+
+      // TODO: Apply section filtering if block.sections is specified
+      // For now, include the full file
+
+      const tokens = estimateTokens(content);
+
+      compiled.set(block.id, {
+        content,
+        tokens,
+        source: block.source,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[recipe] Failed to load context block ${block.id} from ${block.source}: ${msg}`);
+    }
+  }
+
+  return compiled;
+}
+
+/**
+ * Compile operational context from file list.
+ */
+async function compileOperationalContext(
+  files: string[],
+  workspaceRoot: string,
+  delivery: 'sdk' | 'alwaysApply' | 'additionalContext',
+): Promise<CompiledAgentContext['operational']> {
+  const loaded: Array<{ path: string; content: string }> = [];
+
+  for (const file of files) {
+    try {
+      const fullPath = path.resolve(workspaceRoot, file);
+      const content = await fs.readFile(fullPath, 'utf-8');
+      loaded.push({ path: file, content });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[recipe] Failed to load operational file ${file}: ${msg}`);
+    }
+  }
+
+  return {
+    files: loaded,
+    delivery,
+  };
+}
+
+/**
+ * Compile memory context from directory.
+ */
+async function compileMemoryContext(
+  memoryPath: string,
+  types?: Array<'feedback' | 'user' | 'project' | 'reference'>,
+): Promise<CompiledAgentContext['memory']> {
+  const memory: CompiledAgentContext['memory'] = {
+    feedback: [],
+    user: [],
+    project: [],
+    reference: [],
+  };
+
+  const allowedTypes = types ?? ['feedback', 'user', 'project', 'reference'];
+
+  for (const type of allowedTypes) {
+    try {
+      const typePath = path.join(memoryPath, capitalize(type));
+      const entries = await fs.readdir(typePath);
+
+      for (const entry of entries) {
+        if (entry.endsWith('.md')) {
+          const filePath = path.join(typePath, entry);
+          const content = await fs.readFile(filePath, 'utf-8');
+          memory[type].push(content);
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read — skip
+    }
+  }
+
+  return memory;
+}
+
+/**
+ * Capitalize first letter of a string.
+ */
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

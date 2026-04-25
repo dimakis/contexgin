@@ -3,7 +3,7 @@
  */
 
 import * as fs from 'node:fs/promises';
-import * as yaml from 'js-yaml';
+import { parse as parseYaml } from 'yaml';
 import type { AgentDefinition } from './types.js';
 
 /**
@@ -14,7 +14,7 @@ import type { AgentDefinition } from './types.js';
  */
 export async function loadAgentDefinition(filePath: string): Promise<AgentDefinition> {
   const raw = await fs.readFile(filePath, 'utf-8');
-  const parsed = yaml.load(raw);
+  const parsed = parseYaml(raw);
 
   if (!parsed || typeof parsed !== 'object') {
     throw new Error(`Invalid agent definition: expected object, got ${typeof parsed}`);
