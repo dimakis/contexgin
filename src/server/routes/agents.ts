@@ -88,6 +88,22 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
       // Determine workspace root — use override or the root where the agent was found
       const workspaceRoot = workspaceOverride ?? agent.workspaceRoot;
 
+      // Validate that the resolved workspace is within an allowed root
+      const resolvedWorkspace = path.resolve(workspaceRoot);
+      const isAllowedRoot = config.roots.some((root) => {
+        const resolvedRoot = path.resolve(root);
+        return (
+          resolvedWorkspace === resolvedRoot ||
+          resolvedWorkspace.startsWith(resolvedRoot + path.sep)
+        );
+      });
+
+      if (!isAllowedRoot) {
+        return reply.status(403).send({
+          error: `Workspace path not within allowed roots: ${workspaceRoot}`,
+        });
+      }
+
       try {
         // Load and compile the agent definition
         const def = await loadAgentDefinition(agent.filePath);

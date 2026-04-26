@@ -4,7 +4,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { compileWithAdapters, estimateTokens } from '../compiler/index.js';
+import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
+import type { ContextSource } from '../compiler/types.js';
 import type {
   AgentDefinition,
   CompiledAgentContext,
@@ -36,9 +37,14 @@ export async function compileAgent(
     : undefined;
 
   // Layer 4: Memory context
-  const memory = def.context.memory?.enabled
-    ? await compileMemoryContext(def.context.memory.path!, def.context.memory.types)
-    : undefined;
+  let memory: CompiledAgentContext['memory'] | undefined;
+  if (def.context.memory?.enabled) {
+    if (def.context.memory.path) {
+      memory = await compileMemoryContext(def.context.memory.path, def.context.memory.types);
+    } else {
+      console.warn('[recipe] Memory enabled but no path specified — skipping memory compilation');
+    }
+  }
 
   return {
     identity: def.identity,
@@ -65,33 +71,24 @@ async function compileBootContext(
 
   const budget = config.tokenBudget ?? 8000;
 
-  // Build exclusion list from boot config
-  const excluded: string[][] = [];
-
-  if (config.constitution === false) {
-    excluded.push(['constitution']);
-  } else if (Array.isArray(config.constitution)) {
-    // Exclude all constitution sections NOT in the list
-    // This requires knowing all sections first — simplified: exclude nothing
-    // Full implementation would need to discover all sections and invert the filter
-  }
-
-  if (config.claudeMd === false) {
-    excluded.push(['claude-md']);
-  }
-
-  if (config.profile === false) {
-    excluded.push(['profile']);
-  }
-
-  if (config.cursorRules === false) {
-    excluded.push(['cursor-rules']);
-  }
+  // Build a filtered sources list by excluding disabled source types.
+  // This is more reliable than ID-based exclusion since adapter node IDs
+  // don't map 1:1 to config toggles (e.g. constitution produces 'purpose',
+  // 'directory-semantics', etc. — not 'constitution').
+  const allSources = await discoverSources(workspaceRoot);
+  const sources = allSources.filter((s) => {
+    const basename = path.basename(s.relativePath);
+    if (config.constitution === false && basename === 'CONSTITUTION.md') return false;
+    if (config.claudeMd === false && basename === 'CLAUDE.md') return false;
+    if (config.profile === false && s.kind === 'profile') return false;
+    if (config.cursorRules === false && s.relativePath.includes('.cursor/rules/')) return false;
+    return true;
+  });
 
   const result = await compileWithAdapters({
     workspaceRoot,
     tokenBudget: budget,
-    excluded,
+    sources,
   });
 
   return {

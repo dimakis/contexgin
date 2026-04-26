@@ -11,10 +11,13 @@ export function estimateTokens(text: string): number {
 
 /**
  * Normalize a heading for dedup comparison.
- * "Claude Code Instructions > Entry Points" → "entry points"
+ * Uses the full heading path to avoid false positives when
+ * different parent sections share a leaf heading name.
+ * ["Architecture", "Entry Points"] → "architecture > entry points"
+ * ["Entry Points"] → "entry points"
  */
 function normalizeHeading(headingPath: string[]): string {
-  return headingPath[headingPath.length - 1].toLowerCase().trim();
+  return headingPath.map((s) => s.toLowerCase().trim()).join(' > ');
 }
 
 /**

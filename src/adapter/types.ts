@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 // ── Context Node ────────────────────────────────────────────────
 
 /** The type of context a node represents */
@@ -87,6 +89,14 @@ export const TIER_WEIGHTS: Record<ContextTier, number> = {
 };
 
 // ── Helpers ─────────────────────────────────────────────────────
+
+/**
+ * Whether a relative path represents a spoke (not at the workspace root).
+ * Checks both OS-native separator and forward slash for cross-platform safety.
+ */
+export function isSpoke(relativePath: string): boolean {
+  return relativePath.includes(path.sep) || relativePath.includes('/');
+}
 
 /** Slugify a heading into a node ID */
 export function slugify(text: string): string {

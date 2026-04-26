@@ -6,12 +6,7 @@
 import * as path from 'node:path';
 import { parseConstitution } from '../graph/parser.js';
 import { estimateTokens } from '../compiler/trimmer.js';
-import type { ContextAdapter, ContextNode, ContextTier } from './types.js';
-
-/** Whether this constitution is a spoke (not the workspace root) */
-function isSpoke(relativePath: string): boolean {
-  return relativePath.includes(path.sep) || relativePath.includes('/');
-}
+import { isSpoke, type ContextAdapter, type ContextNode, type ContextTier } from './types.js';
 
 /**
  * Demote spoke constitutions — they're context, not instructions.
