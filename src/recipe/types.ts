@@ -36,8 +36,6 @@ export interface ContextBlockConfig {
   id: string;
   /** Source file or pattern */
   source: string;
-  /** Optional section filter */
-  sections?: string[];
   /** Optional task hint for relevance boost */
   taskHint?: string;
 }

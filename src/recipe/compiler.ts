@@ -3,6 +3,7 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
 import type { ContextSource } from '../compiler/types.js';
@@ -12,6 +13,18 @@ import type {
   BootContextConfig,
   ContextBlockConfig,
 } from './types.js';
+
+/**
+ * Expand a leading `~` to the user's home directory.
+ * Node.js path APIs do not perform tilde expansion, so we must
+ * do it explicitly before using the path in filesystem operations.
+ */
+function expandTilde(p: string): string {
+  if (p.startsWith('~/') || p === '~') {
+    return path.join(os.homedir(), p.slice(1));
+  }
+  return p;
+}
 
 /**
  * Compile an agent definition into ready-to-serve context.
@@ -109,11 +122,8 @@ async function compileContextBlocks(
 
   for (const block of blocks) {
     try {
-      const fullPath = path.resolve(workspaceRoot, block.source);
+      const fullPath = path.resolve(workspaceRoot, expandTilde(block.source));
       const content = await fs.readFile(fullPath, 'utf-8');
-
-      // TODO: Apply section filtering if block.sections is specified
-      // For now, include the full file
 
       const tokens = estimateTokens(content);
 
@@ -143,7 +153,7 @@ async function compileOperationalContext(
 
   for (const file of files) {
     try {
-      const fullPath = path.resolve(workspaceRoot, file);
+      const fullPath = path.resolve(workspaceRoot, expandTilde(file));
       const content = await fs.readFile(fullPath, 'utf-8');
       loaded.push({ path: file, content });
     } catch (err) {
@@ -172,11 +182,12 @@ async function compileMemoryContext(
     reference: [],
   };
 
+  const resolvedPath = expandTilde(memoryPath);
   const allowedTypes = types ?? ['feedback', 'user', 'project', 'reference'];
 
   for (const type of allowedTypes) {
     try {
-      const typePath = path.join(memoryPath, capitalize(type));
+      const typePath = path.join(resolvedPath, capitalize(type));
       const entries = await fs.readdir(typePath);
 
       for (const entry of entries) {

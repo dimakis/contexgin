@@ -17,11 +17,23 @@ interface AgentLocation {
   workspaceRoot: string;
 }
 
+/** TTL-based cache for agent discovery (avoids re-scanning filesystem on every request) */
+const AGENT_CACHE_TTL_MS = 30_000; // 30 seconds
+let agentCache: { agents: AgentLocation[]; rootsKey: string; expiresAt: number } | null = null;
+
 /**
  * Discover agent definitions across all workspace roots.
  * Looks for .agents/ directory with .yaml/.yml files.
+ * Results are cached for 30 seconds to avoid repeated filesystem scans.
  */
 async function discoverAgents(roots: string[]): Promise<AgentLocation[]> {
+  const rootsKey = roots.join('\0');
+  const now = Date.now();
+
+  if (agentCache && agentCache.rootsKey === rootsKey && now < agentCache.expiresAt) {
+    return agentCache.agents;
+  }
+
   const agents: AgentLocation[] = [];
 
   for (const root of roots) {
@@ -50,6 +62,7 @@ async function discoverAgents(roots: string[]): Promise<AgentLocation[]> {
     }
   }
 
+  agentCache = { agents, rootsKey, expiresAt: now + AGENT_CACHE_TTL_MS };
   return agents;
 }
 

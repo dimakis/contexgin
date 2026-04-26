@@ -10,8 +10,8 @@ import { isSpoke, type ContextAdapter, type ContextNode, type ContextTier } from
 
 /**
  * Demote spoke constitutions — they're context, not instructions.
- * Root constitutional → 1.0, spoke → 0.65
- * Root navigational  → 0.8, spoke → 0.45
+ * Root constitutional → 1.0, spoke constitutional → 'reference' (0.5)
+ * Root navigational  → 0.8, spoke navigational  → 'historical' (0.3)
  */
 function tierForDepth(baseTier: ContextTier, spoke: boolean): ContextTier {
   if (!spoke) return baseTier;

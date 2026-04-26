@@ -84,4 +84,135 @@ describe('trimToBudget', () => {
     expect(result.included).toHaveLength(0);
     expect(result.trimmed).toHaveLength(0);
   });
+
+  describe('cross-source dedup', () => {
+    it('removes lower-relevance duplicate heading from a different source', () => {
+      const sourceA: ContextSource = {
+        path: '/test/a.md',
+        kind: 'constitution',
+        relativePath: 'a.md',
+      };
+      const sourceB: ContextSource = {
+        path: '/test/b.md',
+        kind: 'reference',
+        relativePath: 'b.md',
+      };
+
+      const sections: RankedSection[] = [
+        {
+          source: sourceA,
+          headingPath: ['Architecture'],
+          level: 1,
+          content: 'Architecture from source A.',
+          tokenEstimate: 7,
+          relevance: 0.9,
+          reason: 'constitutional',
+        },
+        {
+          source: sourceB,
+          headingPath: ['Architecture'],
+          level: 1,
+          content: 'Architecture from source B.',
+          tokenEstimate: 7,
+          relevance: 0.5,
+          reason: 'reference',
+        },
+      ];
+
+      const result = trimToBudget(sections, 1000);
+      // Higher-relevance copy from source A should be included
+      expect(result.included).toHaveLength(1);
+      expect(result.included[0].source.relativePath).toBe('a.md');
+      // Lower-relevance copy from source B should be trimmed
+      expect(result.trimmed).toHaveLength(1);
+      expect(result.trimmed[0].source.relativePath).toBe('b.md');
+    });
+
+    it('keeps same heading from same source (no false dedup)', () => {
+      const source: ContextSource = {
+        path: '/test/file.md',
+        kind: 'constitution',
+        relativePath: 'file.md',
+      };
+
+      const sections: RankedSection[] = [
+        {
+          source,
+          headingPath: ['Entry Points'],
+          level: 1,
+          content: 'First entry points section.',
+          tokenEstimate: 7,
+          relevance: 0.9,
+          reason: 'navigational',
+        },
+        {
+          source,
+          headingPath: ['Entry Points'],
+          level: 1,
+          content: 'Second entry points section.',
+          tokenEstimate: 7,
+          relevance: 0.7,
+          reason: 'navigational',
+        },
+      ];
+
+      const result = trimToBudget(sections, 1000);
+      // Both should be included — same source, no dedup
+      expect(result.included).toHaveLength(2);
+      expect(result.trimmed).toHaveLength(0);
+    });
+
+    it('dedup interacts correctly with budget enforcement', () => {
+      const sourceA: ContextSource = {
+        path: '/test/a.md',
+        kind: 'constitution',
+        relativePath: 'a.md',
+      };
+      const sourceB: ContextSource = {
+        path: '/test/b.md',
+        kind: 'reference',
+        relativePath: 'b.md',
+      };
+
+      const sections: RankedSection[] = [
+        {
+          source: sourceA,
+          headingPath: ['Purpose'],
+          level: 1,
+          content: 'a'.repeat(40), // 10 tokens
+          tokenEstimate: 10,
+          relevance: 1.0,
+          reason: 'constitutional',
+        },
+        {
+          source: sourceB,
+          headingPath: ['Purpose'],
+          level: 1,
+          content: 'b'.repeat(40), // 10 tokens
+          tokenEstimate: 10,
+          relevance: 0.6,
+          reason: 'reference',
+        },
+        {
+          source: sourceA,
+          headingPath: ['Services'],
+          level: 1,
+          content: 'c'.repeat(40), // 10 tokens
+          tokenEstimate: 10,
+          relevance: 0.5,
+          reason: 'reference',
+        },
+      ];
+
+      // Budget for 20 tokens. Purpose from B is deduped, Services fits.
+      const result = trimToBudget(sections, 20);
+      expect(result.included).toHaveLength(2);
+      expect(result.included.some((s) => s.headingPath[0] === 'Purpose')).toBe(true);
+      expect(result.included.some((s) => s.headingPath[0] === 'Services')).toBe(true);
+      // Purpose from source B should be in trimmed (dedup)
+      expect(result.trimmed).toHaveLength(1);
+      expect(result.trimmed[0].headingPath[0]).toBe('Purpose');
+      expect(result.trimmed[0].source.relativePath).toBe('b.md');
+    });
+  });
 });

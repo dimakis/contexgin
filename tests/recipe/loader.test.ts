@@ -148,7 +148,7 @@ context:
   blocks:
     - id: jira-context
       source: ~/redhat/team_home/jira_process/context/workflow.md
-      sections: ["Custom Fields", "Statuses"]
+      taskHint: "Jira workflow context"
 
   operational:
     files:
@@ -373,8 +373,8 @@ describe('validateAgentDefinition', () => {
       },
       context: {
         blocks: [
-          { id: '', source: '', sections: [] },
-          { id: 'valid', source: 'path', sections: [] },
+          { id: '', source: '' },
+          { id: 'valid', source: 'path' },
         ],
       },
     };
