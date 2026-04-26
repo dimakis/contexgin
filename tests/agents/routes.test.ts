@@ -109,7 +109,10 @@ describe('Agent Routes', () => {
 
     it('lists loaded agent definitions', async () => {
       const workspace = await createTestWorkspace(tmpDir);
-      await fs.writeFile(path.join(agentDir, 'test.yaml'), agentDefinition('test-agent', workspace));
+      await fs.writeFile(
+        path.join(agentDir, 'test.yaml'),
+        agentDefinition('test-agent', workspace),
+      );
 
       server = await createServer({
         ...DEFAULT_CONFIG,
@@ -132,7 +135,10 @@ describe('Agent Routes', () => {
   describe('GET /api/agents/:name', () => {
     it('returns agent definition', async () => {
       const workspace = await createTestWorkspace(tmpDir);
-      await fs.writeFile(path.join(agentDir, 'test.yaml'), agentDefinition('test-agent', workspace));
+      await fs.writeFile(
+        path.join(agentDir, 'test.yaml'),
+        agentDefinition('test-agent', workspace),
+      );
 
       server = await createServer({
         ...DEFAULT_CONFIG,
@@ -166,7 +172,10 @@ describe('Agent Routes', () => {
   describe('GET /api/agents/:name/context', () => {
     it('compiles boot context for an agent', async () => {
       const workspace = await createTestWorkspace(tmpDir);
-      await fs.writeFile(path.join(agentDir, 'test.yaml'), agentDefinition('test-agent', workspace));
+      await fs.writeFile(
+        path.join(agentDir, 'test.yaml'),
+        agentDefinition('test-agent', workspace),
+      );
 
       server = await createServer({
         ...DEFAULT_CONFIG,
@@ -210,7 +219,10 @@ describe('Agent Routes', () => {
 
     it('accepts task query parameter', async () => {
       const workspace = await createTestWorkspace(tmpDir);
-      await fs.writeFile(path.join(agentDir, 'test.yaml'), agentDefinition('test-agent', workspace));
+      await fs.writeFile(
+        path.join(agentDir, 'test.yaml'),
+        agentDefinition('test-agent', workspace),
+      );
 
       server = await createServer({
         ...DEFAULT_CONFIG,
