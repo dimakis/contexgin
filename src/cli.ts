@@ -27,7 +27,7 @@ const SEVERITY_ICON: Record<ViolationSeverity, string> = {
 // ── Arg helpers ─────────────────────────────────────────────────
 
 /** Flags that consume the next argument as a value. */
-const VALUE_FLAGS = new Set(['--port', '--socket', '--db', '--goals-db']);
+const VALUE_FLAGS = new Set(['--port', '--socket', '--db', '--goals-db', '--agent-defs']);
 
 /**
  * Extract positional arguments from an args list, skipping flags and
@@ -96,11 +96,12 @@ ${bold('Commands:')}
   serve <root> [root2] ...      Start daemon with HTTP API
 
 ${bold('Serve options:')}
-  --port N        TCP port (default: 4195)
-  --socket PATH   Unix socket path
-  --no-watch      Disable file watching
-  --db PATH       SQLite database path (default: in-memory)
-  --goals-db PATH Goals SQLite database path (default: in-memory)
+  --port N            TCP port (default: 4195)
+  --socket PATH       Unix socket path
+  --no-watch          Disable file watching
+  --db PATH           SQLite database path (default: in-memory)
+  --goals-db PATH     Goals SQLite database path (default: in-memory)
+  --agent-defs PATH   Agent definition search path (repeatable)
 
 ${bold('Examples:')}
   npx contexgin validate ~/redhat/mgmt
@@ -270,10 +271,22 @@ function parseFlag(args: string[], flag: string): string | null {
   return args[idx + 1];
 }
 
+/** Collect all values for a repeatable flag (e.g. --agent-defs a --agent-defs b). */
+function parseAllFlags(args: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flag && i + 1 < args.length) {
+      values.push(args[++i]);
+    }
+  }
+  return values;
+}
+
 async function runServe(roots: string[], args: string[]) {
   const resolvedRoots = roots.map((r) => path.resolve(r.replace(/^~/, process.env.HOME || '')));
 
   const portFlag = parseFlag(args, '--port');
+  const agentDefPaths = parseAllFlags(args, '--agent-defs');
   const config: ServerConfig = {
     ...DEFAULT_CONFIG,
     roots: resolvedRoots,
@@ -282,6 +295,8 @@ async function runServe(roots: string[], args: string[]) {
     dbPath: parseFlag(args, '--db') ?? DEFAULT_CONFIG.dbPath,
     goalsDbPath: parseFlag(args, '--goals-db') ?? DEFAULT_CONFIG.goalsDbPath,
     watch: !args.includes('--no-watch'),
+    agentDefinitionPaths:
+      agentDefPaths.length > 0 ? agentDefPaths : DEFAULT_CONFIG.agentDefinitionPaths,
   };
 
   console.log(dim('Starting ContexGin daemon...'));
@@ -334,6 +349,9 @@ async function runServe(roots: string[], args: string[]) {
   console.log(`  POST ${base}/validate`);
   console.log(`  GET  ${base}/graph`);
   console.log(`  GET  ${base}/graph/:hubId`);
+  console.log(`  GET  ${base}/api/agents`);
+  console.log(`  GET  ${base}/api/agents/:name`);
+  console.log(`  GET  ${base}/api/agents/:name/context`);
   console.log('');
   console.log(dim('Press Ctrl+C to stop'));
 }

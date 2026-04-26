@@ -1,12 +1,13 @@
 // ── Agent Definition Loader ────────────────────────────────────
 //
-// Loads agent definitions from YAML files in a configured directory.
-// Watches for changes and reloads automatically.
+// Loads agent definitions from YAML files in configured directories.
+// Call load() to scan; call again to reload.
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { AgentDefinition } from './types.js';
+import { resolveHome } from './util.js';
 
 export class AgentLoader {
   private definitions = new Map<string, AgentDefinition>();
@@ -42,12 +43,23 @@ export class AgentLoader {
       const filePath = path.join(resolved, entry);
       try {
         const raw = await fs.readFile(filePath, 'utf-8');
-        const parsed = parseYaml(raw) as Record<string, unknown>;
+        const parsed = parseYaml(raw);
 
-        if (!isAgentDefinition(parsed)) continue;
+        if (parsed == null || typeof parsed !== 'object') continue;
+
+        if (!isAgentDefinition(parsed as Record<string, unknown>)) continue;
 
         const def = parsed as unknown as AgentDefinition;
-        this.definitions.set(def.identity.name, def);
+        const name = def.identity.name;
+
+        if (this.definitions.has(name)) {
+          console.warn(
+            `[AgentLoader] duplicate agent name "${name}" — ` +
+              `${filePath} overwrites earlier definition`,
+          );
+        }
+
+        this.definitions.set(name, def);
       } catch {
         // Skip files that can't be parsed
       }
@@ -93,12 +105,4 @@ function isAgentDefinition(data: Record<string, unknown>): boolean {
   if (!memory || !VALID_MEMORY_SCOPES.has(memory.scope as string)) return false;
 
   return true;
-}
-
-function resolveHome(filePath: string): string {
-  if (filePath.startsWith('~/')) {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-    return path.join(home, filePath.slice(2));
-  }
-  return filePath;
 }

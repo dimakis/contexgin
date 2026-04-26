@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { AgentLoader } from './loader.js';
 import type { AgentRecipeResponse } from './types.js';
 import { compileWithAdapters } from '../compiler/index.js';
+import { resolveHome } from './util.js';
 
 export function agentRoutes(app: FastifyInstance, loader: AgentLoader): void {
   // ── GET /api/agents ──────────────────────────────────────────
@@ -85,12 +86,4 @@ export function agentRoutes(app: FastifyInstance, loader: AgentLoader): void {
       }
     },
   );
-}
-
-function resolveHome(filePath: string): string {
-  if (filePath.startsWith('~/')) {
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-    return `${home}/${filePath.slice(2)}`;
-  }
-  return filePath;
 }
