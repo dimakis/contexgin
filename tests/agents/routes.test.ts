@@ -239,5 +239,62 @@ describe('Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json().agent).toBe('test-agent');
     });
+
+    it('returns 400 when agent has empty hubs array', async () => {
+      const emptyHubsAgent = `
+kind: AgentDefinition
+version: "0.1"
+
+identity:
+  name: no-hubs-agent
+  description: Agent with no hubs
+  mode: narrow
+
+provider:
+  default: gpt-4o
+
+context:
+  budget: 4000
+  sources:
+    hubs: []
+  priority: []
+  exclude: []
+  profile: null
+
+output:
+  conventions:
+    commit_style: conventional
+    response_format: structured
+  guides: []
+
+governance:
+  boundaries: []
+  approval:
+    required_for: []
+    auto_allow:
+      - Read
+
+memory:
+  scope: none
+  vault: null
+`;
+
+      await fs.writeFile(path.join(agentDir, 'no-hubs.yaml'), emptyHubsAgent);
+
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [],
+        dbPath: ':memory:',
+        agentDefinitionPaths: [agentDir],
+      });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/no-hubs-agent/context',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('no source hubs');
+    });
   });
 });

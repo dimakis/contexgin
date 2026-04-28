@@ -110,6 +110,42 @@ memory:
   scope: none
 `;
 
+const MISSING_DESCRIPTION = `
+kind: AgentDefinition
+version: "0.1"
+identity:
+  name: no-description
+  mode: narrow
+provider:
+  default: gpt-4o
+context:
+  budget: 8000
+  sources:
+    hubs:
+      - path: /tmp/workspace
+memory:
+  scope: none
+`;
+
+const MISSING_HUBS = `
+kind: AgentDefinition
+version: "0.1"
+identity:
+  name: no-hubs
+  description: Missing hubs
+  mode: narrow
+provider:
+  default: gpt-4o
+context:
+  budget: 8000
+  sources: {}
+memory:
+  scope: none
+`;
+
+const SCALAR_YAML = `42`;
+const EMPTY_YAML = ``;
+
 // ── Tests ──────────────────────────────────────────────────────
 
 describe('AgentLoader', () => {
@@ -242,5 +278,53 @@ describe('AgentLoader', () => {
     expect(all).toHaveLength(1);
     expect(all[0].kind).toBe('AgentDefinition');
     expect(all[0].identity.name).toBe('test-agent');
+  });
+
+  it('skips files missing identity.description', async () => {
+    await fs.writeFile(path.join(tmpDir, 'no-desc.yaml'), MISSING_DESCRIPTION);
+
+    const loader = new AgentLoader([tmpDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual([]);
+  });
+
+  it('skips files missing context.sources.hubs', async () => {
+    await fs.writeFile(path.join(tmpDir, 'no-hubs.yaml'), MISSING_HUBS);
+
+    const loader = new AgentLoader([tmpDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual([]);
+  });
+
+  it('skips empty YAML files', async () => {
+    await fs.writeFile(path.join(tmpDir, 'empty.yaml'), EMPTY_YAML);
+
+    const loader = new AgentLoader([tmpDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual([]);
+  });
+
+  it('skips YAML files containing scalar values', async () => {
+    await fs.writeFile(path.join(tmpDir, 'scalar.yaml'), SCALAR_YAML);
+
+    const loader = new AgentLoader([tmpDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual([]);
+  });
+
+  it('expands tilde in search paths', async () => {
+    const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
+    const relativeDir = tmpDir.replace(homeDir, '~');
+
+    await fs.writeFile(path.join(tmpDir, 'agent.yaml'), VALID_DEFINITION);
+
+    const loader = new AgentLoader([relativeDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual(['test-agent']);
   });
 });

@@ -93,6 +93,7 @@ function isAgentDefinition(data: Record<string, unknown>): boolean {
 
   const identity = data.identity as Record<string, unknown> | undefined;
   if (!identity || typeof identity.name !== 'string') return false;
+  if (typeof identity.description !== 'string') return false;
   if (!VALID_MODES.has(identity.mode as string)) return false;
 
   const provider = data.provider as Record<string, unknown> | undefined;
@@ -100,6 +101,9 @@ function isAgentDefinition(data: Record<string, unknown>): boolean {
 
   const context = data.context as Record<string, unknown> | undefined;
   if (!context || typeof context.budget !== 'number' || context.budget < 1) return false;
+
+  const sources = context.sources as Record<string, unknown> | undefined;
+  if (!sources || !Array.isArray(sources.hubs)) return false;
 
   const memory = data.memory as Record<string, unknown> | undefined;
   if (!memory || !VALID_MEMORY_SCOPES.has(memory.scope as string)) return false;
