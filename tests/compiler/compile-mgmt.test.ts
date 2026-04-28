@@ -6,7 +6,10 @@ import { compile, discoverSources } from '../../src/compiler/index.js';
 import { extractClaims } from '../../src/integrity/claims.js';
 import { validateAll } from '../../src/integrity/validator.js';
 
-describe('compile against mgmt workspace', () => {
+// Skip these tests in CI — they require the mgmt workspace which is not available
+const describeLocal = process.env.CI ? describe.skip : describe;
+
+describeLocal('compile against mgmt workspace', () => {
   const MGMT_ROOT = path.join(os.homedir(), 'redhat/mgmt');
 
   it('discovers sources in mgmt workspace', async () => {

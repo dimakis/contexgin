@@ -99,22 +99,60 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
       }
 
       // Determine workspace root — use override or the root where the agent was found
-      const workspaceRoot = workspaceOverride ?? agent.workspaceRoot;
+      let workspaceRoot = workspaceOverride ?? agent.workspaceRoot;
 
-      // Validate that the resolved workspace is within an allowed root
-      const resolvedWorkspace = path.resolve(workspaceRoot);
-      const isAllowedRoot = config.roots.some((root) => {
-        const resolvedRoot = path.resolve(root);
-        return (
-          resolvedWorkspace === resolvedRoot ||
-          resolvedWorkspace.startsWith(resolvedRoot + path.sep)
-        );
-      });
+      // If workspace is provided as user input, resolve it against each allowed root
+      // to prevent path traversal attacks (e.g., ../../etc)
+      if (workspaceOverride) {
+        // Normalize the user input to remove .. and . segments
+        const normalized = path.normalize(workspaceOverride);
 
-      if (!isAllowedRoot) {
-        return reply.status(403).send({
-          error: `Workspace path not within allowed roots: ${workspaceRoot}`,
+        // Reject if normalized path escapes upward (starts with ..)
+        if (normalized.startsWith('..')) {
+          return reply.status(400).send({
+            error: 'Workspace path cannot escape parent directory',
+          });
+        }
+
+        // Try to resolve against allowed roots
+        let matched = false;
+        for (const root of config.roots) {
+          const candidate = path.isAbsolute(normalized)
+            ? normalized
+            : path.resolve(root, normalized);
+
+          const resolvedRoot = path.resolve(root);
+          if (
+            candidate === resolvedRoot ||
+            candidate.startsWith(resolvedRoot + path.sep)
+          ) {
+            workspaceRoot = candidate;
+            matched = true;
+            break;
+          }
+        }
+
+        if (!matched) {
+          return reply.status(403).send({
+            error: `Workspace path not within allowed roots: ${workspaceOverride}`,
+          });
+        }
+      } else {
+        // Validate the agent's default workspace root
+        const resolvedWorkspace = path.resolve(workspaceRoot);
+        const isAllowedRoot = config.roots.some((root) => {
+          const resolvedRoot = path.resolve(root);
+          return (
+            resolvedWorkspace === resolvedRoot ||
+            resolvedWorkspace.startsWith(resolvedRoot + path.sep)
+          );
         });
+
+        if (!isAllowedRoot) {
+          return reply.status(403).send({
+            error: `Workspace path not within allowed roots: ${workspaceRoot}`,
+          });
+        }
       }
 
       try {

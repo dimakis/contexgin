@@ -20,8 +20,11 @@ import type {
  * do it explicitly before using the path in filesystem operations.
  */
 function expandTilde(p: string): string {
-  if (p.startsWith('~/') || p === '~') {
-    return path.join(os.homedir(), p.slice(1));
+  if (p === '~') {
+    return os.homedir();
+  }
+  if (p.startsWith('~/')) {
+    return path.join(os.homedir(), p.slice(2));
   }
   return p;
 }
@@ -91,10 +94,27 @@ async function compileBootContext(
   const allSources = await discoverSources(workspaceRoot);
   const sources = allSources.filter((s) => {
     const basename = path.basename(s.relativePath);
-    if (config.constitution === false && basename === 'CONSTITUTION.md') return false;
-    if (config.claudeMd === false && basename === 'CLAUDE.md') return false;
-    if (config.profile === false && s.kind === 'profile') return false;
-    if (config.cursorRules === false && s.relativePath.includes('.cursor/rules/')) return false;
+
+    // CONSTITUTION.md — exclude if explicitly disabled
+    if (basename === 'CONSTITUTION.md') {
+      return config.constitution !== false;
+    }
+
+    // CLAUDE.md — exclude if explicitly disabled
+    if (basename === 'CLAUDE.md') {
+      return config.claudeMd !== false;
+    }
+
+    // Profile files — exclude if explicitly disabled
+    if (s.kind === 'profile') {
+      return config.profile !== false;
+    }
+
+    // Cursor rules — exclude if explicitly disabled
+    if (s.relativePath.includes('.cursor/rules/')) {
+      return config.cursorRules !== false;
+    }
+
     return true;
   });
 
