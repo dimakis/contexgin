@@ -122,10 +122,7 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
             : path.resolve(root, normalized);
 
           const resolvedRoot = path.resolve(root);
-          if (
-            candidate === resolvedRoot ||
-            candidate.startsWith(resolvedRoot + path.sep)
-          ) {
+          if (candidate === resolvedRoot || candidate.startsWith(resolvedRoot + path.sep)) {
             workspaceRoot = candidate;
             matched = true;
             break;

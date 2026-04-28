@@ -174,10 +174,7 @@ describe('compileAgent', () => {
       path.join(memoryDir, 'Feedback', 'feedback_example.md'),
       '# Feedback\n\nUser likes X.',
     );
-    await fs.writeFile(
-      path.join(memoryDir, 'User', 'user_pref.md'),
-      '# User Pref\n\nPrefers Y.',
-    );
+    await fs.writeFile(path.join(memoryDir, 'User', 'user_pref.md'), '# User Pref\n\nPrefers Y.');
 
     const def = createMinimalAgent();
     def.context.memory = {

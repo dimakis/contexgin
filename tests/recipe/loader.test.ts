@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { loadAgentDefinition, loadAgentDefinitions, validateAgentDefinition } from '../../src/recipe/loader.js';
+import {
+  loadAgentDefinition,
+  loadAgentDefinitions,
+  validateAgentDefinition,
+} from '../../src/recipe/loader.js';
 import type { AgentDefinition } from '../../src/recipe/types.js';
 
 async function createTestAgentYaml(content: string): Promise<string> {
@@ -63,7 +67,9 @@ provider:
 
     const filePath = await createTestAgentYaml(yaml);
     try {
-      await expect(loadAgentDefinition(filePath)).rejects.toThrow('missing required field: identity');
+      await expect(loadAgentDefinition(filePath)).rejects.toThrow(
+        'missing required field: identity',
+      );
     } finally {
       await fs.rm(path.dirname(filePath), { recursive: true });
     }
@@ -81,7 +87,9 @@ provider:
 
     const filePath = await createTestAgentYaml(yaml);
     try {
-      await expect(loadAgentDefinition(filePath)).rejects.toThrow('identity missing required field: name');
+      await expect(loadAgentDefinition(filePath)).rejects.toThrow(
+        'identity missing required field: name',
+      );
     } finally {
       await fs.rm(path.dirname(filePath), { recursive: true });
     }
@@ -96,7 +104,9 @@ identity:
 
     const filePath = await createTestAgentYaml(yaml);
     try {
-      await expect(loadAgentDefinition(filePath)).rejects.toThrow('missing required field: provider');
+      await expect(loadAgentDefinition(filePath)).rejects.toThrow(
+        'missing required field: provider',
+      );
     } finally {
       await fs.rm(path.dirname(filePath), { recursive: true });
     }

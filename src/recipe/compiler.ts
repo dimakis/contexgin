@@ -6,7 +6,6 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
-import type { ContextSource } from '../compiler/types.js';
 import type {
   AgentDefinition,
   CompiledAgentContext,
@@ -49,7 +48,11 @@ export async function compileAgent(
 
   // Layer 3: Operational context
   const operational = def.context.operational
-    ? await compileOperationalContext(def.context.operational.files, root, def.context.operational.delivery)
+    ? await compileOperationalContext(
+        def.context.operational.files,
+        root,
+        def.context.operational.delivery,
+      )
     : undefined;
 
   // Layer 4: Memory context
@@ -154,7 +157,9 @@ async function compileContextBlocks(
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[recipe] Failed to load context block ${block.id} from ${block.source}: ${msg}`);
+      console.warn(
+        `[recipe] Failed to load context block ${block.id} from ${block.source}: ${msg}`,
+      );
     }
   }
 

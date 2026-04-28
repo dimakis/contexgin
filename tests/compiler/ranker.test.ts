@@ -104,9 +104,7 @@ describe('rankSections', () => {
 
       const ranked = rankSections([spokeSection, rootSection]);
       const root = ranked.find((s) => s.source.relativePath === 'CONSTITUTION.md');
-      const spoke = ranked.find(
-        (s) => s.source.relativePath === 'command_center/CONSTITUTION.md',
-      );
+      const spoke = ranked.find((s) => s.source.relativePath === 'command_center/CONSTITUTION.md');
 
       expect(root!.relevance).toBeGreaterThan(spoke!.relevance);
     });
