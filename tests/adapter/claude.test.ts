@@ -89,15 +89,15 @@ Hub-spoke topology with mgmt as root hub.
       });
     });
 
-    it('classifies Agent System as reference', async () => {
+    it('classifies Agent System as operational/navigational', async () => {
       const md = `## Agent System
 
 Autonomous workspace agents with journals and proposals.
 `;
       await withTempFile(md, 'CLAUDE.md', async (filePath, dir) => {
         const nodes = await claudeAdapter.adapt(filePath, dir);
-        expect(nodes[0].type).toBe('reference');
-        expect(nodes[0].tier).toBe('reference');
+        expect(nodes[0].type).toBe('operational');
+        expect(nodes[0].tier).toBe('navigational');
       });
     });
 
@@ -113,15 +113,15 @@ Read workflow.md and org_structure.md for custom fields.
       });
     });
 
-    it('defaults unknown headings to operational/reference', async () => {
+    it('classifies Worktree Sessions as operational/navigational', async () => {
       const md = `## Worktree Sessions
 
 Sessions use multi-repo worktrees.
 `;
       await withTempFile(md, 'CLAUDE.md', async (filePath, dir) => {
         const nodes = await claudeAdapter.adapt(filePath, dir);
-        expect(nodes[0].type).toBe('reference');
-        expect(nodes[0].tier).toBe('reference');
+        expect(nodes[0].type).toBe('operational');
+        expect(nodes[0].tier).toBe('navigational');
       });
     });
   });

@@ -6,7 +6,19 @@
 import * as path from 'node:path';
 import { parseConstitution } from '../graph/parser.js';
 import { estimateTokens } from '../compiler/trimmer.js';
-import type { ContextAdapter, ContextNode } from './types.js';
+import { isSpoke, type ContextAdapter, type ContextNode, type ContextTier } from './types.js';
+
+/**
+ * Demote spoke constitutions — they're context, not instructions.
+ * Root constitutional → 1.0, spoke constitutional → 'reference' (0.5)
+ * Root navigational  → 0.8, spoke navigational  → 'historical' (0.3)
+ */
+function tierForDepth(baseTier: ContextTier, spoke: boolean): ContextTier {
+  if (!spoke) return baseTier;
+  // Spokes get demoted: constitutional → reference, navigational → historical
+  if (baseTier === 'constitutional') return 'reference';
+  return 'historical';
+}
 
 export const constitutionAdapter: ContextAdapter = {
   format: 'constitution',
@@ -19,6 +31,7 @@ export const constitutionAdapter: ContextAdapter = {
     const relativePath = path.relative(workspaceRoot, filePath);
     const constitution = await parseConstitution(filePath);
     const nodes: ContextNode[] = [];
+    const spoke = isSpoke(relativePath);
 
     const origin = (headingPath?: string[]) => ({
       source: filePath,
@@ -27,19 +40,19 @@ export const constitutionAdapter: ContextAdapter = {
       ...(headingPath ? { headingPath } : {}),
     });
 
-    // Purpose → identity / constitutional
+    // Purpose → identity / constitutional (or reference for spokes)
     if (constitution.purpose) {
       nodes.push({
         id: 'purpose',
         type: 'identity',
-        tier: 'constitutional',
+        tier: tierForDepth('constitutional', spoke),
         content: constitution.purpose,
         origin: origin(['Purpose']),
         tokenEstimate: estimateTokens(constitution.purpose),
       });
     }
 
-    // Directory semantics → structural / navigational
+    // Directory semantics → structural / navigational (or historical for spokes)
     if (constitution.tree.length > 0) {
       const treeContent = constitution.tree
         .map((n) => `- \`${n.path}\` — ${n.description || n.name}`)
@@ -47,7 +60,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'directory-semantics',
         type: 'structural',
-        tier: 'navigational',
+        tier: tierForDepth('navigational', spoke),
         content: treeContent,
         origin: origin(['Directory Semantics']),
         tokenEstimate: estimateTokens(treeContent),
@@ -62,7 +75,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'entry-points',
         type: 'operational',
-        tier: 'navigational',
+        tier: tierForDepth('navigational', spoke),
         content: epContent,
         origin: origin(['Entry Points']),
         tokenEstimate: estimateTokens(epContent),
@@ -77,7 +90,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'dependencies',
         type: 'structural',
-        tier: 'navigational',
+        tier: tierForDepth('navigational', spoke),
         content: depContent,
         origin: origin(['Dependencies']),
         tokenEstimate: estimateTokens(depContent),
@@ -92,7 +105,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'boundaries',
         type: 'governance',
-        tier: 'constitutional',
+        tier: tierForDepth('constitutional', spoke),
         content: boundContent,
         origin: origin(['Boundaries']),
         tokenEstimate: estimateTokens(boundContent),
@@ -105,7 +118,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'principles',
         type: 'governance',
-        tier: 'constitutional',
+        tier: tierForDepth('constitutional', spoke),
         content: prinContent,
         origin: origin(['Principles']),
         tokenEstimate: estimateTokens(prinContent),
@@ -120,7 +133,7 @@ export const constitutionAdapter: ContextAdapter = {
       nodes.push({
         id: 'spoke-charters',
         type: 'structural',
-        tier: 'navigational',
+        tier: tierForDepth('navigational', spoke),
         content: spokeContent,
         origin: origin(['Spoke Charters']),
         tokenEstimate: estimateTokens(spokeContent),

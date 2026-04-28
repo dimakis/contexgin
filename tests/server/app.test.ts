@@ -285,6 +285,172 @@ describe('ContexGin Server', () => {
     });
   });
 
+  describe('GET /api/agents', () => {
+    it('returns empty list when no agent definitions exist', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({ method: 'GET', url: '/api/agents' });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.agents).toEqual([]);
+    });
+
+    it('discovers agents from .agents/ directory', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({ method: 'GET', url: '/api/agents' });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.agents).toHaveLength(1);
+      expect(body.agents[0].name).toBe('test-agent');
+    });
+  });
+
+  describe('GET /api/agents/:name/context', () => {
+    it('compiles context for an agent', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+context:
+  boot:
+    tokenBudget: 4000
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/test-agent/context',
+      });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.agent).toBe('test-agent');
+      expect(body.boot).toBeDefined();
+    });
+
+    it('returns 404 for unknown agent', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/nonexistent/context',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('rejects workspace path outside allowed roots (path traversal)', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Attempt path traversal via workspace parameter
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/test-agent/context?workspace=/etc',
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error).toContain('not within allowed roots');
+    });
+
+    it('rejects workspace path traversal with ..', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Attempt path traversal using relative ..
+      const response = await server.app.inject({
+        method: 'GET',
+        url: `/api/agents/test-agent/context?workspace=${encodeURIComponent(root + '/../../../etc')}`,
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('accepts workspace within allowed roots', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+context:
+  boot:
+    tokenBudget: 4000
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Use a subdirectory of root as workspace — should be allowed
+      const response = await server.app.inject({
+        method: 'GET',
+        url: `/api/agents/test-agent/context?workspace=${encodeURIComponent(path.join(root, 'svc'))}`,
+      });
+
+      // Should succeed (200) — svc/ is within root
+      expect(response.statusCode).toBe(200);
+    });
+  });
+
   describe('POST /compile', () => {
     it('returns 503 before build', async () => {
       server = await createServer({ ...DEFAULT_CONFIG, roots: [], dbPath: ':memory:' });

@@ -90,6 +90,106 @@ Third content.
   });
 });
 
+describe('extractAllLevel2 — h3 splitting', () => {
+  it('splits h2 sections exceeding SPLIT_THRESHOLD at h3 boundaries', () => {
+    // Create an h2 with enough content to exceed 500 tokens (~2000 chars)
+    const longChild1 = 'First child content. '.repeat(60);
+    const longChild2 = 'Second child content. '.repeat(60);
+    const md = `# Top
+
+## Big Section
+
+Intro text.
+
+### Child One
+
+${longChild1}
+
+### Child Two
+
+${longChild2}
+`;
+    const nodes = parseMarkdown(md);
+    const sections = extractAllLevel2(nodes, dummySource);
+
+    // Should have 3 sections: intro (h2), Child One (h3), Child Two (h3)
+    expect(sections.length).toBe(3);
+    expect(sections[0].headingPath).toEqual(['Top', 'Big Section']);
+    expect(sections[0].content).toContain('Intro text.');
+    expect(sections[1].headingPath).toEqual(['Top', 'Big Section', 'Child One']);
+    expect(sections[1].content).toContain('First child content.');
+    expect(sections[2].headingPath).toEqual(['Top', 'Big Section', 'Child Two']);
+    expect(sections[2].content).toContain('Second child content.');
+  });
+
+  it('emits h2 intro-only section when there is non-trivial intro text before h3s', () => {
+    const longChild = 'Padding content here. '.repeat(120);
+    const md = `# Root
+
+## Section With Intro
+
+This is important introductory text.
+
+### Sub Section
+
+${longChild}
+`;
+    const nodes = parseMarkdown(md);
+    const sections = extractAllLevel2(nodes, dummySource);
+
+    // Intro section should exist and contain the intro text
+    const introSection = sections.find(
+      (s) => s.headingPath.length === 2 && s.headingPath[1] === 'Section With Intro',
+    );
+    expect(introSection).toBeDefined();
+    expect(introSection!.content).toContain('This is important introductory text.');
+    // Intro should NOT contain child content
+    expect(introSection!.content).not.toContain('Padding content here.');
+  });
+
+  it('does not split when section is under threshold', () => {
+    const md = `# Top
+
+## Small Section
+
+Short content.
+
+### Sub A
+
+Also short.
+
+### Sub B
+
+Brief.
+`;
+    const nodes = parseMarkdown(md);
+    const sections = extractAllLevel2(nodes, dummySource);
+
+    // Should be kept as one section since total tokens < 500
+    expect(sections).toHaveLength(1);
+    expect(sections[0].headingPath).toEqual(['Top', 'Small Section']);
+    expect(sections[0].content).toContain('Short content.');
+    expect(sections[0].content).toContain('Also short.');
+  });
+
+  it('does not split when h3 children are absent', () => {
+    // Large h2 with no h3 children — should not be split
+    const longContent = 'Lots of text without sub-headings. '.repeat(80);
+    const md = `# Top
+
+## Monolithic Section
+
+${longContent}
+`;
+    const nodes = parseMarkdown(md);
+    const sections = extractAllLevel2(nodes, dummySource);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0].headingPath).toEqual(['Top', 'Monolithic Section']);
+    expect(sections[0].content).toContain('Lots of text without sub-headings.');
+  });
+});
+
 describe('cleanContent', () => {
   it('removes See: references', () => {
     const content = `Some text here.

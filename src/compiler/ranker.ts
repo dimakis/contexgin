@@ -1,13 +1,18 @@
+import { isSpoke as isSpokeByPath } from '../adapter/types.js';
 import type { ExtractedSection, RankedSection } from './types.js';
 
 /** Relevance ranking tiers */
 const TIER_WEIGHTS = {
   constitutional: 1.0, // Purpose, principles, boundaries — always top
   navigational: 0.8, // Architecture, directory semantics, entry points
+  operational: 0.75, // How-to-work rules (git, CLI, worktrees)
   identity: 0.7, // Profile, communication style, working style
   reference: 0.5, // Services, memory observations
   historical: 0.3, // Session notes, old decisions
 };
+
+/** Spoke constitution penalty — these are context, not instructions */
+const SPOKE_PENALTY = 0.35;
 
 /** Heading keywords that indicate navigational content */
 const NAVIGATIONAL_HEADINGS = [
@@ -19,6 +24,9 @@ const NAVIGATIONAL_HEADINGS = [
   'boundaries',
   'layout',
 ];
+
+/** Root constitution headings that are reference-tier (detailed catalogues) */
+const ROOT_REFERENCE_HEADINGS = ['sub-repo charter', 'external project', 'spoke charter'];
 
 /** Heading keywords that indicate constitutional content */
 const CONSTITUTIONAL_HEADINGS = [
@@ -32,22 +40,64 @@ const CONSTITUTIONAL_HEADINGS = [
 /** Heading keywords that indicate historical content */
 const HISTORICAL_HEADINGS = ['session', 'history', 'decisions', 'log', 'journal'];
 
+/** Heading keywords that indicate operational CLAUDE.md content */
+const OPERATIONAL_HEADINGS = [
+  'git',
+  'commit',
+  'branch',
+  'workflow',
+  'remote',
+  'entry point',
+  'cli',
+  'command',
+  'worktree',
+  'session',
+  'closeout',
+  'boot',
+  'memory',
+  'agent',
+];
+
+/** Whether a constitution source is a spoke (not the workspace root) */
+function isSpoke(section: ExtractedSection): boolean {
+  return isSpokeByPath(section.source.relativePath);
+}
+
 /**
  * Determine the tier weight for a section based on its source kind and heading content.
  */
 function getTierWeight(section: ExtractedSection): { weight: number; reason: string } {
   const headingText = section.headingPath.join(' ').toLowerCase();
 
-  // Constitutional source + constitutional heading = top tier
+  // Constitution sources — root vs spoke distinction
   if (section.source.kind === 'constitution') {
+    const spoke = isSpoke(section);
+    const penalty = spoke ? SPOKE_PENALTY : 0;
+
+    // Root constitution catalogues (Sub-Repo Charters, External Projects) are
+    // detailed reference material — demote so operational content wins budget
+    if (!spoke && ROOT_REFERENCE_HEADINGS.some((kw) => headingText.includes(kw))) {
+      return { weight: TIER_WEIGHTS.reference, reason: 'root catalogue' };
+    }
+
     if (CONSTITUTIONAL_HEADINGS.some((kw) => headingText.includes(kw))) {
-      return { weight: TIER_WEIGHTS.constitutional, reason: 'constitutional content' };
+      const w = TIER_WEIGHTS.constitutional - penalty;
+      return { weight: w, reason: spoke ? 'spoke constitutional' : 'constitutional content' };
     }
     if (NAVIGATIONAL_HEADINGS.some((kw) => headingText.includes(kw))) {
-      return { weight: TIER_WEIGHTS.navigational, reason: 'navigational content' };
+      const w = TIER_WEIGHTS.navigational - penalty;
+      return { weight: w, reason: spoke ? 'spoke navigational' : 'navigational content' };
     }
-    // Default for constitution source
-    return { weight: TIER_WEIGHTS.navigational, reason: 'constitution source' };
+    const w = TIER_WEIGHTS.navigational - penalty;
+    return { weight: w, reason: spoke ? 'spoke content' : 'constitution source' };
+  }
+
+  // CLAUDE.md — operational instructions, not generic references
+  if (section.source.kind === 'reference' && section.source.relativePath === 'CLAUDE.md') {
+    if (OPERATIONAL_HEADINGS.some((kw) => headingText.includes(kw))) {
+      return { weight: TIER_WEIGHTS.operational, reason: 'operational instructions' };
+    }
+    return { weight: TIER_WEIGHTS.operational, reason: 'CLAUDE.md content' };
   }
 
   if (section.source.kind === 'profile') {
@@ -65,7 +115,7 @@ function getTierWeight(section: ExtractedSection): { weight: number; reason: str
     return { weight: TIER_WEIGHTS.reference, reason: 'service reference' };
   }
 
-  // Default for reference and unknown kinds
+  // Default for unknown kinds
   return { weight: TIER_WEIGHTS.reference, reason: 'reference content' };
 }
 

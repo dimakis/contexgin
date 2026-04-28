@@ -44,6 +44,19 @@ export async function discoverSources(workspaceRoot: string): Promise<ContextSou
     }
   }
 
+  // Check for .cursor/rules/*.mdc
+  const cursorRulesDir = path.join(root, '.cursor', 'rules');
+  if (await dirExists(cursorRulesDir)) {
+    const rulesFiles = await fs.readdir(cursorRulesDir);
+    for (const file of rulesFiles) {
+      if (file.endsWith('.mdc')) {
+        const fullPath = path.join(cursorRulesDir, file);
+        const relativePath = path.join('.cursor', 'rules', file);
+        sources.push({ path: fullPath, kind: 'reference', relativePath });
+      }
+    }
+  }
+
   // Check for spoke-level CONSTITUTION.md files (one level deep)
   try {
     const entries = await fs.readdir(root, { withFileTypes: true });

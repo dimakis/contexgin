@@ -119,4 +119,4 @@ export type {
   NodeOrigin,
   SourceFormat,
 } from './types.js';
-export { slugify, TIER_WEIGHTS } from './types.js';
+export { isSpoke, slugify, TIER_WEIGHTS } from './types.js';

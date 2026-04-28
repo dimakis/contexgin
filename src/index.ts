@@ -141,6 +141,25 @@ export type {
   PermissionEvaluation,
 } from './permissions/types.js';
 
+// Agent recipes
+export {
+  loadAgentDefinition,
+  loadAgentDefinitions,
+  validateAgentDefinition,
+} from './recipe/loader.js';
+export { compileAgent } from './recipe/compiler.js';
+export type {
+  AgentDefinition,
+  CompiledAgentContext,
+  BootContextConfig as RecipeBootConfig,
+  ContextBlockConfig,
+  OperationalContextConfig,
+  MemoryContextConfig,
+  GovernanceConfig as RecipeGovernanceConfig,
+  SkillConfig,
+  ProviderConfig as RecipeProviderConfig,
+} from './recipe/types.js';
+
 // Goals
 export { GoalRegistry } from './goals/registry.js';
 export { GoalStore } from './goals/store.js';

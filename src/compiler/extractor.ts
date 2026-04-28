@@ -56,33 +56,65 @@ function collectFullContent(node: HeadingNode): string {
 }
 
 /**
- * Extract all level-2 sections (equivalent to build_boot_context's get_level_two_sections).
+ * Token threshold above which h2 sections are split into h3 sub-sections.
+ * Large monolithic sections prevent the trimmer from making granular choices.
+ */
+const SPLIT_THRESHOLD = 500;
+
+/**
+ * Extract all level-2 sections. When an h2 section exceeds SPLIT_THRESHOLD
+ * tokens and has h3 children, emit each h3 as a separate section so the
+ * trimmer can rank and trim them independently.
  */
 export function extractAllLevel2(nodes: HeadingNode[], source: ContextSource): ExtractedSection[] {
   const sections: ExtractedSection[] = [];
 
-  for (const node of nodes) {
-    if (node.level === 2) {
-      const fullContent = collectFullContent(node);
+  const addH2 = (node: HeadingNode, parentPath: string[]) => {
+    const fullContent = collectFullContent(node);
+    const tokens = estimateTokens(fullContent);
+
+    if (tokens > SPLIT_THRESHOLD && node.children.length > 0) {
+      // Emit the h2's own content (before first child) if non-trivial
+      if (node.content.trim()) {
+        sections.push({
+          source,
+          headingPath: [...parentPath, node.title],
+          level: node.level,
+          content: node.content,
+          tokenEstimate: estimateTokens(node.content),
+        });
+      }
+      // Emit each h3 child as its own section
+      for (const child of node.children) {
+        const childContent = collectFullContent(child);
+        sections.push({
+          source,
+          headingPath: [...parentPath, node.title, child.title],
+          level: child.level,
+          content: childContent,
+          tokenEstimate: estimateTokens(childContent),
+        });
+      }
+    } else {
+      // Small enough to keep as one section
       sections.push({
         source,
-        headingPath: [node.title],
+        headingPath: [...parentPath, node.title],
         level: node.level,
         content: fullContent,
-        tokenEstimate: estimateTokens(fullContent),
+        tokenEstimate: tokens,
       });
+    }
+  };
+
+  for (const node of nodes) {
+    if (node.level === 2) {
+      addH2(node, []);
     }
     // Also check children for H2 nodes nested under H1
     for (const child of node.children) {
       if (child.level === 2) {
-        const fullContent = collectFullContent(child);
-        sections.push({
-          source,
-          headingPath: [node.title, child.title],
-          level: child.level,
-          content: fullContent,
-          tokenEstimate: estimateTokens(fullContent),
-        });
+        addH2(child, [node.title]);
       }
     }
   }
