@@ -171,9 +171,12 @@ function extractDirectoryTree(content: string): DeclaredNode[] {
     const rawPath = stripBackticks(row.cells[0]);
     if (!rawPath) continue;
 
-    // Skip self-referencing root entries like "professional/ (root)" or bare "Root"
-    if (/\(root\)/i.test(rawPath)) continue;
-    if (/^root$/i.test(rawPath)) continue;
+    // Skip self-referencing root entries:
+    // 1. Explicitly annotated with (root), e.g. "professional/ (root)"
+    // 2. Bare "Root" (case-insensitive exact match) — a standalone entry
+    //    named "Root" is always a self-reference. Paths containing "root"
+    //    as a substring (e.g. "rootfs/", "root-config.yml") are NOT matched.
+    if (/\(root\)/i.test(rawPath) || /^root$/i.test(rawPath)) continue;
 
     // Strip other annotations from path
     const cleanPath = rawPath.replace(/\s*\(.*?\)\s*$/, '').trim();

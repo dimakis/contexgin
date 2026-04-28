@@ -21,6 +21,8 @@ export interface ServerConfig {
   dbPath: string;
   /** Goals SQLite database path */
   goalsDbPath: string;
+  /** Directories containing agent definition YAML files */
+  agentDefinitionPaths: string[];
   /** File watcher debounce interval in ms */
   debounceMs: number;
   /** Enable file watching */
@@ -34,6 +36,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   roots: [],
   dbPath: ':memory:',
   goalsDbPath: ':memory:',
+  agentDefinitionPaths: [],
   debounceMs: 500,
   watch: true,
 };
