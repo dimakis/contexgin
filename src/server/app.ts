@@ -52,7 +52,7 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   // Agent definitions
   const agentLoader = new AgentLoader(config.agentDefinitionPaths);
   await agentLoader.load();
-  agentRoutes(app, agentLoader);
+  agentRoutes(app, agentLoader, config);
 
   // Serialize rebuilds — if one is in flight, the next caller waits for it
   let rebuildInFlight: Promise<void> | null = null;

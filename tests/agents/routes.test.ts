@@ -240,7 +240,8 @@ describe('Agent Routes', () => {
       expect(response.json().agent).toBe('test-agent');
     });
 
-    it('returns 400 when agent has empty hubs array', async () => {
+    it('loader rejects agent definitions with empty hubs array', async () => {
+      // Empty hubs are now rejected at load time, not request time
       const emptyHubsAgent = `
 kind: AgentDefinition
 version: "0.1"
@@ -288,13 +289,78 @@ memory:
         agentDefinitionPaths: [agentDir],
       });
 
+      // Agent should not be loaded (rejected during validation)
       const response = await server.app.inject({
         method: 'GET',
         url: '/api/agents/no-hubs-agent/context',
       });
 
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('rejects path traversal attempts in hub paths', async () => {
+      const workspace = await createTestWorkspace(tmpDir);
+      await fs.writeFile(
+        path.join(agentDir, 'bad.yaml'),
+        agentDefinition('bad-agent', '../../../etc'),
+      );
+
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [workspace],
+        dbPath: ':memory:',
+        agentDefinitionPaths: [agentDir],
+      });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/bad-agent/context',
+      });
+
       expect(response.statusCode).toBe(400);
-      expect(response.json().error).toContain('no source hubs');
+      expect(response.json().error).toContain('traversal');
+    });
+
+    it('rejects hub paths outside allowed roots', async () => {
+      const workspace = await createTestWorkspace(tmpDir);
+      await fs.writeFile(path.join(agentDir, 'bad.yaml'), agentDefinition('bad-agent', '/etc'));
+
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [workspace],
+        dbPath: ':memory:',
+        agentDefinitionPaths: [agentDir],
+      });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/bad-agent/context',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('not within allowed roots');
+    });
+
+    it('allows hub paths within configured roots', async () => {
+      const workspace = await createTestWorkspace(tmpDir);
+      await fs.writeFile(
+        path.join(agentDir, 'good.yaml'),
+        agentDefinition('good-agent', workspace),
+      );
+
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [workspace],
+        dbPath: ':memory:',
+        agentDefinitionPaths: [agentDir],
+      });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/good-agent/context',
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 });

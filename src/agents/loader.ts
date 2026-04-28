@@ -104,6 +104,7 @@ function isAgentDefinition(data: Record<string, unknown>): boolean {
 
   const sources = context.sources as Record<string, unknown> | undefined;
   if (!sources || !Array.isArray(sources.hubs)) return false;
+  if (sources.hubs.length === 0) return false;
 
   const memory = data.memory as Record<string, unknown> | undefined;
   if (!memory || !VALID_MEMORY_SCOPES.has(memory.scope as string)) return false;

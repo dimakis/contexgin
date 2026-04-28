@@ -105,6 +105,24 @@ provider:
 context:
   budget: 0
   sources:
+    hubs:
+      - path: /tmp/workspace
+memory:
+  scope: none
+`;
+
+const EMPTY_HUBS = `
+kind: AgentDefinition
+version: "0.1"
+identity:
+  name: empty-hubs
+  description: Agent with empty hubs array
+  mode: narrow
+provider:
+  default: gpt-4o
+context:
+  budget: 8000
+  sources:
     hubs: []
 memory:
   scope: none
@@ -326,5 +344,14 @@ describe('AgentLoader', () => {
     await loader.load();
 
     expect(loader.list()).toEqual(['test-agent']);
+  });
+
+  it('skips files with empty hubs array', async () => {
+    await fs.writeFile(path.join(tmpDir, 'empty-hubs.yaml'), EMPTY_HUBS);
+
+    const loader = new AgentLoader([tmpDir]);
+    await loader.load();
+
+    expect(loader.list()).toEqual([]);
   });
 });
