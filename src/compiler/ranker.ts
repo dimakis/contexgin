@@ -1,4 +1,4 @@
-import { isSpoke as isSpokeByPath } from '../adapter/types.js';
+import { isNestedPath } from '../adapter/types.js';
 import type { ExtractedSection, RankedSection } from './types.js';
 
 /** Relevance ranking tiers */
@@ -58,9 +58,8 @@ const OPERATIONAL_HEADINGS = [
   'agent',
 ];
 
-/** Whether a constitution source is a spoke (not the workspace root) */
 function isSpoke(section: ExtractedSection): boolean {
-  return isSpokeByPath(section.source.relativePath);
+  return isNestedPath(section.source.relativePath);
 }
 
 /**

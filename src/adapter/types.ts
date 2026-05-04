@@ -90,11 +90,8 @@ export const TIER_WEIGHTS: Record<ContextTier, number> = {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/**
- * Whether a relative path represents a spoke (not at the workspace root).
- * Checks both OS-native separator and forward slash for cross-platform safety.
- */
-export function isSpoke(relativePath: string): boolean {
+/** Whether a relative path is nested below the workspace root (has path separators). */
+export function isNestedPath(relativePath: string): boolean {
   return relativePath.includes(path.sep) || relativePath.includes('/');
 }
 

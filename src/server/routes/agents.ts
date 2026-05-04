@@ -114,18 +114,23 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
           });
         }
 
-        // Try to resolve against allowed roots
+        // Try to resolve against allowed roots (use realpath for symlink safety)
         let matched = false;
         for (const root of config.roots) {
-          const candidate = path.isAbsolute(normalized)
-            ? normalized
-            : path.resolve(root, normalized);
+          try {
+            const candidate = path.isAbsolute(normalized)
+              ? normalized
+              : path.resolve(root, normalized);
 
-          const resolvedRoot = path.resolve(root);
-          if (candidate === resolvedRoot || candidate.startsWith(resolvedRoot + path.sep)) {
-            workspaceRoot = candidate;
-            matched = true;
-            break;
+            const realCandidate = await fs.realpath(candidate);
+            const realRoot = await fs.realpath(path.resolve(root));
+            if (realCandidate === realRoot || realCandidate.startsWith(realRoot + path.sep)) {
+              workspaceRoot = realCandidate;
+              matched = true;
+              break;
+            }
+          } catch {
+            // Path doesn't exist — skip this root
           }
         }
 
@@ -135,15 +140,26 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
           });
         }
       } else {
-        // Validate the agent's default workspace root
-        const resolvedWorkspace = path.resolve(workspaceRoot);
-        const isAllowedRoot = config.roots.some((root) => {
-          const resolvedRoot = path.resolve(root);
-          return (
-            resolvedWorkspace === resolvedRoot ||
-            resolvedWorkspace.startsWith(resolvedRoot + path.sep)
-          );
-        });
+        // Validate the agent's default workspace root (use realpath for symlink safety)
+        let isAllowedRoot = false;
+        try {
+          const realWorkspace = await fs.realpath(path.resolve(workspaceRoot));
+          isAllowedRoot = await (async () => {
+            for (const root of config.roots) {
+              try {
+                const realRoot = await fs.realpath(path.resolve(root));
+                if (realWorkspace === realRoot || realWorkspace.startsWith(realRoot + path.sep)) {
+                  return true;
+                }
+              } catch {
+                // Root doesn't exist — skip
+              }
+            }
+            return false;
+          })();
+        } catch {
+          // Workspace path doesn't exist
+        }
 
         if (!isAllowedRoot) {
           return reply.status(403).send({

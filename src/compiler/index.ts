@@ -257,23 +257,15 @@ function assembleGroupedPayload(nodes: RankedNode[]): string {
   return sections.join('\n\n');
 }
 
-/**
- * Check whether a node needs an injected heading (used by both
- * the renderer and the budget trimmer).
- */
-function nodeNeedsHeading(node: ContextNode | RankedNode): boolean {
-  if (node.content.trimStart().startsWith('#')) return false;
+/** @internal — exported for testing */
+export function nodeNeedsHeading(node: ContextNode | RankedNode): boolean {
+  if (/^#{1,6}\s/.test(node.content.trimStart())) return false;
   const hp = node.origin.headingPath;
   return !!(hp && hp.length > 0);
 }
 
-/**
- * Render a node with its original section heading preserved.
- * Uses the last element of headingPath as a ### heading within
- * the type group. Nodes whose content already starts with a
- * markdown heading are emitted as-is to avoid double-headings.
- */
-function renderNodeWithHeading(node: RankedNode): string {
+/** @internal — exported for testing */
+export function renderNodeWithHeading(node: RankedNode): string {
   if (!nodeNeedsHeading(node)) {
     return node.content;
   }
@@ -283,19 +275,13 @@ function renderNodeWithHeading(node: RankedNode): string {
   return `### ${heading}\n\n${node.content}`;
 }
 
-/**
- * If a node comes from a spoke-level file (e.g. career/CONSTITUTION.md),
- * return the spoke name for heading disambiguation. Root-level files
- * and profile files (memory/Profile/*) return undefined — they're
- * core content, not spoke-specific.
- */
-function spokeQualifier(node: RankedNode): string | undefined {
+/** @internal — exported for testing */
+export function spokeQualifier(node: RankedNode): string | undefined {
   const rel = node.origin.relativePath;
-  const parts = rel.split(path.sep);
-  // Root files (single segment) — no qualifier
+  const parts = rel.split(/[/\\]/);
   if (parts.length < 2) return undefined;
-  // Profile files are core identity, not spokes
-  if (parts[0] === 'memory') return undefined;
+  if (parts[0] === 'memory' && parts[1] === 'Profile') return undefined;
+  if (parts[0] === '.cursor') return undefined;
   return parts[0];
 }
 

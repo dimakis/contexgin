@@ -6,7 +6,7 @@
 import * as path from 'node:path';
 import { parseConstitution } from '../graph/parser.js';
 import { estimateTokens } from '../compiler/trimmer.js';
-import { isSpoke, type ContextAdapter, type ContextNode, type ContextTier } from './types.js';
+import { isNestedPath, type ContextAdapter, type ContextNode, type ContextTier } from './types.js';
 
 /**
  * Demote spoke constitutions — they're context, not instructions.
@@ -31,7 +31,7 @@ export const constitutionAdapter: ContextAdapter = {
     const relativePath = path.relative(workspaceRoot, filePath);
     const constitution = await parseConstitution(filePath);
     const nodes: ContextNode[] = [];
-    const spoke = isSpoke(relativePath);
+    const spoke = isNestedPath(relativePath);
 
     const origin = (headingPath?: string[]) => ({
       source: filePath,

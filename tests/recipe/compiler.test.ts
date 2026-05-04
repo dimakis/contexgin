@@ -247,6 +247,45 @@ describe('compileAgent', () => {
     expect(result.memory!.user).toEqual([]);
   });
 
+  it('excludes spoke files when spokes is false', async () => {
+    // Create a spoke-level constitution
+    const spokeDir = path.join(tmpDir, 'career');
+    await fs.mkdir(spokeDir, { recursive: true });
+    await fs.writeFile(
+      path.join(spokeDir, 'CONSTITUTION.md'),
+      '# Career Constitution\n\n## Purpose\n\nCareer tracking spoke.',
+    );
+
+    const def = createMinimalAgent();
+    def.context.boot = {
+      tokenBudget: 8000,
+      spokes: false,
+    };
+
+    const result = await compileAgent(def, tmpDir);
+
+    // Spoke constitution should be excluded
+    expect(result.bootContext.sources.some((s) => s.includes('career'))).toBe(false);
+    // Boot content should not mention career spoke
+    expect(result.bootContext.content).not.toContain('Career tracking spoke');
+  });
+
+  it('includes spoke files by default', async () => {
+    const spokeDir = path.join(tmpDir, 'career');
+    await fs.mkdir(spokeDir, { recursive: true });
+    await fs.writeFile(
+      path.join(spokeDir, 'CONSTITUTION.md'),
+      '# Career Constitution\n\n## Purpose\n\nCareer tracking spoke.',
+    );
+
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 8000 };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.sources.some((s) => s.includes('career'))).toBe(true);
+  });
+
   it('combines subdirectory and flat prefix memory', async () => {
     const memoryDir = path.join(tmpDir, 'memory');
     await fs.mkdir(path.join(memoryDir, 'Feedback'), { recursive: true });
