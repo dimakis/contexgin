@@ -278,7 +278,24 @@ function renderNodeWithHeading(node: RankedNode): string {
     return node.content;
   }
   const sectionTitle = node.origin.headingPath!.slice(-1)[0];
-  return `### ${sectionTitle}\n\n${node.content}`;
+  const qualifier = spokeQualifier(node);
+  const heading = qualifier ? `${sectionTitle} (${qualifier})` : sectionTitle;
+  return `### ${heading}\n\n${node.content}`;
+}
+
+/**
+ * If a node comes from a spoke-level file (e.g. career/CONSTITUTION.md),
+ * return the spoke name for heading disambiguation. Root-level files
+ * return undefined.
+ */
+function spokeQualifier(node: RankedNode): string | undefined {
+  const rel = node.origin.relativePath;
+  const parts = rel.split(path.sep);
+  // Spoke files have ≥2 path segments (e.g. "career/CONSTITUTION.md")
+  if (parts.length >= 2) {
+    return parts[0];
+  }
+  return undefined;
 }
 
 function trimNodesToBudget(
@@ -299,10 +316,14 @@ function trimNodesToBudget(
       overhead = estimateTokens(`## ${heading}\n\n`);
     }
 
-    // Per-node heading overhead (### Title\n\n) when content doesn't already have one
-    const nodeHeadingOverhead = nodeNeedsHeading(node)
-      ? estimateTokens(`### ${(node.origin.headingPath ?? [node.id]).slice(-1)[0]}\n\n`)
-      : 0;
+    // Per-node heading overhead (### Title (spoke)\n\n) when content doesn't already have one
+    let nodeHeadingOverhead = 0;
+    if (nodeNeedsHeading(node)) {
+      const title = (node.origin.headingPath ?? [node.id]).slice(-1)[0];
+      const qualifier = spokeQualifier(node);
+      const heading = qualifier ? `### ${title} (${qualifier})\n\n` : `### ${title}\n\n`;
+      nodeHeadingOverhead = estimateTokens(heading);
+    }
 
     if (used + node.tokenEstimate + nodeHeadingOverhead + overhead <= budget) {
       if (!seenTypes.has(node.type)) {
