@@ -286,16 +286,17 @@ function renderNodeWithHeading(node: RankedNode): string {
 /**
  * If a node comes from a spoke-level file (e.g. career/CONSTITUTION.md),
  * return the spoke name for heading disambiguation. Root-level files
- * return undefined.
+ * and profile files (memory/Profile/*) return undefined — they're
+ * core content, not spoke-specific.
  */
 function spokeQualifier(node: RankedNode): string | undefined {
   const rel = node.origin.relativePath;
   const parts = rel.split(path.sep);
-  // Spoke files have ≥2 path segments (e.g. "career/CONSTITUTION.md")
-  if (parts.length >= 2) {
-    return parts[0];
-  }
-  return undefined;
+  // Root files (single segment) — no qualifier
+  if (parts.length < 2) return undefined;
+  // Profile files are core identity, not spokes
+  if (parts[0] === 'memory') return undefined;
+  return parts[0];
 }
 
 function trimNodesToBudget(
