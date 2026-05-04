@@ -16,7 +16,7 @@ import { constitutionAdapter } from '../../src/adapter/constitution.js';
 import { markdownAdapter } from '../../src/adapter/markdown.js';
 import { findAdapter, adaptFile } from '../../src/adapter/registry.js';
 import { discoverAndAdapt } from '../../src/adapter/index.js';
-import { compileWithAdapters } from '../../src/compiler/index.js';
+import { compile } from '../../src/compiler/index.js';
 import { estimateTokens } from '../../src/compiler/trimmer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -243,7 +243,7 @@ describe('token budget accuracy', () => {
         await writeFile(dir, 'README.md', `## Overview\n\n${longContent}\n`);
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 200,
         });
@@ -265,7 +265,7 @@ describe('token budget accuracy', () => {
       },
       async (dir) => {
         // Very tight budget — should not overflow
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 50,
         });
@@ -286,8 +286,8 @@ describe('token budget accuracy', () => {
         await writeFile(dir, 'CLAUDE.md', sections);
       },
       async (dir) => {
-        const small = await compileWithAdapters({ workspaceRoot: dir, tokenBudget: 200 });
-        const large = await compileWithAdapters({ workspaceRoot: dir, tokenBudget: 5000 });
+        const small = await compile({ workspaceRoot: dir, tokenBudget: 200 });
+        const large = await compile({ workspaceRoot: dir, tokenBudget: 5000 });
 
         expect(large.nodes!.length).toBeGreaterThan(small.nodes!.length);
       },
@@ -297,7 +297,7 @@ describe('token budget accuracy', () => {
 
 // ── options.sources Respect ─────────────────────────────────────
 
-describe('compileWithAdapters respects options.sources', () => {
+describe('compile respects options.sources', () => {
   it('uses only specified sources when options.sources is provided', async () => {
     await withTempWorkspace(
       async (dir) => {
@@ -306,7 +306,7 @@ describe('compileWithAdapters respects options.sources', () => {
       },
       async (dir) => {
         // Only compile from README, not CLAUDE.md
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 5000,
           sources: [
@@ -328,7 +328,7 @@ describe('compileWithAdapters respects options.sources', () => {
         await writeFile(dir, 'README.md', '## Overview\n\nProject info.\n');
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 5000,
         });
@@ -359,7 +359,7 @@ describe('payload grouping by type', () => {
         );
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 10000,
         });
@@ -385,7 +385,7 @@ describe('payload grouping by type', () => {
         await writeFile(dir, 'CLAUDE.md', '## Git Discipline\n\nConventional commits.\n');
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 10000,
         });
@@ -573,7 +573,7 @@ describe('task hint relevance boosting', () => {
         await writeFile(dir, 'CLAUDE.md', sections);
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 10000,
           taskHint: 'git commit conventional',
@@ -600,7 +600,7 @@ describe('excluded sections', () => {
         );
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 10000,
           excluded: [['agent-system']],
@@ -625,7 +625,7 @@ describe('excluded sections', () => {
         );
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 10000,
           excluded: [['Overview']],
@@ -832,7 +832,7 @@ describe('real-world: mgmt workspace', () => {
   it('compiles with adapter pipeline producing grouped output', async () => {
     if (await skipIfMissing()) return;
 
-    const result = await compileWithAdapters({
+    const result = await compile({
       workspaceRoot: mgmtRoot,
       tokenBudget: 12000,
       taskHint: 'Review PR for convention violations',
@@ -1045,7 +1045,7 @@ describe('sources list reflects included nodes only', () => {
       },
       async (dir) => {
         // Compile with a generous budget — all should be included
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 8000,
         });
@@ -1063,7 +1063,7 @@ describe('sources list reflects included nodes only', () => {
         await writeFile(dir, 'CLAUDE.md', '# Instructions\n\n## Agent System\n\nAgents info.\n');
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 8000,
           excluded: [['agent-system']],
@@ -1090,7 +1090,7 @@ describe('case-insensitive exclusion matching', () => {
       },
       async (dir) => {
         // Exclude with different casing
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 8000,
           excluded: [['Agent-System']], // mixed case vs slug "agent-system"
@@ -1113,7 +1113,7 @@ describe('case-insensitive exclusion matching', () => {
         );
       },
       async (dir) => {
-        const result = await compileWithAdapters({
+        const result = await compile({
           workspaceRoot: dir,
           tokenBudget: 8000,
           excluded: [['BOUNDARIES']], // uppercase vs actual heading "Boundaries"
@@ -1125,21 +1125,15 @@ describe('case-insensitive exclusion matching', () => {
   });
 });
 
-describe('compile route legacy fallback', () => {
-  // This is a contract test — verify CompileRequest accepts legacy flag
-  it('CompileRequest type accepts legacy field', () => {
-    // TypeScript compilation is the test — if this compiles, the type is correct
+describe('compile route request type', () => {
+  it('CompileRequest accepts spoke and optional fields', () => {
     const request: import('../../src/server/types.js').CompileRequest = {
       spoke: 'test',
-      legacy: true,
+      task: 'review code',
+      budget: 8000,
     };
-    expect(request.legacy).toBe(true);
-  });
-
-  it('CompileRequest defaults legacy to undefined', () => {
-    const request: import('../../src/server/types.js').CompileRequest = {
-      spoke: 'test',
-    };
-    expect(request.legacy).toBeUndefined();
+    expect(request.spoke).toBe('test');
+    expect(request.task).toBe('review code');
+    expect(request.budget).toBe(8000);
   });
 });

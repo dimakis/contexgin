@@ -3,7 +3,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { AgentLoader } from './loader.js';
 import type { AgentRecipeResponse } from './types.js';
-import { compileWithAdapters } from '../compiler/index.js';
+import { compile } from '../compiler/index.js';
 import { resolveHome } from './util.js';
 
 export function agentRoutes(app: FastifyInstance, loader: AgentLoader): void {
@@ -55,7 +55,7 @@ export function agentRoutes(app: FastifyInstance, loader: AgentLoader): void {
       const primaryHub = resolveHome(hubs[0].path);
 
       try {
-        const compiled = await compileWithAdapters({
+        const compiled = await compile({
           workspaceRoot: primaryHub,
           tokenBudget: def.context.budget,
           taskHint: request.query.task,

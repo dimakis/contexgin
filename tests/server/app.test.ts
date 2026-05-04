@@ -567,7 +567,7 @@ provider:
       expect(response.statusCode).toBe(400);
     });
 
-    it('legacy flag uses legacy pipeline without nodes', async () => {
+    it('compile returns typed nodes', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
@@ -575,15 +575,14 @@ provider:
       const response = await server.app.inject({
         method: 'POST',
         url: '/compile',
-        payload: { spoke: 'svc', budget: 4000, legacy: true },
+        payload: { spoke: 'svc', budget: 4000 },
       });
       const body = response.json();
 
       expect(response.statusCode).toBe(200);
       expect(body.spoke).toContain('svc');
       expect(body.tokens).toBeGreaterThanOrEqual(0);
-      // Legacy pipeline does not return typed nodes
-      expect(body.nodes).toBeUndefined();
+      expect(body.nodes).toBeDefined();
     });
   });
 });

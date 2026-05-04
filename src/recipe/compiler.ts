@@ -5,7 +5,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
+import { compile, discoverSources, estimateTokens } from '../compiler/index.js';
 import { isNestedPath } from '../adapter/types.js';
 import type {
   AgentDefinition,
@@ -131,7 +131,7 @@ async function compileBootContext(
     return true;
   });
 
-  const result = await compileWithAdapters({
+  const result = await compile({
     workspaceRoot,
     tokenBudget: budget,
     sources,

@@ -19,7 +19,7 @@ describeLocal('compile against mgmt workspace', () => {
     expect(sources.some((s) => s.kind === 'profile')).toBe(true);
   });
 
-  it('compiles to roughly equivalent output as build_boot_context.py', async () => {
+  it('compiles mgmt workspace with typed nodes', async () => {
     const result = await compile({
       workspaceRoot: MGMT_ROOT,
       tokenBudget: 12000,
@@ -27,6 +27,8 @@ describeLocal('compile against mgmt workspace', () => {
     expect(result.bootPayload.length).toBeGreaterThan(0);
     expect(result.bootTokens).toBeLessThan(12000);
     expect(result.sources.length).toBeGreaterThan(0);
+    expect(result.nodes).toBeDefined();
+    expect(result.nodes!.length).toBeGreaterThan(0);
   });
 
   it('detects real drift in mgmt workspace', async () => {
