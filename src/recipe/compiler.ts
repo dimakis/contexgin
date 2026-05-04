@@ -118,6 +118,11 @@ async function compileBootContext(
       return config.cursorRules !== false;
     }
 
+    // Spoke-level files — exclude if explicitly disabled
+    if (config.spokes === false && s.relativePath.includes('/')) {
+      return false;
+    }
+
     return true;
   });
 

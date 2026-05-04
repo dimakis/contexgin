@@ -26,6 +26,8 @@ export interface BootContextConfig {
   profile?: boolean | string[];
   /** Include .cursor/rules/*.mdc */
   cursorRules?: boolean | string[];
+  /** Include spoke-level files (e.g. career/CONSTITUTION.md). Default: true */
+  spokes?: boolean;
   /** Token budget for boot context */
   tokenBudget?: number;
 }
