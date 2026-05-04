@@ -224,4 +224,49 @@ describe('compileAgent', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('loads memory files from flat prefix layout', async () => {
+    const memoryDir = path.join(tmpDir, 'memory');
+    await fs.mkdir(memoryDir, { recursive: true });
+    await fs.writeFile(path.join(memoryDir, 'feedback_testing.md'), '# Testing feedback');
+    await fs.writeFile(path.join(memoryDir, 'project_alpha.md'), '# Project Alpha');
+    await fs.writeFile(path.join(memoryDir, 'MEMORY.md'), '# Index'); // should be ignored
+
+    const def = createMinimalAgent();
+    def.context.memory = {
+      enabled: true,
+      path: path.join(tmpDir, 'memory'),
+    };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.memory!.feedback).toHaveLength(1);
+    expect(result.memory!.feedback[0]).toContain('# Testing feedback');
+    expect(result.memory!.project).toHaveLength(1);
+    expect(result.memory!.project[0]).toContain('# Project Alpha');
+    expect(result.memory!.user).toEqual([]);
+  });
+
+  it('combines subdirectory and flat prefix memory', async () => {
+    const memoryDir = path.join(tmpDir, 'memory');
+    await fs.mkdir(path.join(memoryDir, 'Feedback'), { recursive: true });
+    await fs.writeFile(path.join(memoryDir, 'Feedback', 'sub.md'), '# Sub feedback');
+    await fs.writeFile(path.join(memoryDir, 'feedback_flat.md'), '# Flat feedback');
+
+    const def = createMinimalAgent();
+    def.context.memory = {
+      enabled: true,
+      path: path.join(tmpDir, 'memory'),
+    };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.memory!.feedback).toHaveLength(2);
+    expect(result.memory!.feedback).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('# Sub feedback'),
+        expect.stringContaining('# Flat feedback'),
+      ]),
+    );
+  });
 });

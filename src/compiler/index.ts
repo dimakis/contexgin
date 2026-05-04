@@ -250,11 +250,53 @@ function assembleGroupedPayload(nodes: RankedNode[]): string {
     if (!group || group.length === 0) continue;
 
     const heading = TYPE_GROUP_HEADINGS[type] || type;
-    const content = group.map((n) => n.content).join('\n\n');
+    const content = group.map((n) => renderNodeWithHeading(n)).join('\n\n');
     sections.push(`## ${heading}\n\n${content}`);
   }
 
   return sections.join('\n\n');
+}
+
+/**
+ * Check whether a node needs an injected heading (used by both
+ * the renderer and the budget trimmer).
+ */
+function nodeNeedsHeading(node: ContextNode | RankedNode): boolean {
+  if (node.content.trimStart().startsWith('#')) return false;
+  const hp = node.origin.headingPath;
+  return !!(hp && hp.length > 0);
+}
+
+/**
+ * Render a node with its original section heading preserved.
+ * Uses the last element of headingPath as a ### heading within
+ * the type group. Nodes whose content already starts with a
+ * markdown heading are emitted as-is to avoid double-headings.
+ */
+function renderNodeWithHeading(node: RankedNode): string {
+  if (!nodeNeedsHeading(node)) {
+    return node.content;
+  }
+  const sectionTitle = node.origin.headingPath!.slice(-1)[0];
+  const qualifier = spokeQualifier(node);
+  const heading = qualifier ? `${sectionTitle} (${qualifier})` : sectionTitle;
+  return `### ${heading}\n\n${node.content}`;
+}
+
+/**
+ * If a node comes from a spoke-level file (e.g. career/CONSTITUTION.md),
+ * return the spoke name for heading disambiguation. Root-level files
+ * and profile files (memory/Profile/*) return undefined — they're
+ * core content, not spoke-specific.
+ */
+function spokeQualifier(node: RankedNode): string | undefined {
+  const rel = node.origin.relativePath;
+  const parts = rel.split(path.sep);
+  // Root files (single segment) — no qualifier
+  if (parts.length < 2) return undefined;
+  // Profile files are core identity, not spokes
+  if (parts[0] === 'memory') return undefined;
+  return parts[0];
 }
 
 function trimNodesToBudget(
@@ -275,13 +317,22 @@ function trimNodesToBudget(
       overhead = estimateTokens(`## ${heading}\n\n`);
     }
 
-    if (used + node.tokenEstimate + overhead <= budget) {
+    // Per-node heading overhead (### Title (spoke)\n\n) when content doesn't already have one
+    let nodeHeadingOverhead = 0;
+    if (nodeNeedsHeading(node)) {
+      const title = (node.origin.headingPath ?? [node.id]).slice(-1)[0];
+      const qualifier = spokeQualifier(node);
+      const heading = qualifier ? `### ${title} (${qualifier})\n\n` : `### ${title}\n\n`;
+      nodeHeadingOverhead = estimateTokens(heading);
+    }
+
+    if (used + node.tokenEstimate + nodeHeadingOverhead + overhead <= budget) {
       if (!seenTypes.has(node.type)) {
         seenTypes.add(node.type);
         used += overhead;
       }
       included.push(node);
-      used += node.tokenEstimate;
+      used += node.tokenEstimate + nodeHeadingOverhead;
     } else {
       trimmed.push(node);
     }
