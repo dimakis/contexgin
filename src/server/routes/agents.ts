@@ -144,19 +144,17 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
         let isAllowedRoot = false;
         try {
           const realWorkspace = await fs.realpath(path.resolve(workspaceRoot));
-          isAllowedRoot = await (async () => {
-            for (const root of config.roots) {
-              try {
-                const realRoot = await fs.realpath(path.resolve(root));
-                if (realWorkspace === realRoot || realWorkspace.startsWith(realRoot + path.sep)) {
-                  return true;
-                }
-              } catch {
-                // Root doesn't exist — skip
+          for (const root of config.roots) {
+            try {
+              const realRoot = await fs.realpath(path.resolve(root));
+              if (realWorkspace === realRoot || realWorkspace.startsWith(realRoot + path.sep)) {
+                isAllowedRoot = true;
+                break;
               }
+            } catch {
+              // Root doesn't exist — skip
             }
-            return false;
-          })();
+          }
         } catch {
           // Workspace path doesn't exist
         }

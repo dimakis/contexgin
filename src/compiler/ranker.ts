@@ -58,7 +58,8 @@ const OPERATIONAL_HEADINGS = [
   'agent',
 ];
 
-function isSpoke(section: ExtractedSection): boolean {
+/** Whether this section comes from a spoke (nested path, not workspace root). */
+function isSpokeSection(section: ExtractedSection): boolean {
   return isNestedPath(section.source.relativePath);
 }
 
@@ -70,7 +71,7 @@ function getTierWeight(section: ExtractedSection): { weight: number; reason: str
 
   // Constitution sources — root vs spoke distinction
   if (section.source.kind === 'constitution') {
-    const spoke = isSpoke(section);
+    const spoke = isSpokeSection(section);
     const penalty = spoke ? SPOKE_PENALTY : 0;
 
     // Root constitution catalogues (Sub-Repo Charters, External Projects) are

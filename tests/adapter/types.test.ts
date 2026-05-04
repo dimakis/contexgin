@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isNestedPath,
   slugify,
   TIER_WEIGHTS,
   type ContextNode,
@@ -125,6 +126,35 @@ describe('slugify', () => {
 
   it('handles empty string', () => {
     expect(slugify('')).toBe('');
+  });
+});
+
+describe('isNestedPath', () => {
+  it('returns false for root-level file', () => {
+    expect(isNestedPath('CONSTITUTION.md')).toBe(false);
+  });
+
+  it('returns true for forward-slash nested path', () => {
+    expect(isNestedPath('career/CONSTITUTION.md')).toBe(true);
+  });
+
+  it('returns true for backslash nested path on Windows', () => {
+    // On macOS/Linux path.sep is '/', so backslash is a valid filename char.
+    // isNestedPath checks path.sep OR '/' — backslash only matches on Windows.
+    const expected = process.platform === 'win32';
+    expect(isNestedPath('career\\CONSTITUTION.md')).toBe(expected);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isNestedPath('')).toBe(false);
+  });
+
+  it('returns true for .cursor/rules paths', () => {
+    expect(isNestedPath('.cursor/rules/foo.mdc')).toBe(true);
+  });
+
+  it('returns true for memory/Profile paths', () => {
+    expect(isNestedPath('memory/Profile/bio.md')).toBe(true);
   });
 });
 

@@ -103,7 +103,7 @@ async function compileBootContext(
     // would otherwise match the type-specific filters below
     if (config.spokes === false && isNestedPath(s.relativePath)) {
       // Don't filter profiles or cursor rules — they're not spokes
-      if (s.kind !== 'profile' && !s.relativePath.startsWith('.cursor/')) {
+      if (s.kind !== 'profile' && !s.relativePath.match(/^\.cursor[/\\]/)) {
         return false;
       }
     }
@@ -124,7 +124,7 @@ async function compileBootContext(
     }
 
     // Cursor rules — exclude if explicitly disabled
-    if (s.relativePath.includes('.cursor/rules/')) {
+    if (/\.cursor[/\\]rules[/\\]/.test(s.relativePath)) {
       return config.cursorRules !== false;
     }
 
