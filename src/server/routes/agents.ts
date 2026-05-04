@@ -95,132 +95,140 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
     const originSource = request.query['origin.source'];
     const originEntityId = request.query['origin.entityId'];
 
-      // Find the agent definition
-      const allAgents = await discoverAgents(config.roots);
-      const agent = allAgents.find((a) => a.name === name);
+    // Validate origin.source if provided
+    const VALID_ORIGIN_SOURCES: OriginSource[] = ['chat', 'telos', 'calendar', 'file'];
+    if (originSource && !VALID_ORIGIN_SOURCES.includes(originSource)) {
+      return reply.status(400).send({
+        error: `Invalid origin.source: ${originSource}`,
+        valid: VALID_ORIGIN_SOURCES,
+      });
+    }
 
-      if (!agent) {
-        return reply.status(404).send({
-          error: `Agent not found: ${name}`,
-          available: allAgents.map((a) => a.name),
+    // Find the agent definition
+    const allAgents = await discoverAgents(config.roots);
+    const agent = allAgents.find((a) => a.name === name);
+
+    if (!agent) {
+      return reply.status(404).send({
+        error: `Agent not found: ${name}`,
+        available: allAgents.map((a) => a.name),
+      });
+    }
+
+    // Determine workspace root — use override or the root where the agent was found
+    let workspaceRoot = workspaceOverride ?? agent.workspaceRoot;
+
+    // If workspace is provided as user input, resolve it against each allowed root
+    // to prevent path traversal attacks (e.g., ../../etc)
+    if (workspaceOverride) {
+      // Normalize the user input to remove .. and . segments
+      const normalized = path.normalize(workspaceOverride);
+
+      // Reject if normalized path escapes upward (starts with ..)
+      if (normalized.startsWith('..')) {
+        return reply.status(400).send({
+          error: 'Workspace path cannot escape parent directory',
         });
       }
 
-      // Determine workspace root — use override or the root where the agent was found
-      let workspaceRoot = workspaceOverride ?? agent.workspaceRoot;
+      // Try to resolve against allowed roots (use realpath for symlink safety)
+      let matched = false;
+      for (const root of config.roots) {
+        try {
+          const candidate = path.isAbsolute(normalized)
+            ? normalized
+            : path.resolve(root, normalized);
 
-      // If workspace is provided as user input, resolve it against each allowed root
-      // to prevent path traversal attacks (e.g., ../../etc)
-      if (workspaceOverride) {
-        // Normalize the user input to remove .. and . segments
-        const normalized = path.normalize(workspaceOverride);
-
-        // Reject if normalized path escapes upward (starts with ..)
-        if (normalized.startsWith('..')) {
-          return reply.status(400).send({
-            error: 'Workspace path cannot escape parent directory',
-          });
+          const realCandidate = await fs.realpath(candidate);
+          const realRoot = await fs.realpath(path.resolve(root));
+          if (realCandidate === realRoot || realCandidate.startsWith(realRoot + path.sep)) {
+            workspaceRoot = realCandidate;
+            matched = true;
+            break;
+          }
+        } catch {
+          // Path doesn't exist — skip this root
         }
+      }
 
-        // Try to resolve against allowed roots (use realpath for symlink safety)
-        let matched = false;
+      if (!matched) {
+        return reply.status(403).send({
+          error: `Workspace path not within allowed roots: ${workspaceOverride}`,
+        });
+      }
+    } else {
+      // Validate the agent's default workspace root (use realpath for symlink safety)
+      let isAllowedRoot = false;
+      try {
+        const realWorkspace = await fs.realpath(path.resolve(workspaceRoot));
         for (const root of config.roots) {
           try {
-            const candidate = path.isAbsolute(normalized)
-              ? normalized
-              : path.resolve(root, normalized);
-
-            const realCandidate = await fs.realpath(candidate);
             const realRoot = await fs.realpath(path.resolve(root));
-            if (realCandidate === realRoot || realCandidate.startsWith(realRoot + path.sep)) {
-              workspaceRoot = realCandidate;
-              matched = true;
+            if (realWorkspace === realRoot || realWorkspace.startsWith(realRoot + path.sep)) {
+              isAllowedRoot = true;
               break;
             }
           } catch {
-            // Path doesn't exist — skip this root
+            // Root doesn't exist — skip
           }
         }
-
-        if (!matched) {
-          return reply.status(403).send({
-            error: `Workspace path not within allowed roots: ${workspaceOverride}`,
-          });
-        }
-      } else {
-        // Validate the agent's default workspace root (use realpath for symlink safety)
-        let isAllowedRoot = false;
-        try {
-          const realWorkspace = await fs.realpath(path.resolve(workspaceRoot));
-          for (const root of config.roots) {
-            try {
-              const realRoot = await fs.realpath(path.resolve(root));
-              if (realWorkspace === realRoot || realWorkspace.startsWith(realRoot + path.sep)) {
-                isAllowedRoot = true;
-                break;
-              }
-            } catch {
-              // Root doesn't exist — skip
-            }
-          }
-        } catch {
-          // Workspace path doesn't exist
-        }
-
-        if (!isAllowedRoot) {
-          return reply.status(403).send({
-            error: `Workspace path not within allowed roots: ${workspaceRoot}`,
-          });
-        }
+      } catch {
+        // Workspace path doesn't exist
       }
 
-      try {
-        // Build session origin from query params
-        const origin: SessionOrigin | undefined = originSource
+      if (!isAllowedRoot) {
+        return reply.status(403).send({
+          error: `Workspace path not within allowed roots: ${workspaceRoot}`,
+        });
+      }
+    }
+
+    try {
+      // Build session origin from query params
+      const origin: SessionOrigin | undefined = originSource
+        ? {
+            source: originSource,
+            entityId: originEntityId,
+          }
+        : undefined;
+
+      // Load and compile the agent definition
+      const def = await loadAgentDefinition(agent.filePath);
+      const compiled = await compileAgent(def, workspaceRoot, origin);
+
+      return {
+        agent: name,
+        identity: compiled.identity,
+        boot: {
+          content: compiled.bootContext.content,
+          tokens: compiled.bootContext.tokens,
+          sources: compiled.bootContext.sources,
+        },
+        contextBlocks: Object.fromEntries(
+          Array.from(compiled.contextBlocks.entries()).map(([id, block]) => [
+            id,
+            {
+              content: block.content,
+              tokens: block.tokens,
+              source: block.source,
+            },
+          ]),
+        ),
+        operational: compiled.operational
           ? {
-              source: originSource,
-              entityId: originEntityId,
+              files: compiled.operational.files,
+              delivery: compiled.operational.delivery,
             }
-          : undefined;
-
-        // Load and compile the agent definition
-        const def = await loadAgentDefinition(agent.filePath);
-        const compiled = await compileAgent(def, workspaceRoot, origin);
-
-        return {
-          agent: name,
-          identity: compiled.identity,
-          boot: {
-            content: compiled.bootContext.content,
-            tokens: compiled.bootContext.tokens,
-            sources: compiled.bootContext.sources,
-          },
-          contextBlocks: Object.fromEntries(
-            Array.from(compiled.contextBlocks.entries()).map(([id, block]) => [
-              id,
-              {
-                content: block.content,
-                tokens: block.tokens,
-                source: block.source,
-              },
-            ]),
-          ),
-          operational: compiled.operational
-            ? {
-                files: compiled.operational.files,
-                delivery: compiled.operational.delivery,
-              }
-            : undefined,
-          memory: compiled.memory,
-          governance: compiled.governance,
-          skills: compiled.skills,
-          provider: compiled.provider,
-        };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        request.log.error({ err, agent: name }, 'Agent compilation failed');
-        return reply.status(500).send({ error: `Compilation failed: ${message}` });
-      }
-    },
-  );
+          : undefined,
+        memory: compiled.memory,
+        governance: compiled.governance,
+        skills: compiled.skills,
+        provider: compiled.provider,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      request.log.error({ err, agent: name }, 'Agent compilation failed');
+      return reply.status(500).send({ error: `Compilation failed: ${message}` });
+    }
+  });
 }

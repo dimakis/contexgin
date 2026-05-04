@@ -4,7 +4,6 @@
  */
 
 import type { OriginResolver, SessionOrigin, ResolvedManifest } from './types.js';
-import type { ContextSource } from '../compiler/types.js';
 
 export const chatResolver: OriginResolver = {
   source: 'chat',
@@ -13,11 +12,7 @@ export const chatResolver: OriginResolver = {
     return origin.source === 'chat';
   },
 
-  async resolve(
-    _origin: SessionOrigin,
-    _workspaceRoot: string,
-    _defaultSources: ContextSource[],
-  ): Promise<ResolvedManifest> {
+  async resolve(): Promise<ResolvedManifest> {
     // Chat sessions use default sources from agent definition — no augmentation
     return {};
   },

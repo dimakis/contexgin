@@ -333,7 +333,6 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
     navigationHints,
     bootTokens: estimateTokens(bootPayload),
     sources,
-    trimmed: [],
     nodes: included.map(nodeToSerialized),
     trimmedNodes: trimmed.map(nodeToSerialized),
   };
