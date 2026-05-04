@@ -195,6 +195,11 @@ async function compileOperationalContext(
 
 /**
  * Compile memory context from directory.
+ *
+ * Supports two layouts:
+ *   1. Subdirectory: `<memoryPath>/Feedback/*.md`, `<memoryPath>/User/*.md`, etc.
+ *   2. Flat prefix:  `<memoryPath>/feedback_*.md`, `<memoryPath>/project_*.md`, etc.
+ * Both strategies contribute — duplicates are avoided by tracking seen file paths.
  */
 async function compileMemoryContext(
   memoryPath: string,
@@ -210,7 +215,18 @@ async function compileMemoryContext(
   const resolvedPath = expandTilde(memoryPath);
   const allowedTypes = types ?? ['feedback', 'user', 'project', 'reference'];
 
+  // Pre-read root directory listing for flat-prefix scan (once, not per-type)
+  let rootEntries: string[] = [];
+  try {
+    rootEntries = await fs.readdir(resolvedPath);
+  } catch {
+    // Root directory doesn't exist — all types will be empty
+  }
+
   for (const type of allowedTypes) {
+    const seen = new Set<string>();
+
+    // Strategy 1: Subdirectory (e.g. Feedback/*.md)
     try {
       const typePath = path.join(resolvedPath, capitalize(type));
       const entries = await fs.readdir(typePath);
@@ -220,10 +236,27 @@ async function compileMemoryContext(
           const filePath = path.join(typePath, entry);
           const content = await fs.readFile(filePath, 'utf-8');
           memory[type].push(content);
+          seen.add(filePath);
         }
       }
     } catch {
-      // Directory doesn't exist or can't be read — skip
+      // Subdirectory doesn't exist — fall through to flat prefix
+    }
+
+    // Strategy 2: Flat prefix (e.g. feedback_*.md in root)
+    const prefix = `${type}_`;
+    for (const entry of rootEntries) {
+      if (entry.startsWith(prefix) && entry.endsWith('.md')) {
+        const filePath = path.join(resolvedPath, entry);
+        if (!seen.has(filePath)) {
+          try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            memory[type].push(content);
+          } catch {
+            // File unreadable — skip
+          }
+        }
+      }
     }
   }
 
