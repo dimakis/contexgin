@@ -160,6 +160,15 @@ export type {
   ProviderConfig as RecipeProviderConfig,
 } from './recipe/types.js';
 
+// Origin resolution
+export { resolveOrigin, findResolver, chatResolver } from './resolve/index.js';
+export type {
+  OriginSource,
+  SessionOrigin,
+  ResolvedManifest,
+  OriginResolver,
+} from './resolve/index.js';
+
 // Goals
 export { GoalRegistry } from './goals/registry.js';
 export { GoalStore } from './goals/store.js';

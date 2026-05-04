@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { loadAgentDefinition, compileAgent } from '../../recipe/index.js';
 import type { ServerConfig } from '../types.js';
+import type { SessionOrigin, OriginSource } from '../../resolve/index.js';
 
 interface AgentLocation {
   name: string;
@@ -81,11 +82,18 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
   });
 
   // Compile context for a named agent
-  app.get<{ Params: { name: string }; Querystring: { workspace?: string } }>(
-    '/api/agents/:name/context',
-    async (request, reply) => {
-      const { name } = request.params;
-      const workspaceOverride = request.query.workspace;
+  app.get<{
+    Params: { name: string };
+    Querystring: {
+      workspace?: string;
+      'origin.source'?: OriginSource;
+      'origin.entityId'?: string;
+    };
+  }>('/api/agents/:name/context', async (request, reply) => {
+    const { name } = request.params;
+    const workspaceOverride = request.query.workspace;
+    const originSource = request.query['origin.source'];
+    const originEntityId = request.query['origin.entityId'];
 
       // Find the agent definition
       const allAgents = await discoverAgents(config.roots);
@@ -167,9 +175,17 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
       }
 
       try {
+        // Build session origin from query params
+        const origin: SessionOrigin | undefined = originSource
+          ? {
+              source: originSource,
+              entityId: originEntityId,
+            }
+          : undefined;
+
         // Load and compile the agent definition
         const def = await loadAgentDefinition(agent.filePath);
-        const compiled = await compileAgent(def, workspaceRoot);
+        const compiled = await compileAgent(def, workspaceRoot, origin);
 
         return {
           agent: name,
