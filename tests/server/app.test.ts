@@ -449,6 +449,38 @@ context:
       // Should succeed (200) — svc/ is within root
       expect(response.statusCode).toBe(200);
     });
+
+    it('rejects workspace via symlink escaping allowed roots', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+`,
+      );
+
+      // Create a symlink inside the allowed root that points outside it
+      const outsideDir = path.join(tmpDir, 'outside');
+      await fs.mkdir(outsideDir, { recursive: true });
+      const symlinkPath = path.join(root, 'escape-link');
+      await fs.symlink(outsideDir, symlinkPath);
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Attempt to use the symlink as workspace — should be rejected
+      const response = await server.app.inject({
+        method: 'GET',
+        url: `/api/agents/test-agent/context?workspace=${encodeURIComponent(symlinkPath)}`,
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
   });
 
   describe('POST /compile', () => {

@@ -6,6 +6,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
+import { isNestedPath } from '../adapter/types.js';
 import type {
   AgentDefinition,
   CompiledAgentContext,
@@ -98,6 +99,15 @@ async function compileBootContext(
   const sources = allSources.filter((s) => {
     const basename = path.basename(s.relativePath);
 
+    // Spoke-level files — check first since spoke constitutions/CLAUDEs
+    // would otherwise match the type-specific filters below
+    if (config.spokes === false && isNestedPath(s.relativePath)) {
+      // Don't filter profiles or cursor rules — they're not spokes
+      if (s.kind !== 'profile' && !s.relativePath.match(/^\.cursor[/\\]/)) {
+        return false;
+      }
+    }
+
     // CONSTITUTION.md — exclude if explicitly disabled
     if (basename === 'CONSTITUTION.md') {
       return config.constitution !== false;
@@ -114,13 +124,8 @@ async function compileBootContext(
     }
 
     // Cursor rules — exclude if explicitly disabled
-    if (s.relativePath.includes('.cursor/rules/')) {
+    if (/\.cursor[/\\]rules[/\\]/.test(s.relativePath)) {
       return config.cursorRules !== false;
-    }
-
-    // Spoke-level files — exclude if explicitly disabled
-    if (config.spokes === false && s.relativePath.includes('/')) {
-      return false;
     }
 
     return true;
