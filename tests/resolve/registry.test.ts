@@ -28,7 +28,11 @@ describe('Origin resolution', () => {
 
     it('does not modify default sources for chat origin', async () => {
       const defaultSources = [
-        { path: '/workspace/CONSTITUTION.md', kind: 'constitution' as const, relativePath: 'CONSTITUTION.md' },
+        {
+          path: '/workspace/CONSTITUTION.md',
+          kind: 'constitution' as const,
+          relativePath: 'CONSTITUTION.md',
+        },
       ];
       const manifest = await resolveOrigin({ source: 'chat' }, '/workspace', defaultSources);
 

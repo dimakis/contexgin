@@ -5,9 +5,4 @@
 
 export { resolveOrigin, findResolver } from './registry.js';
 export { chatResolver } from './chat.js';
-export type {
-  OriginSource,
-  SessionOrigin,
-  ResolvedManifest,
-  OriginResolver,
-} from './types.js';
+export type { OriginSource, SessionOrigin, ResolvedManifest, OriginResolver } from './types.js';

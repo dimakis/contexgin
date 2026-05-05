@@ -16,6 +16,6 @@ A missing file would be `src/nonexistent.ts`.
 
 ## Entry Points
 
-| Command | Description |
-|---------|-------------|
-| `src/index.ts` | Main entry |
+| Command        | Description |
+| -------------- | ----------- |
+| `src/index.ts` | Main entry  |
