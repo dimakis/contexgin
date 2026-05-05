@@ -161,7 +161,7 @@ export type {
 } from './recipe/types.js';
 
 // Origin resolution
-export { resolveOrigin, findResolver, chatResolver } from './resolve/index.js';
+export { resolveOrigin, findResolver, chatResolver, telosResolver } from './resolve/index.js';
 export type {
   OriginSource,
   SessionOrigin,

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { resolveOrigin, findResolver, chatResolver } from '../../src/resolve/index.js';
+import {
+  resolveOrigin,
+  findResolver,
+  chatResolver,
+  telosResolver,
+} from '../../src/resolve/index.js';
 import type { OriginSource } from '../../src/resolve/index.js';
 
 describe('Origin resolution', () => {
@@ -7,6 +12,11 @@ describe('Origin resolution', () => {
     it('returns chatResolver for chat origin', () => {
       const resolver = findResolver({ source: 'chat' });
       expect(resolver).toBe(chatResolver);
+    });
+
+    it('returns telosResolver for telos origin', () => {
+      const resolver = findResolver({ source: 'telos', entityId: '123' });
+      expect(resolver).toBe(telosResolver);
     });
 
     it('falls back to chatResolver for unknown origin', () => {
