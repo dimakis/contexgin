@@ -481,6 +481,95 @@ provider:
 
       expect(response.statusCode).toBe(403);
     });
+
+    it('returns 400 for invalid origin.source', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+context:
+  boot:
+    tokenBudget: 4000
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/test-agent/context?origin.source=invalid',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('Invalid origin.source');
+    });
+
+    it('accepts valid origin.source and threads it through compilation', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+context:
+  boot:
+    tokenBudget: 4000
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Chat origin should compile successfully (no-op resolver)
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/test-agent/context?origin.source=chat',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().agent).toBe('test-agent');
+    });
+
+    it('accepts telos origin with entityId', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const agentsDir = path.join(root, '.agents');
+      await fs.mkdir(agentsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(agentsDir, 'test-agent.yaml'),
+        `identity:
+  name: test-agent
+  description: A test agent
+provider:
+  provider: anthropic
+  model: claude-sonnet-4.5
+context:
+  boot:
+    tokenBudget: 4000
+`,
+      );
+
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+
+      // Telos origin without a DB — should still compile (graceful degradation)
+      const response = await server.app.inject({
+        method: 'GET',
+        url: '/api/agents/test-agent/context?origin.source=telos&origin.entityId=abc123',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().agent).toBe('test-agent');
+    });
   });
 
   describe('POST /compile', () => {
@@ -567,7 +656,7 @@ provider:
       expect(response.statusCode).toBe(400);
     });
 
-    it('legacy flag uses legacy pipeline without nodes', async () => {
+    it('compile returns typed nodes', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
@@ -575,15 +664,14 @@ provider:
       const response = await server.app.inject({
         method: 'POST',
         url: '/compile',
-        payload: { spoke: 'svc', budget: 4000, legacy: true },
+        payload: { spoke: 'svc', budget: 4000 },
       });
       const body = response.json();
 
       expect(response.statusCode).toBe(200);
       expect(body.spoke).toContain('svc');
       expect(body.tokens).toBeGreaterThanOrEqual(0);
-      // Legacy pipeline does not return typed nodes
-      expect(body.nodes).toBeUndefined();
+      expect(body.nodes).toBeDefined();
     });
   });
 });

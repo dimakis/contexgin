@@ -1,5 +1,5 @@
 // Compiler
-export { compile, discoverSources } from './compiler/index.js';
+export { compile, discoverSources, rankNodes, trimNodesToBudget } from './compiler/index.js';
 export { parseMarkdown, stripFrontmatter } from './compiler/parser.js';
 export type { HeadingNode } from './compiler/parser.js';
 export { extractSection, extractAllLevel2, cleanContent } from './compiler/extractor.js';
@@ -159,6 +159,15 @@ export type {
   SkillConfig,
   ProviderConfig as RecipeProviderConfig,
 } from './recipe/types.js';
+
+// Origin resolution
+export { resolveOrigin, findResolver, chatResolver, telosResolver } from './resolve/index.js';
+export type {
+  OriginSource,
+  SessionOrigin,
+  ResolvedManifest,
+  OriginResolver,
+} from './resolve/index.js';
 
 // Goals
 export { GoalRegistry } from './goals/registry.js';

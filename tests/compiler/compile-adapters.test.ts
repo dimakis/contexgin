@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import { compileWithAdapters } from '../../src/compiler/index.js';
+import { compile } from '../../src/compiler/index.js';
 
 async function createWorkspace(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-compile-'));
@@ -91,11 +91,11 @@ This is a test project.
   return dir;
 }
 
-describe('compileWithAdapters', () => {
+describe('compile', () => {
   it('compiles a workspace into grouped payload', async () => {
     const dir = await createWorkspace();
     try {
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
       });
@@ -113,7 +113,7 @@ describe('compileWithAdapters', () => {
   it('groups payload by type with section headers', async () => {
     const dir = await createWorkspace();
     try {
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
       });
@@ -129,7 +129,7 @@ describe('compileWithAdapters', () => {
   it('returns typed nodes with correct metadata', async () => {
     const dir = await createWorkspace();
     try {
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
       });
@@ -161,12 +161,12 @@ describe('compileWithAdapters', () => {
   it('respects token budget', async () => {
     const dir = await createWorkspace();
     try {
-      const small = await compileWithAdapters({
+      const small = await compile({
         workspaceRoot: dir,
         tokenBudget: 100,
       });
 
-      const large = await compileWithAdapters({
+      const large = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
       });
@@ -181,7 +181,7 @@ describe('compileWithAdapters', () => {
   it('applies task hint boost', async () => {
     const dir = await createWorkspace();
     try {
-      const withHint = await compileWithAdapters({
+      const withHint = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
         taskHint: 'git commit conventional',
@@ -200,7 +200,7 @@ describe('compileWithAdapters', () => {
   it('handles excluded sections', async () => {
     const dir = await createWorkspace();
     try {
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
         excluded: [['agent-system']],
@@ -216,7 +216,7 @@ describe('compileWithAdapters', () => {
   it('provides navigation hints', async () => {
     const dir = await createWorkspace();
     try {
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: dir,
         tokenBudget: 10000,
       });
@@ -237,7 +237,7 @@ describe('compileWithAdapters', () => {
         return;
       }
 
-      const result = await compileWithAdapters({
+      const result = await compile({
         workspaceRoot: mgmtRoot,
         tokenBudget: 12000,
         taskHint: 'Review PR for git discipline violations',

@@ -5,8 +5,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { compileWithAdapters, discoverSources, estimateTokens } from '../compiler/index.js';
+import { compile, discoverSources, estimateTokens } from '../compiler/index.js';
 import { isNestedPath } from '../adapter/types.js';
+import { resolveOrigin } from '../resolve/index.js';
+import type { SessionOrigin } from '../resolve/index.js';
 import type {
   AgentDefinition,
   CompiledAgentContext,
@@ -33,16 +35,18 @@ function expandTilde(p: string): string {
  * Compile an agent definition into ready-to-serve context.
  * @param def - Agent definition to compile
  * @param workspaceRoot - Workspace root directory
+ * @param origin - Optional session origin metadata for context resolution
  * @returns Compiled agent context ready for serving
  */
 export async function compileAgent(
   def: AgentDefinition,
   workspaceRoot: string,
+  origin?: SessionOrigin,
 ): Promise<CompiledAgentContext> {
   const root = path.resolve(workspaceRoot);
 
   // Layer 1: Boot context
-  const bootContext = await compileBootContext(def.context.boot, root);
+  const bootContext = await compileBootContext(def.context.boot, root, origin);
 
   // Layer 2: Context blocks
   const contextBlocks = await compileContextBlocks(def.context.blocks ?? [], root);
@@ -84,6 +88,7 @@ export async function compileAgent(
 async function compileBootContext(
   config: BootContextConfig | undefined,
   workspaceRoot: string,
+  origin?: SessionOrigin,
 ): Promise<CompiledAgentContext['bootContext']> {
   if (!config) {
     return { content: '', tokens: 0, sources: [] };
@@ -131,10 +136,20 @@ async function compileBootContext(
     return true;
   });
 
-  const result = await compileWithAdapters({
+  // Resolve additional context based on session origin
+  const resolved = await resolveOrigin(origin, workspaceRoot, sources);
+
+  // Merge resolved sources with defaults (resolved sources take precedence)
+  const finalSources = resolved.sources ?? sources;
+  const finalExcluded = resolved.excluded;
+  const finalTaskHint = resolved.taskHint;
+
+  const result = await compile({
     workspaceRoot,
     tokenBudget: budget,
-    sources,
+    sources: finalSources,
+    excluded: finalExcluded,
+    taskHint: finalTaskHint,
   });
 
   return {
