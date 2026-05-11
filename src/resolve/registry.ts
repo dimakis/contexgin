@@ -6,12 +6,14 @@ import type { OriginResolver, SessionOrigin, ResolvedManifest } from './types.js
 import type { ContextSource } from '../compiler/types.js';
 import { chatResolver } from './chat.js';
 import { telosResolver } from './telos.js';
+import { calendarResolver } from './calendar.js';
 
 /** Registered resolvers in priority order */
 const RESOLVERS: OriginResolver[] = [
   telosResolver,
+  calendarResolver,
   chatResolver,
-  // calendar, file resolvers will be added in subsequent phases
+  // file resolver will be added in a subsequent phase
 ];
 
 /**
