@@ -1,7 +1,13 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { estimateTokens } from './trimmer.js';
-import type { CompileOptions, CompiledContext, ContextSource, ExtractedSection, SerializedNode } from './types.js';
+import type {
+  CompileOptions,
+  CompiledContext,
+  ContextSource,
+  ExtractedSection,
+  SerializedNode,
+} from './types.js';
 import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
 import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
 
