@@ -57,7 +57,11 @@ export interface CompiledContext {
   bootTokens: number;
   /** Sources that contributed */
   sources: ContextSource[];
-  /** Typed context nodes included in the payload */
+  /** Sections included in the boot payload */
+  included: ExtractedSection[];
+  /** Sections that were trimmed due to budget */
+  trimmed: ExtractedSection[];
+  /** Typed context nodes (present when compiled via adapter pipeline) */
   nodes?: SerializedNode[];
   /** Nodes trimmed due to budget */
   trimmedNodes?: SerializedNode[];

@@ -158,6 +158,52 @@ describe('compile', () => {
     }
   });
 
+  it('returns included sections with correct metadata', async () => {
+    const dir = await createWorkspace();
+    try {
+      const result = await compile({
+        workspaceRoot: dir,
+        tokenBudget: 10000,
+      });
+
+      expect(result.included).toBeDefined();
+      expect(result.included.length).toBeGreaterThan(0);
+
+      // Every included section should have required fields
+      for (const section of result.included) {
+        expect(section.source).toBeDefined();
+        expect(section.source.path).toBeTruthy();
+        expect(section.source.relativePath).toBeTruthy();
+        expect(section.headingPath.length).toBeGreaterThan(0);
+        expect(section.content).toBeTruthy();
+        expect(section.tokenEstimate).toBeGreaterThan(0);
+      }
+
+      // included count should match nodes count
+      expect(result.included.length).toBe(result.nodes!.length);
+    } finally {
+      await fs.rm(dir, { recursive: true });
+    }
+  });
+
+  it('returns trimmed sections when budget is tight', async () => {
+    const dir = await createWorkspace();
+    try {
+      const result = await compile({
+        workspaceRoot: dir,
+        tokenBudget: 100,
+      });
+
+      expect(result.trimmed).toBeDefined();
+      expect(result.trimmed.length).toBeGreaterThan(0);
+
+      // trimmed count should match trimmedNodes count
+      expect(result.trimmed.length).toBe(result.trimmedNodes!.length);
+    } finally {
+      await fs.rm(dir, { recursive: true });
+    }
+  });
+
   it('respects token budget', async () => {
     const dir = await createWorkspace();
     try {

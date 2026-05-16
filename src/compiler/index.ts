@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { estimateTokens } from './trimmer.js';
-import type { CompileOptions, CompiledContext, ContextSource, SerializedNode } from './types.js';
+import type { CompileOptions, CompiledContext, ContextSource, ExtractedSection, SerializedNode } from './types.js';
 import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
 import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
 
@@ -251,6 +251,29 @@ export function trimNodesToBudget(
 
 // ── Serialization ───────────────────────────────────────────────
 
+const NODE_TYPE_TO_SOURCE_KIND: Record<string, ContextSource['kind']> = {
+  structural: 'constitution',
+  operational: 'service',
+  identity: 'profile',
+  governance: 'constitution',
+  reference: 'reference',
+};
+
+function nodeToExtractedSection(node: ContextNode): ExtractedSection {
+  const headingPath = node.origin.headingPath ?? [node.id];
+  return {
+    source: {
+      path: node.origin.source,
+      kind: NODE_TYPE_TO_SOURCE_KIND[node.type] ?? 'reference',
+      relativePath: node.origin.relativePath,
+    },
+    headingPath,
+    level: headingPath.length + 1,
+    content: node.content,
+    tokenEstimate: node.tokenEstimate,
+  };
+}
+
 function nodeToSerialized(node: ContextNode): SerializedNode {
   return {
     id: node.id,
@@ -333,6 +356,8 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
     navigationHints,
     bootTokens: estimateTokens(bootPayload),
     sources,
+    included: included.map(nodeToExtractedSection),
+    trimmed: trimmed.map(nodeToExtractedSection),
     nodes: included.map(nodeToSerialized),
     trimmedNodes: trimmed.map(nodeToSerialized),
   };
