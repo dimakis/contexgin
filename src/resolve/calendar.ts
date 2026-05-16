@@ -67,6 +67,7 @@ function formatTime(startTime: string): string {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
+      timeZone: 'UTC',
     });
   } catch {
     return startTime;

@@ -69,9 +69,8 @@ describe('calendarResolver', () => {
       );
 
       expect(manifest.taskHint).toContain('When:');
-      // Should contain readable date components
-      expect(manifest.taskHint).toContain('May');
-      expect(manifest.taskHint).toContain('12');
+      // Timezone-stable: verify UTC rendering
+      expect(manifest.taskHint).toContain('When: Tue, May 12, 10:00 AM');
     });
 
     it('includes attendees, excluding self', async () => {
