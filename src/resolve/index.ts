@@ -6,4 +6,5 @@
 export { resolveOrigin, findResolver } from './registry.js';
 export { chatResolver } from './chat.js';
 export { telosResolver } from './telos.js';
+export { calendarResolver } from './calendar.js';
 export type { OriginSource, SessionOrigin, ResolvedManifest, OriginResolver } from './types.js';
