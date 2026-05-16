@@ -70,6 +70,21 @@ describe('fileResolver', () => {
       expect(manifest.taskHint).toContain('File: jira_process/fetch.py');
     });
 
+    it('includes short purpose from spoke CONSTITUTION.md', async () => {
+      const spokeDir = path.join(tmpDir, 'utils');
+      await fs.mkdir(spokeDir, { recursive: true });
+      await fs.writeFile(path.join(spokeDir, 'CONSTITUTION.md'), '# Utils\n\nCore lib.');
+      await fs.writeFile(path.join(spokeDir, 'helper.py'), '# helper');
+
+      const manifest = await fileResolver.resolve(
+        { source: 'file', entityId: path.join(spokeDir, 'helper.py') },
+        tmpDir,
+        [],
+      );
+
+      expect(manifest.taskHint).toContain('Purpose: Core lib.');
+    });
+
     it('includes purpose from spoke CONSTITUTION.md', async () => {
       const spokeDir = path.join(tmpDir, 'command_center');
       await fs.mkdir(spokeDir, { recursive: true });
