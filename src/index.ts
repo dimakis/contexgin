@@ -167,6 +167,7 @@ export {
   chatResolver,
   telosResolver,
   calendarResolver,
+  fileResolver,
 } from './resolve/index.js';
 export type {
   OriginSource,

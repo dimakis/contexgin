@@ -7,14 +7,10 @@ import type { ContextSource } from '../compiler/types.js';
 import { chatResolver } from './chat.js';
 import { telosResolver } from './telos.js';
 import { calendarResolver } from './calendar.js';
+import { fileResolver } from './file.js';
 
 /** Registered resolvers in priority order */
-const RESOLVERS: OriginResolver[] = [
-  telosResolver,
-  calendarResolver,
-  chatResolver,
-  // file resolver will be added in a subsequent phase
-];
+const RESOLVERS: OriginResolver[] = [telosResolver, calendarResolver, fileResolver, chatResolver];
 
 /**
  * Find a resolver for the given origin.
