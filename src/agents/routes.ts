@@ -68,6 +68,7 @@ export function agentRoutes(app: FastifyInstance, loader: AgentLoader): void {
           boot: {
             context: compiled.bootPayload,
             tokens: compiled.bootTokens,
+            tokenBudget: def.context.budget,
             sources: compiled.sources.length,
           },
           recipe: {

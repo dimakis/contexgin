@@ -70,6 +70,7 @@ export interface AgentRecipeResponse {
   boot: {
     context: string;
     tokens: number;
+    tokenBudget: number;
     sources: number;
   };
   recipe: {
