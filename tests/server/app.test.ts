@@ -353,6 +353,7 @@ context:
       expect(response.statusCode).toBe(200);
       expect(body.agent).toBe('test-agent');
       expect(body.boot).toBeDefined();
+      expect(body.boot.tokenBudget).toBe(4000);
     });
 
     it('returns 404 for unknown agent', async () => {

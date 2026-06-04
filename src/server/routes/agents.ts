@@ -202,6 +202,7 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
         boot: {
           content: compiled.bootContext.content,
           tokens: compiled.bootContext.tokens,
+          tokenBudget: def.context.boot?.tokenBudget ?? 8000,
           sources: compiled.bootContext.sources,
         },
         contextBlocks: Object.fromEntries(
