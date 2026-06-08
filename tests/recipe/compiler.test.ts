@@ -46,6 +46,7 @@ describe('compileAgent', () => {
     expect(result.identity).toEqual(def.identity);
     expect(result.bootContext.content).toBe('');
     expect(result.bootContext.tokens).toBe(0);
+    expect(result.bootContext.tokenBudget).toBe(0);
     expect(result.contextBlocks.size).toBe(0);
     expect(result.operational).toBeUndefined();
     expect(result.memory).toBeUndefined();
@@ -61,7 +62,17 @@ describe('compileAgent', () => {
     expect(result.bootContext.content).toBeDefined();
     expect(result.bootContext.tokens).toBeGreaterThanOrEqual(0);
     expect(result.bootContext.tokens).toBeLessThan(8000);
+    expect(result.bootContext.tokenBudget).toBe(8000);
     expect(result.bootContext.sources).toBeDefined();
+  });
+
+  it('threads custom tokenBudget through to bootContext', async () => {
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 12000 };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.tokenBudget).toBe(12000);
   });
 
   it('excludes CONSTITUTION.md when disabled', async () => {

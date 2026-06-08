@@ -91,7 +91,7 @@ async function compileBootContext(
   origin?: SessionOrigin,
 ): Promise<CompiledAgentContext['bootContext']> {
   if (!config) {
-    return { content: '', tokens: 0, sources: [] };
+    return { content: '', tokens: 0, tokenBudget: 0, sources: [] };
   }
 
   const budget = config.tokenBudget ?? 8000;
@@ -155,6 +155,7 @@ async function compileBootContext(
   return {
     content: result.bootPayload,
     tokens: result.bootTokens,
+    tokenBudget: budget,
     sources: result.sources.map((s) => s.relativePath),
   };
 }
