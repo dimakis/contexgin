@@ -137,6 +137,8 @@ export interface CompiledAgentContext {
     content: string;
     /** Token estimate */
     tokens: number;
+    /** Token budget ceiling from agent definition */
+    tokenBudget: number;
     /** Source files included */
     sources: string[];
   };
