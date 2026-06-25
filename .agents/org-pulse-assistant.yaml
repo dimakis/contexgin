@@ -1,0 +1,80 @@
+# Org Pulse AI Assistant — agent definition for ContexGin
+#
+# Context-aware assistant for the rhai-org-pulse dashboard.
+# Uses OpenCode as harness inside OpenShell on OpenShift,
+# with models.corp (Gemini 2.5 Flash) as the LLM provider.
+#
+# Served by ContexGin via GET /api/agents/org-pulse-assistant/context
+
+identity:
+  name: org-pulse-assistant
+  description: AI assistant for the Org Pulse engineering dashboard — answers questions about modules, data, releases, and team metrics
+  role: codebase assistant
+
+provider:
+  provider: openai-compatible
+  model: gemini-2.5-flash
+  temperature: 0.3
+  maxTokens: 4096
+  params:
+    baseURL: https://developer.models.corp.redhat.com/v1
+
+context:
+  boot:
+    constitution: false
+    claudeMd: true
+    profile: false
+    cursorRules: false
+    spokes: true
+    tokenBudget: 8000
+    sources:
+      - "modules/*/module.json"
+      - "shared/**/*.js"
+
+  blocks:
+    - id: module-detail
+      source: dynamic
+      taskHint: Resolve active module source files from page origin
+
+    - id: data-schema
+      source: data/data-schema.json
+      taskHint: Column definitions and record counts for all datasets
+
+  operational:
+    files:
+      - ai-context/APP_CONTEXT.md
+    delivery: additionalContext
+
+  memory:
+    enabled: false
+
+governance:
+  forbidden:
+    - Never modify source code or data files
+    - Never execute shell commands
+    - Never access external APIs beyond models.corp
+  required:
+    - Always cite the module and file when referencing code
+    - Use markdown tables for structured data in responses
+    - Reference specific view paths when discussing UI features
+
+skills:
+  - id: module-lookup
+    description: Look up module metadata, views, and navigation items
+    enabled: true
+  - id: data-query
+    description: Answer questions about available datasets and their schemas
+    enabled: true
+  - id: route-lookup
+    description: List API endpoints for a given module
+    enabled: true
+
+metadata:
+  version: "0.1.0"
+  updated: "2026-06-25"
+  author: dimakis
+  tags:
+    - org-pulse
+    - dashboard
+    - opencode
+    - openshell
