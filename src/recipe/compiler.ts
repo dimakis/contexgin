@@ -403,10 +403,7 @@ async function compileMemoryContext(
 
 // Resolve file globs relative to a workspace root.
 // Supports patterns with * wildcards. Plain paths are resolved directly.
-async function resolveGlobs(
-  patterns: string[],
-  workspaceRoot: string,
-): Promise<ContextSource[]> {
+async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<ContextSource[]> {
   const sources: ContextSource[] = [];
   const seen = new Set<string>();
 

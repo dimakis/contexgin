@@ -86,10 +86,7 @@ describe('dataSchemaAdapter', () => {
     });
 
     it('handles mixed types across records', async () => {
-      const data = JSON.stringify([
-        { value: 'hello' },
-        { value: 42 },
-      ]);
+      const data = JSON.stringify([{ value: 'hello' }, { value: 42 }]);
 
       await withTempFile(data, 'data/mixed.json', async (filePath, dir) => {
         const nodes = await dataSchemaAdapter.adapt(filePath, dir);
@@ -98,9 +95,7 @@ describe('dataSchemaAdapter', () => {
     });
 
     it('handles null values', async () => {
-      const data = JSON.stringify([
-        { name: 'Test', score: null },
-      ]);
+      const data = JSON.stringify([{ name: 'Test', score: null }]);
 
       await withTempFile(data, 'data/nulls.json', async (filePath, dir) => {
         const nodes = await dataSchemaAdapter.adapt(filePath, dir);
