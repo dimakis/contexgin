@@ -110,6 +110,9 @@ export { claudeAdapter } from './claude.js';
 export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';
 export { markdownAdapter } from './markdown.js';
+export { moduleManifestAdapter } from './module_manifest.js';
+export { expressRoutesAdapter } from './express_routes.js';
+export { dataSchemaAdapter } from './data_schema.js';
 export type {
   ContextNode,
   ContextNodeType,
