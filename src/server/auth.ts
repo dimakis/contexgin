@@ -17,8 +17,8 @@ export function registerAuth(app: FastifyInstance): void {
   const expectedBuf = Buffer.from(token);
 
   app.addHook('onRequest', async (request, reply) => {
-    // Health endpoint is always public (ignore query params)
-    const pathname = request.url.split('?')[0];
+    // Health endpoint is always public (ignore query params, fragments, etc.)
+    const { pathname } = new URL(request.url, 'http://localhost');
     if (pathname === '/health') return;
 
     const auth = request.headers.authorization;

@@ -19,6 +19,9 @@ export async function findModuleDir(
   moduleName: string,
   workspaceRoot: string,
 ): Promise<string | undefined> {
+  // Reject path traversal attempts
+  if (moduleName.includes('..') || path.isAbsolute(moduleName)) return undefined;
+
   for (const pattern of MODULE_DIR_PATTERNS) {
     const candidate = pattern
       ? path.join(workspaceRoot, pattern, moduleName)

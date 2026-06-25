@@ -18,6 +18,9 @@ RUN npm ci --production && npm cache clean --force
 
 COPY --from=build /app/dist/ dist/
 
+RUN addgroup --system contexgin && adduser --system --ingroup contexgin contexgin
+USER contexgin
+
 ENV NODE_ENV=production
 EXPOSE 4195
 

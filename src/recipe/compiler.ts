@@ -407,6 +407,12 @@ async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<
   const seen = new Set<string>();
 
   for (const pattern of patterns) {
+    // Reject patterns with path traversal
+    if (pattern.includes('..') || path.isAbsolute(pattern)) {
+      console.warn(`[recipe] Rejecting glob pattern with traversal: "${pattern}"`);
+      continue;
+    }
+
     try {
       const matches = await expandGlob(pattern, workspaceRoot);
       for (const match of matches) {
