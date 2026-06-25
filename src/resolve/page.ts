@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import type { OriginResolver, SessionOrigin, ResolvedManifest } from './types.js';
 import type { ContextSource } from '../compiler/types.js';
+import { findModuleDir } from './module-dir.js';
 
 /**
  * Parse a hash route into module name and optional view.
@@ -102,26 +103,6 @@ async function dirExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * Try common module directory locations relative to workspace root.
- * Returns the first one that exists.
- */
-async function findModuleDir(
-  moduleName: string,
-  workspaceRoot: string,
-): Promise<string | undefined> {
-  const candidates = [
-    path.join(workspaceRoot, 'modules', moduleName),
-    path.join(workspaceRoot, 'src', 'modules', moduleName),
-    path.join(workspaceRoot, moduleName),
-  ];
-
-  for (const candidate of candidates) {
-    if (await dirExists(candidate)) return candidate;
-  }
-  return undefined;
 }
 
 export const pageResolver: OriginResolver = {

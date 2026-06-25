@@ -72,6 +72,15 @@ describe('registerAuth', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('allows /health with query params without auth', async () => {
+    process.env.CONTEXGIN_AUTH_TOKEN = 'secret-token';
+    registerAuth(app);
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/health?verbose=1' });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('rejects non-Bearer auth schemes', async () => {
     process.env.CONTEXGIN_AUTH_TOKEN = 'secret-token';
     registerAuth(app);

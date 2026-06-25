@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { compile, discoverSources, estimateTokens } from '../compiler/index.js';
 import { isNestedPath } from '../adapter/types.js';
 import { resolveOrigin } from '../resolve/index.js';
+import { findModuleDir } from '../resolve/module-dir.js';
 import type { SessionOrigin } from '../resolve/index.js';
 import type { ContextSource } from '../compiler/types.js';
 import type {
@@ -103,11 +104,16 @@ async function compileBootContext(
   // 'directory-semantics', etc. — not 'constitution').
   const allSources = await discoverSources(workspaceRoot);
 
-  // Resolve additional source globs from config
+  // Resolve additional source globs from config.
+  // Track explicitly-requested paths so they bypass the spokes filter —
+  // if the user explicitly lists a glob, they want those files regardless
+  // of whether spokes are disabled.
+  const explicitPaths = new Set<string>();
   if (config.sources && config.sources.length > 0) {
     const globSources = await resolveGlobs(config.sources, workspaceRoot);
     const existingPaths = new Set(allSources.map((s) => s.path));
     for (const gs of globSources) {
+      explicitPaths.add(gs.path);
       if (!existingPaths.has(gs.path)) {
         allSources.push(gs);
       }
@@ -115,6 +121,9 @@ async function compileBootContext(
   }
 
   const sources = allSources.filter((s) => {
+    // Explicitly-requested sources always pass through
+    if (explicitPaths.has(s.path)) return true;
+
     const basename = path.basename(s.relativePath);
 
     // Spoke-level files — check first since spoke constitutions/CLAUDEs
@@ -237,30 +246,20 @@ async function resolveDynamicBlock(
     const moduleName = origin.entityId.replace(/^#?\/?/, '').split('/')[0];
     if (!moduleName) return undefined;
 
-    // Try common module locations
-    const candidates = [
-      path.join(workspaceRoot, 'modules', moduleName),
-      path.join(workspaceRoot, 'src', 'modules', moduleName),
-      path.join(workspaceRoot, moduleName),
-    ];
+    // Reject path traversal attempts
+    if (moduleName.includes('..') || path.isAbsolute(moduleName)) return undefined;
 
-    for (const moduleDir of candidates) {
-      try {
-        const stat = await fs.stat(moduleDir);
-        if (!stat.isDirectory()) continue;
+    const moduleDir = await findModuleDir(moduleName, workspaceRoot);
+    if (!moduleDir) return undefined;
 
-        // Gather key source files from the module
-        const parts: string[] = [`# Module: ${moduleName}`];
-        const entries = await collectModuleFiles(moduleDir, workspaceRoot);
-        for (const entry of entries) {
-          parts.push(`## ${entry.relativePath}\n\n\`\`\`\n${entry.content}\n\`\`\``);
-        }
-
-        return parts.length > 1 ? parts.join('\n\n') : undefined;
-      } catch {
-        continue;
-      }
+    // Gather key source files from the module
+    const parts: string[] = [`# Module: ${moduleName}`];
+    const entries = await collectModuleFiles(moduleDir, workspaceRoot);
+    for (const entry of entries) {
+      parts.push(`## ${entry.relativePath}\n\n\`\`\`\n${entry.content}\n\`\`\``);
     }
+
+    return parts.length > 1 ? parts.join('\n\n') : undefined;
   }
 
   return undefined;
@@ -430,6 +429,7 @@ async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<
 }
 
 // Expand a glob pattern into matching file paths relative to root.
+// Supports * (single-level wildcard) and ** (recursive descent).
 async function expandGlob(pattern: string, root: string): Promise<string[]> {
   const segments = pattern.split('/');
   return expandSegments(segments, 0, root, '');
@@ -447,6 +447,29 @@ async function expandSegments(
   const isLast = index === segments.length - 1;
   const currentDir = path.join(root, prefix);
 
+  // ** recursive glob — match zero or more directory levels
+  if (segment === '**') {
+    const results: string[] = [];
+    // Try matching remaining segments at this level (zero-depth match)
+    const sub = await expandSegments(segments, index + 1, root, prefix);
+    results.push(...sub);
+    // Recurse into subdirectories
+    try {
+      const entries = await fs.readdir(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        // Continue matching ** at the deeper level
+        const deeper = await expandSegments(segments, index, root, relPath);
+        results.push(...deeper);
+      }
+    } catch {
+      // directory unreadable
+    }
+    return results;
+  }
+
   if (segment.includes('*')) {
     // Wildcard segment — list directory and filter
     let entries: string[];
@@ -457,7 +480,7 @@ async function expandSegments(
     }
 
     const regex = new RegExp(
-      '^' + segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$',
+      '^' + segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$',
     );
 
     const results: string[] = [];

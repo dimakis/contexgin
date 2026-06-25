@@ -94,6 +94,10 @@ export const dataSchemaAdapter: ContextAdapter = {
   },
 
   async adapt(filePath: string, workspaceRoot: string): Promise<ContextNode[]> {
+    // Skip very large files to avoid memory pressure
+    const stat = await fs.stat(filePath);
+    if (stat.size > 5_000_000) return []; // 5MB limit
+
     const raw = await fs.readFile(filePath, 'utf-8');
     const parsed: unknown = JSON.parse(raw);
 
