@@ -441,11 +441,15 @@ async function expandGlob(pattern: string, root: string): Promise<string[]> {
   return expandSegments(segments, 0, root, '');
 }
 
+// Maximum recursion depth for ** glob patterns to prevent runaway traversal
+const MAX_GLOB_DEPTH = 10;
+
 async function expandSegments(
   segments: string[],
   index: number,
   root: string,
   prefix: string,
+  depth: number = 0,
 ): Promise<string[]> {
   if (index >= segments.length) return [];
 
@@ -455,9 +459,11 @@ async function expandSegments(
 
   // ** recursive glob — match zero or more directory levels
   if (segment === '**') {
+    if (depth >= MAX_GLOB_DEPTH) return [];
+
     const results: string[] = [];
     // Try matching remaining segments at this level (zero-depth match)
-    const sub = await expandSegments(segments, index + 1, root, prefix);
+    const sub = await expandSegments(segments, index + 1, root, prefix, depth);
     results.push(...sub);
     // Recurse into subdirectories
     try {
@@ -467,7 +473,7 @@ async function expandSegments(
         if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
         const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
         // Continue matching ** at the deeper level
-        const deeper = await expandSegments(segments, index, root, relPath);
+        const deeper = await expandSegments(segments, index, root, relPath, depth + 1);
         results.push(...deeper);
       }
     } catch {
@@ -486,7 +492,7 @@ async function expandSegments(
     }
 
     const regex = new RegExp(
-      '^' + segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$',
+      '^' + segment.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$',
     );
 
     const results: string[] = [];

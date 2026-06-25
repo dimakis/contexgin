@@ -92,6 +92,54 @@ describe('compiler extensions', () => {
       expect(moduleSources).toContain('features/module.json');
       expect(moduleSources).toContain('features/dashboard/module.json');
     });
+
+    it('rejects glob patterns with path traversal', async () => {
+      const def = baseDef({
+        context: {
+          boot: {
+            tokenBudget: 4000,
+            constitution: false,
+            claudeMd: false,
+            profile: false,
+            cursorRules: false,
+            spokes: false,
+            sources: ['../../etc/*.json'],
+          },
+        },
+      });
+
+      const result = await compileAgent(def, tmpDir);
+      // Should produce no sources from the traversal pattern
+      const etcSources = result.bootContext.sources.filter((s) => s.includes('etc'));
+      expect(etcSources).toHaveLength(0);
+    });
+
+    it('matches literal filenames without treating ? as regex', async () => {
+      // Create a file with a literal ? in the glob pattern context
+      await fs.mkdir(path.join(tmpDir, 'data'), { recursive: true });
+      await fs.writeFile(
+        path.join(tmpDir, 'data', 'module.json'),
+        JSON.stringify([{ name: 'test', value: 1 }]),
+      );
+
+      const def = baseDef({
+        context: {
+          boot: {
+            tokenBudget: 4000,
+            constitution: false,
+            claudeMd: false,
+            profile: false,
+            cursorRules: false,
+            spokes: false,
+            sources: ['data/*.json'],
+          },
+        },
+      });
+
+      const result = await compileAgent(def, tmpDir);
+      const dataSources = result.bootContext.sources.filter((s) => s.includes('data/'));
+      expect(dataSources.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('dynamic block resolution', () => {
