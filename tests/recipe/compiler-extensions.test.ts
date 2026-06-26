@@ -114,8 +114,7 @@ describe('compiler extensions', () => {
       expect(etcSources).toHaveLength(0);
     });
 
-    it('matches literal filenames without treating ? as regex', async () => {
-      // Create a file with a literal ? in the glob pattern context
+    it('resolves wildcard globs for data directory files', async () => {
       await fs.mkdir(path.join(tmpDir, 'data'), { recursive: true });
       await fs.writeFile(
         path.join(tmpDir, 'data', 'module.json'),

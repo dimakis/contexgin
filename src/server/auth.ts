@@ -28,13 +28,16 @@ export function registerAuth(app: FastifyInstance): void {
     }
 
     const provided = auth.slice(7);
-    const providedBuf = Buffer.from(provided);
 
-    // Timing-safe comparison — prevent brute-force via response timing
-    if (
-      providedBuf.length !== expectedBuf.length ||
-      !crypto.timingSafeEqual(providedBuf, expectedBuf)
-    ) {
+    // HMAC-compare to avoid leaking token length via early length check.
+    // Both sides are hashed to equal-length digests before comparison.
+    const expectedHash = crypto.createHmac('sha256', expectedBuf).update(expectedBuf).digest();
+    const providedHash = crypto
+      .createHmac('sha256', expectedBuf)
+      .update(Buffer.from(provided))
+      .digest();
+
+    if (!crypto.timingSafeEqual(expectedHash, providedHash)) {
       reply.code(403).send({ error: 'Invalid token' });
       return;
     }

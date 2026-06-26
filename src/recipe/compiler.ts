@@ -277,6 +277,7 @@ async function collectModuleFiles(
 
   try {
     const entries = await fs.readdir(moduleDir, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       if (results.length >= maxFiles) break;
 
@@ -497,6 +498,7 @@ async function expandSegments(
 
     const results: string[] = [];
     for (const entry of entries) {
+      if (entry.startsWith('.') || entry === 'node_modules') continue;
       if (!regex.test(entry)) continue;
       const relPath = prefix ? `${prefix}/${entry}` : entry;
 
