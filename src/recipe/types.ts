@@ -30,13 +30,15 @@ export interface BootContextConfig {
   spokes?: boolean;
   /** Token budget for boot context */
   tokenBudget?: number;
+  // Additional source file globs to include (e.g. "modules/*/module.json")
+  sources?: string[];
 }
 
 /** Context block configuration */
 export interface ContextBlockConfig {
   /** Block identifier */
   id: string;
-  /** Source file or pattern */
+  /** Source file, pattern, or "dynamic" for origin-resolved content */
   source: string;
   /** Optional task hint for relevance boost */
   taskHint?: string;
