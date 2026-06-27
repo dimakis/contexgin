@@ -10,6 +10,7 @@ import { graphRoutes } from './routes/graph.js';
 import { GoalRegistry } from '../goals/registry.js';
 import { goalRoutes } from '../goals/routes.js';
 import { agentRoutes } from './routes/agents.js';
+import { knowledgeSpaceRoute } from './routes/knowledge-space.js';
 
 export interface ContexGinServer {
   app: FastifyInstance;
@@ -50,6 +51,9 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
 
   // Agent recipe routes
   agentRoutes(app, config);
+
+  // Knowledge space rebuild
+  knowledgeSpaceRoute(app, store, config);
 
   // Serialize rebuilds — if one is in flight, the next caller waits for it
   let rebuildInFlight: Promise<void> | null = null;
