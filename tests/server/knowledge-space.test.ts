@@ -8,23 +8,25 @@ import type { ContexGinServer } from '../../src/server/app.js';
 
 // Mock child_process.execFile to avoid needing real Python/git
 vi.mock('node:child_process', () => ({
-  execFile: vi.fn((cmd: string, args: string[], opts: unknown, cb?: (...args: unknown[]) => void) => {
-    // Support both callback and promisified forms
-    const callback = cb ?? opts;
-    if (typeof callback === 'function') {
-      if (typeof cmd === 'string' && cmd.includes('python')) {
-        const script = (args as string[])[0] ?? '';
-        if (script.includes('crawl.py')) {
-          callback(null, { stdout: 'Crawled 42 artifacts (whole-doc):\n', stderr: '' });
+  execFile: vi.fn(
+    (cmd: string, args: string[], opts: unknown, cb?: (...args: unknown[]) => void) => {
+      // Support both callback and promisified forms
+      const callback = cb ?? opts;
+      if (typeof callback === 'function') {
+        if (typeof cmd === 'string' && cmd.includes('python')) {
+          const script = (args as string[])[0] ?? '';
+          if (script.includes('crawl.py')) {
+            callback(null, { stdout: 'Crawled 42 artifacts (whole-doc):\n', stderr: '' });
+          } else {
+            callback(null, { stdout: 'Saved 42 embeddings, dim=384\n', stderr: '' });
+          }
         } else {
-          callback(null, { stdout: 'Saved 42 embeddings, dim=384\n', stderr: '' });
+          // git pull
+          callback(null, { stdout: 'Already up to date.\n', stderr: '' });
         }
-      } else {
-        // git pull
-        callback(null, { stdout: 'Already up to date.\n', stderr: '' });
       }
-    }
-  }),
+    },
+  ),
 }));
 
 async function createMgmtWorkspace(tmpDir: string): Promise<string> {
