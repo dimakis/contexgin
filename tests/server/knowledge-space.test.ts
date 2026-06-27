@@ -8,7 +8,7 @@ import type { ContexGinServer } from '../../src/server/app.js';
 
 // Mock child_process.execFile to avoid needing real Python/git
 vi.mock('node:child_process', () => ({
-  execFile: vi.fn((cmd: string, args: string[], opts: unknown, cb?: Function) => {
+  execFile: vi.fn((cmd: string, args: string[], opts: unknown, cb?: (...args: unknown[]) => void) => {
     // Support both callback and promisified forms
     const callback = cb ?? opts;
     if (typeof callback === 'function') {
@@ -162,7 +162,7 @@ describe('POST /api/knowledge-space/rebuild', () => {
       cmd: string,
       args: string[],
       opts: unknown,
-      cb?: Function,
+      cb?: (...args: unknown[]) => void,
     ) => {
       const callback = cb ?? opts;
       if (typeof callback === 'function') {
