@@ -97,6 +97,10 @@ export function knowledgeSpaceRoute(
     if (rebuildInFlight) {
       const result = await rebuildInFlight;
       if (result.status === 'error') {
+        request.log.error(
+          { error: result.error, trigger: `${trigger}:waited` },
+          'Knowledge space rebuild failed (waited for in-flight)',
+        );
         return reply.status(500).send({ ...result, trigger: `${trigger}:waited` });
       }
       return { ...result, trigger: `${trigger}:waited` };
@@ -106,6 +110,8 @@ export function knowledgeSpaceRoute(
       const start = Date.now();
       try {
         // Step 1: git pull latest main
+        // Note: assumes the mgmt workspace is checked out on main.
+        // If not, --ff-only will fail and the error is caught + recorded below.
         await execFileAsync('git', ['-C', mgmtRoot, 'pull', '--ff-only', 'origin', 'main'], {
           timeout: 30_000,
         });
@@ -113,6 +119,12 @@ export function knowledgeSpaceRoute(
         // Step 2: crawl
         const crawlResult = await runKnowledgeSpaceScript(mgmtRoot, 'crawl.py');
         const artifactCount = parseArtifactCount(crawlResult.stdout);
+        if (artifactCount === 0 && crawlResult.stdout.trim().length > 0) {
+          request.log.warn(
+            { stdout: crawlResult.stdout.slice(0, 200) },
+            'crawl.py produced output but artifact count pattern did not match — output format may have changed',
+          );
+        }
 
         // Step 3: embed
         await runKnowledgeSpaceScript(mgmtRoot, 'embed.py');
@@ -147,6 +159,7 @@ export function knowledgeSpaceRoute(
     try {
       const result = await rebuildInFlight;
       if (result.status === 'error') {
+        request.log.error({ error: result.error, trigger }, 'Knowledge space rebuild failed');
         return reply.status(500).send(result);
       }
       return result;
