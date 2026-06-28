@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { promisify } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import type { GraphStore } from '../store.js';
@@ -9,8 +9,6 @@ import type { ServerConfig } from '../types.js';
 const execFileAsync = promisify(execFile);
 
 interface RebuildRequest {
-  /** Repository name (e.g. "dimakis/mgmt") — used for logging, not path resolution */
-  repo?: string;
   /** What triggered the rebuild (e.g. "push:dimakis", "manual", "post-merge") */
   trigger?: string;
 }
@@ -26,11 +24,11 @@ interface RebuildResponse {
 
 /**
  * Find the mgmt workspace root from configured roots.
- * Matches any root whose basename or path contains "mgmt".
+ * Matches any root whose basename is exactly "mgmt".
  */
 function findMgmtRoot(roots: string[]): string | null {
   for (const root of roots) {
-    if (path.basename(root) === 'mgmt' || root.includes('/mgmt')) {
+    if (path.basename(root) === 'mgmt') {
       return root;
     }
   }
@@ -64,14 +62,15 @@ function parseArtifactCount(stdout: string): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
-// Serialize rebuilds — only one knowledge space rebuild at a time
-let rebuildInFlight: Promise<RebuildResponse> | null = null;
-
 export function knowledgeSpaceRoute(
   app: FastifyInstance,
   store: GraphStore,
   config: ServerConfig,
 ): void {
+  // Serialize rebuilds — only one knowledge space rebuild at a time
+  // Scoped to this server instance (not module-level)
+  let rebuildInFlight: Promise<RebuildResponse> | null = null;
+
   app.post<{ Body: RebuildRequest }>('/api/knowledge-space/rebuild', async (request, reply) => {
     const trigger = request.body?.trigger ?? 'manual';
     const mgmtRoot = findMgmtRoot(config.roots);
@@ -85,7 +84,9 @@ export function knowledgeSpaceRoute(
 
     // Check knowledge_space directory exists
     const ksDir = path.join(mgmtRoot, 'knowledge_space');
-    if (!fs.existsSync(ksDir)) {
+    try {
+      await fs.access(ksDir);
+    } catch {
       return reply.status(404).send({
         status: 'error',
         error: `knowledge_space directory not found at ${ksDir}`,
@@ -95,6 +96,9 @@ export function knowledgeSpaceRoute(
     // Serialize — if a rebuild is already running, wait for it
     if (rebuildInFlight) {
       const result = await rebuildInFlight;
+      if (result.status === 'error') {
+        return reply.status(500).send({ ...result, trigger: `${trigger}:waited` });
+      }
       return { ...result, trigger: `${trigger}:waited` };
     }
 
