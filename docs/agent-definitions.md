@@ -46,7 +46,7 @@ context:
     spokes: boolean # Include spoke-level files (default: true)
     tokenBudget: number # Token budget for boot context
 
-  blocks: # Context blocks (per-message dynamic context)
+  blocks: # Context blocks (per-message dynamic context) — placeholder, not yet implemented (#14)
     - id: string # Block identifier
       source: string # Source file or pattern
       taskHint: string # Optional task hint for relevance
@@ -372,7 +372,7 @@ const def = await loadAgentDefinition('/path/to/.agents/pr-reviewer.yaml');
 const compiled = await compileAgent(def, '/path/to/workspace');
 
 // With origin
-const compiled = await compileAgent(def, '/path/to/workspace', {
+const compiledWithOrigin = await compileAgent(def, '/path/to/workspace', {
   source: 'telos',
   entityId: 'task-123',
 });

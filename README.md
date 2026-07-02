@@ -330,7 +330,7 @@ Declarative agent definitions for multi-client context serving. See [docs/agent-
 | Export                             | Description                                      |
 | ---------------------------------- | ------------------------------------------------ |
 | `loadAgentDefinition(filePath)`    | Load and validate a single agent definition YAML |
-| `loadAgentDefinitions()`           | Load all definitions from standard paths         |
+| `loadAgentDefinitions(dirPath)`    | Load all definitions from a directory            |
 | `validateAgentDefinition(def)`     | Validate an agent definition object              |
 | `compileAgent(def, root, origin?)` | Compile boot context for an agent definition     |
 
