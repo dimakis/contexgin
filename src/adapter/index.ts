@@ -71,7 +71,28 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
     // Directory listing failed — skip spoke discovery
   }
 
-  // 4. memory/Profile/*.md
+  // 4. workflows/*.yaml at workspace root
+  const workflowsDir = path.join(root, 'workflows');
+  if (await dirExists(workflowsDir)) {
+    const files = await fs.readdir(workflowsDir);
+    for (const file of files) {
+      if (!file.endsWith('.yaml') && !file.endsWith('.yml')) continue;
+      const relPath = path.join('workflows', file);
+      if (shouldIgnore(relPath, ignorePatterns)) continue;
+      const fullPath = path.join(workflowsDir, file);
+      const nodes = await adaptFile(fullPath, root);
+      allNodes.push(...nodes);
+    }
+  }
+
+  // 5. context/workflow.md at workspace root
+  const contextWorkflowPath = path.join(root, 'context', 'workflow.md');
+  if (await fileExists(contextWorkflowPath)) {
+    const nodes = await adaptFile(contextWorkflowPath, root);
+    allNodes.push(...nodes);
+  }
+
+  // 6. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
   if (await dirExists(profileDir)) {
     const files = await fs.readdir(profileDir);

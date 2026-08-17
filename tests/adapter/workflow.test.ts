@@ -269,4 +269,43 @@ Council evaluates feasibility.
       });
     });
   });
+
+  describe('edge cases', () => {
+    it('handles null state values without crashing', async () => {
+      const yaml = `name: edge-case
+states:
+  empty_state:
+  valid_state:
+    description: This one is fine
+`;
+      await withTempFile(yaml, 'workflows/edge.yaml', async (filePath, dir) => {
+        const nodes = await workflowAdapter.adapt(filePath, dir);
+        expect(nodes.length).toBeGreaterThanOrEqual(1);
+        // Should skip null state, include valid_state
+        const statesNode = nodes.find((n) => n.id.includes('states'));
+        if (statesNode) {
+          expect(statesNode.content).toContain('valid_state');
+        }
+      });
+    });
+
+    it('returns only overview for YAML with no states or transitions', async () => {
+      const yaml = `name: bare-workflow
+description: A workflow with no states
+`;
+      await withTempFile(yaml, 'workflows/bare.yaml', async (filePath, dir) => {
+        const nodes = await workflowAdapter.adapt(filePath, dir);
+        expect(nodes.length).toBe(1);
+        expect(nodes[0].id).toContain('overview');
+      });
+    });
+
+    it('returns empty array for non-object YAML', async () => {
+      const yaml = `just a string`;
+      await withTempFile(yaml, 'workflows/bad.yaml', async (filePath, dir) => {
+        const nodes = await workflowAdapter.adapt(filePath, dir);
+        expect(nodes).toHaveLength(0);
+      });
+    });
+  });
 });

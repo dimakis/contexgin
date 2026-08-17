@@ -48,7 +48,7 @@ function normalise(filePath: string): string {
 
 function isWorkflowYaml(filePath: string): boolean {
   const norm = normalise(filePath);
-  return /\/workflows\/[^/]+\.ya?ml$/.test(norm) || /^workflows\/[^/]+\.ya?ml$/.test(norm);
+  return /(^|\/)workflows\/[^/]+\.ya?ml$/.test(norm);
 }
 
 function isWorkflowMd(filePath: string): boolean {
@@ -61,6 +61,7 @@ function isWorkflowMd(filePath: string): boolean {
 function renderStatesContent(states: Record<string, WorkflowState>): string {
   const lines: string[] = [];
   for (const [name, state] of Object.entries(states)) {
+    if (!state || typeof state !== 'object') continue;
     const parts = [`- **${name}**`];
     if (state.description) parts.push(`— ${state.description}`);
     if (state.owner) parts.push(`(owner: ${state.owner})`);
