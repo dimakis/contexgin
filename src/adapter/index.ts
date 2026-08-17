@@ -110,6 +110,7 @@ export { claudeAdapter } from './claude.js';
 export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';
 export { knowledgeAdapter } from './knowledge.js';
+export { workflowAdapter } from './workflow.js';
 export { markdownAdapter } from './markdown.js';
 export type {
   ContextNode,
