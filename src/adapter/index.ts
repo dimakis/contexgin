@@ -109,6 +109,7 @@ export { findAdapter, adaptFile } from './registry.js';
 export { claudeAdapter } from './claude.js';
 export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';
+export { entityAdapter } from './entity.js';
 export { knowledgeAdapter } from './knowledge.js';
 export { markdownAdapter } from './markdown.js';
 export type {
