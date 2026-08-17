@@ -1,5 +1,3 @@
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import { estimateTokens } from './trimmer.js';
 import type {
   CompileOptions,
@@ -12,97 +10,25 @@ import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
 import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
 
 /**
- * Auto-discover context sources in a workspace.
- * Looks for: CONSTITUTION.md, CLAUDE.md, memory/Profile/*.md, SERVICES.md,
- * and any spoke-level CONSTITUTION.md files.
+ * @deprecated Use `discoverAndAdapt()` from '../adapter/index.js' instead.
+ * This was the legacy discovery path with its own hardcoded file list.
+ * Kept temporarily for backward compatibility — will be removed in a future version.
  */
 export async function discoverSources(workspaceRoot: string): Promise<ContextSource[]> {
+  const nodes = await discoverAndAdapt(workspaceRoot);
+  const seen = new Set<string>();
   const sources: ContextSource[] = [];
-  const root = path.resolve(workspaceRoot);
-
-  // Check for root-level files
-  const rootFiles: Array<{ file: string; kind: ContextSource['kind'] }> = [
-    { file: 'CONSTITUTION.md', kind: 'constitution' },
-    { file: 'CLAUDE.md', kind: 'reference' },
-    { file: 'SERVICES.md', kind: 'service' },
-  ];
-
-  for (const { file, kind } of rootFiles) {
-    const fullPath = path.join(root, file);
-    if (await fileExists(fullPath)) {
-      sources.push({ path: fullPath, kind, relativePath: file });
+  for (const node of nodes) {
+    if (!seen.has(node.origin.source)) {
+      seen.add(node.origin.source);
+      sources.push({
+        path: node.origin.source,
+        kind: 'reference',
+        relativePath: node.origin.relativePath,
+      });
     }
   }
-
-  // Check for memory/Profile/*.md
-  const profileDir = path.join(root, 'memory', 'Profile');
-  if (await dirExists(profileDir)) {
-    const profileFiles = await fs.readdir(profileDir);
-    for (const file of profileFiles) {
-      if (file.endsWith('.md')) {
-        const fullPath = path.join(profileDir, file);
-        const relativePath = path.join('memory', 'Profile', file);
-        sources.push({ path: fullPath, kind: 'profile', relativePath });
-      }
-    }
-  }
-
-  // Check for .cursor/rules/*.mdc
-  const cursorRulesDir = path.join(root, '.cursor', 'rules');
-  if (await dirExists(cursorRulesDir)) {
-    const rulesFiles = await fs.readdir(cursorRulesDir);
-    for (const file of rulesFiles) {
-      if (file.endsWith('.mdc')) {
-        const fullPath = path.join(cursorRulesDir, file);
-        const relativePath = path.join('.cursor', 'rules', file);
-        sources.push({ path: fullPath, kind: 'reference', relativePath });
-      }
-    }
-  }
-
-  // Check for spoke-level CONSTITUTION.md files (one level deep)
-  try {
-    const entries = await fs.readdir(root, { withFileTypes: true });
-    for (const entry of entries) {
-      if (
-        entry.isDirectory() &&
-        !entry.name.startsWith('.') &&
-        !entry.name.startsWith('node_modules') &&
-        entry.name !== 'dist'
-      ) {
-        const spokeConst = path.join(root, entry.name, 'CONSTITUTION.md');
-        if (await fileExists(spokeConst)) {
-          sources.push({
-            path: spokeConst,
-            kind: 'constitution',
-            relativePath: path.join(entry.name, 'CONSTITUTION.md'),
-          });
-        }
-      }
-    }
-  } catch {
-    // Directory listing failed — skip spoke discovery
-  }
-
   return sources;
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(p);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function dirExists(p: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(p);
-    return stat.isDirectory();
-  } catch {
-    return false;
-  }
 }
 
 // ── Ranking ─────────────────────────────────────────────────────
@@ -307,7 +233,10 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
 
   // Step 1: Discover and adapt all sources
   let allNodes: ContextNode[];
-  if (options.sources) {
+  if (options.nodes) {
+    // Pre-adapted nodes — skip discovery and adaptation entirely
+    allNodes = options.nodes;
+  } else if (options.sources) {
     const nodeArrays = await Promise.all(
       options.sources.map((s) => adaptFile(s.path, workspaceRoot)),
     );

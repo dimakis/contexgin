@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs/promises';
-import { compile, discoverSources } from '../../src/compiler/index.js';
+import { compile } from '../../src/compiler/index.js';
+import { discoverAndAdapt } from '../../src/adapter/index.js';
 import { extractClaims } from '../../src/integrity/claims.js';
 import { validateAll } from '../../src/integrity/validator.js';
 
@@ -13,10 +14,16 @@ describeLocal('compile against mgmt workspace', () => {
   const MGMT_ROOT = path.join(os.homedir(), 'redhat/mgmt');
 
   it('discovers sources in mgmt workspace', async () => {
-    const sources = await discoverSources(MGMT_ROOT);
-    expect(sources.length).toBeGreaterThan(3);
-    expect(sources.some((s) => s.kind === 'constitution')).toBe(true);
-    expect(sources.some((s) => s.kind === 'profile')).toBe(true);
+    const nodes = await discoverAndAdapt(MGMT_ROOT);
+    expect(nodes.length).toBeGreaterThan(3);
+    expect(nodes.some((n) => n.origin.format === 'constitution')).toBe(true);
+    expect(
+      nodes.some(
+        (n) =>
+          n.origin.relativePath.startsWith('memory/Profile/') ||
+          n.origin.relativePath.startsWith('memory\\Profile\\'),
+      ),
+    ).toBe(true);
   });
 
   it('compiles mgmt workspace with typed nodes', async () => {
@@ -32,13 +39,13 @@ describeLocal('compile against mgmt workspace', () => {
   });
 
   it('detects real drift in mgmt workspace', async () => {
-    const sources = await discoverSources(MGMT_ROOT);
-    const constitutionSource = sources.find(
-      (s) => s.kind === 'constitution' && s.relativePath === 'CONSTITUTION.md',
+    const nodes = await discoverAndAdapt(MGMT_ROOT);
+    const constitutionNode = nodes.find(
+      (n) => n.origin.format === 'constitution' && n.origin.relativePath === 'CONSTITUTION.md',
     );
-    expect(constitutionSource).toBeDefined();
-    const content = await fs.readFile(constitutionSource!.path, 'utf-8');
-    const claims = extractClaims(content, constitutionSource!.path);
+    expect(constitutionNode).toBeDefined();
+    const content = await fs.readFile(constitutionNode!.origin.source, 'utf-8');
+    const claims = extractClaims(content, constitutionNode!.origin.source);
     const report = await validateAll(claims, MGMT_ROOT);
     // At minimum, we should find some valid claims
     expect(report.summary.total).toBeGreaterThan(5);

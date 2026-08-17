@@ -73,6 +73,8 @@ export interface CompileOptions {
   workspaceRoot: string;
   /** Maximum tokens for boot payload */
   tokenBudget: number;
+  /** Pre-adapted context nodes (skip discovery + adaptation) */
+  nodes?: import('../adapter/types.js').ContextNode[];
   /** Source files to compile from (auto-discovered if not provided) */
   sources?: ContextSource[];
   /** Sections to always include regardless of relevance */
