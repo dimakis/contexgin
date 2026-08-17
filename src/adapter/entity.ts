@@ -65,6 +65,7 @@ function buildEntityContent(name: string, entity: EntityDefinition): string {
   if (entity.fields && entity.fields.length > 0) {
     parts.push('', '### Fields', '');
     for (const field of entity.fields) {
+      if (typeof field !== 'object' || !field?.name) continue;
       parts.push(formatField(field));
     }
   }
@@ -72,6 +73,7 @@ function buildEntityContent(name: string, entity: EntityDefinition): string {
   if (entity.relationships && entity.relationships.length > 0) {
     parts.push('', '### Relationships', '');
     for (const rel of entity.relationships) {
+      if (typeof rel !== 'object' || !rel?.type || !rel?.target) continue;
       parts.push(formatRelationship(rel));
     }
   }
