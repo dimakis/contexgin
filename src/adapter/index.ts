@@ -9,7 +9,7 @@ import type { ContextNode } from './types.js';
 import { adaptFile } from './registry.js';
 
 /** Files that adapters know how to handle at workspace root level */
-const ROOT_FILES = ['CONSTITUTION.md', 'CLAUDE.md', 'SERVICES.md', 'README.md'];
+const ROOT_FILES = ['CONSTITUTION.md', 'CLAUDE.md', 'SERVICES.md', 'README.md', 'KNOWLEDGE.md'];
 
 /**
  * Discover context sources in a workspace and adapt them all into ContextNodes.
