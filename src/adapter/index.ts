@@ -111,6 +111,7 @@ export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';
 export { knowledgeAdapter } from './knowledge.js';
 export { markdownAdapter } from './markdown.js';
+export { rhythmsAdapter } from './rhythms.js';
 export type {
   ContextNode,
   ContextNodeType,
