@@ -8,6 +8,7 @@ import { constitutionAdapter } from './constitution.js';
 import { knowledgeAdapter } from './knowledge.js';
 import { claudeAdapter } from './claude.js';
 import { cursorAdapter } from './cursor.js';
+import { entityAdapter } from './entity.js';
 import { markdownAdapter } from './markdown.js';
 
 /**
@@ -17,6 +18,7 @@ import { markdownAdapter } from './markdown.js';
 const ADAPTERS: ContextAdapter[] = [
   constitutionAdapter,
   knowledgeAdapter,
+  entityAdapter,
   claudeAdapter,
   cursorAdapter,
   markdownAdapter, // fallback — must be last
