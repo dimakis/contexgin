@@ -5,16 +5,18 @@
 
 import type { ContextAdapter, ContextNode } from './types.js';
 import { constitutionAdapter } from './constitution.js';
+import { knowledgeAdapter } from './knowledge.js';
 import { claudeAdapter } from './claude.js';
 import { cursorAdapter } from './cursor.js';
 import { markdownAdapter } from './markdown.js';
 
 /**
  * Ordered list of adapters. More specific adapters first.
- * Constitution and Claude must be checked before markdown fallback.
+ * Constitution, Knowledge, and Claude must be checked before markdown fallback.
  */
 const ADAPTERS: ContextAdapter[] = [
   constitutionAdapter,
+  knowledgeAdapter,
   claudeAdapter,
   cursorAdapter,
   markdownAdapter, // fallback — must be last

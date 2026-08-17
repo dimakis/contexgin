@@ -14,12 +14,13 @@ export type ContextNodeType =
 export type ContextTier =
   | 'constitutional' // 1.0 — purpose, principles, boundaries
   | 'navigational' // 0.8 — architecture, entry points
+  | 'operational' // 0.75 — knowledge store, operating manuals
   | 'identity' // 0.7 — profile, communication style
   | 'reference' // 0.5 — services, memory
   | 'historical'; // 0.3 — session notes, old decisions
 
 /** The source format a node was parsed from */
-export type SourceFormat = 'claude_md' | 'cursor_rules' | 'constitution' | 'markdown';
+export type SourceFormat = 'claude_md' | 'cursor_rules' | 'constitution' | 'knowledge' | 'markdown';
 
 /** Where a context node originated */
 export interface NodeOrigin {
@@ -83,6 +84,7 @@ export interface ContextAdapter {
 export const TIER_WEIGHTS: Record<ContextTier, number> = {
   constitutional: 1.0,
   navigational: 0.8,
+  operational: 0.75,
   identity: 0.7,
   reference: 0.5,
   historical: 0.3,

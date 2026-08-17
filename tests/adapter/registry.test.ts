@@ -31,6 +31,11 @@ describe('findAdapter', () => {
     expect(adapter?.format).toBe('markdown');
   });
 
+  it('selects knowledge adapter for KNOWLEDGE.md', () => {
+    const adapter = findAdapter('/workspace/KNOWLEDGE.md');
+    expect(adapter?.format).toBe('knowledge');
+  });
+
   it('prefers constitution over markdown for CONSTITUTION.md', () => {
     const adapter = findAdapter('CONSTITUTION.md');
     expect(adapter?.format).toBe('constitution');
