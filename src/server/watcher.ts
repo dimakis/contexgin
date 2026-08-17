@@ -33,7 +33,7 @@ export function startWatcher(server: ContexGinServer, config: ServerConfig): Wat
       const watcher = fs.watch(root, { recursive: true }, (_event, filename) => {
         if (!filename) return;
         const base = path.basename(filename);
-        if (base === 'CONSTITUTION.md' || base === 'CLAUDE.md') {
+        if (base === 'CONSTITUTION.md' || base === 'CLAUDE.md' || base === 'KNOWLEDGE.md') {
           scheduleRebuild();
         }
       });
