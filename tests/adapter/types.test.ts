@@ -35,7 +35,13 @@ describe('ContextNode type system', () => {
   });
 
   it('supports all five source formats', () => {
-    const formats: SourceFormat[] = ['claude_md', 'cursor_rules', 'constitution', 'knowledge', 'markdown'];
+    const formats: SourceFormat[] = [
+      'claude_md',
+      'cursor_rules',
+      'constitution',
+      'knowledge',
+      'markdown',
+    ];
     expect(formats).toHaveLength(5);
   });
 
