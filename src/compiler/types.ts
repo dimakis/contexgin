@@ -3,7 +3,7 @@ export interface ContextSource {
   /** Absolute path to the file */
   path: string;
   /** What kind of source this is */
-  kind: 'constitution' | 'profile' | 'memory' | 'service' | 'reference';
+  kind: 'constitution' | 'knowledge' | 'profile' | 'memory' | 'service' | 'reference';
   /** Relative path within the workspace */
   relativePath: string;
 }

@@ -23,6 +23,7 @@ export async function discoverSources(workspaceRoot: string): Promise<ContextSou
   // Check for root-level files
   const rootFiles: Array<{ file: string; kind: ContextSource['kind'] }> = [
     { file: 'CONSTITUTION.md', kind: 'constitution' },
+    { file: 'KNOWLEDGE.md', kind: 'knowledge' },
     { file: 'CLAUDE.md', kind: 'reference' },
     { file: 'SERVICES.md', kind: 'service' },
   ];
