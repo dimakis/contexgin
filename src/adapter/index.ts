@@ -71,7 +71,16 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
     // Directory listing failed — skip spoke discovery
   }
 
-  // 4. memory/Profile/*.md
+  // 4. context/ files (entities, rhythms, etc.) at workspace root and spoke level
+  for (const contextFile of ['entities.yaml']) {
+    const rootContextPath = path.join(root, 'context', contextFile);
+    if (await fileExists(rootContextPath)) {
+      const nodes = await adaptFile(rootContextPath, root);
+      allNodes.push(...nodes);
+    }
+  }
+
+  // 5. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
   if (await dirExists(profileDir)) {
     const files = await fs.readdir(profileDir);

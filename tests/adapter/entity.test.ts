@@ -228,6 +228,20 @@ describe('entityAdapter', () => {
       });
     });
 
+    it('returns empty array for empty file', async () => {
+      await withTempFile('', async (filePath, dir) => {
+        const nodes = await entityAdapter.adapt(filePath, dir);
+        expect(nodes).toHaveLength(0);
+      });
+    });
+
+    it('throws on malformed YAML (registry catches it)', async () => {
+      const yaml = `entities:\n  deal:\n    - [invalid: {yaml`;
+      await withTempFile(yaml, async (filePath, dir) => {
+        await expect(entityAdapter.adapt(filePath, dir)).rejects.toThrow();
+      });
+    });
+
     it('handles the canonical KNOWLEDGE.md entity model example', async () => {
       const yaml = `entities:
   deal:
