@@ -120,4 +120,11 @@ export type {
   NodeOrigin,
   SourceFormat,
 } from './types.js';
-export { isNestedPath, slugify, TIER_WEIGHTS } from './types.js';
+export {
+  isNestedPath,
+  isProfilePath,
+  slugify,
+  TIER_WEIGHTS,
+  nodeToSourceKind,
+  nodesToSources,
+} from './types.js';

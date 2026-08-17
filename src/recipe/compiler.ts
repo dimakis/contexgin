@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { compile, estimateTokens } from '../compiler/index.js';
 import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
-import { isNestedPath } from '../adapter/types.js';
+import { isNestedPath, isProfilePath, nodesToSources } from '../adapter/types.js';
 import type { ContextNode } from '../adapter/types.js';
 import { resolveOrigin } from '../resolve/index.js';
 import type { SessionOrigin } from '../resolve/index.js';
@@ -106,12 +106,13 @@ async function compileBootContext(
     const rel = node.origin.relativePath;
     const basename = path.basename(rel);
 
+    const profile = isProfilePath(rel);
+
     // Spoke-level files — check first since spoke constitutions/CLAUDEs
     // would otherwise match the type-specific filters below
     if (config.spokes === false && isNestedPath(rel)) {
       // Don't filter profiles or cursor rules — they're not spokes
-      const isProfile = rel.startsWith('memory/Profile/') || rel.startsWith('memory\\Profile\\');
-      if (!isProfile && !rel.match(/^\.cursor[/\\]/)) {
+      if (!profile && !rel.match(/^\.cursor[/\\]/)) {
         return false;
       }
     }
@@ -127,7 +128,7 @@ async function compileBootContext(
     }
 
     // Profile files — exclude if explicitly disabled
-    if (rel.startsWith('memory/Profile/') || rel.startsWith('memory\\Profile\\')) {
+    if (profile) {
       return config.profile !== false;
     }
 
@@ -140,11 +141,15 @@ async function compileBootContext(
   });
 
   // Resolve additional context based on session origin.
-  // The resolve system still works with ContextSource[] — convert for the shim.
+  // The resolve system still works with ContextSource[] — convert via shared utility.
   const filteredSources = nodesToSources(filteredNodes);
   const resolved = await resolveOrigin(origin, workspaceRoot, filteredSources);
 
-  // Determine final node set: if resolver changed sources, adapt new ones
+  // Determine final node set: if resolver changed sources, adapt new ones.
+  // NOTE: The resolver integration path below (where resolved.sources differs
+  // from the filtered set) is not directly unit-tested — it requires mocking
+  // resolveOrigin to return a modified source list. Covered by integration
+  // tests against the mgmt workspace.
   let finalNodes: ContextNode[];
   if (resolved.sources) {
     const resolvedPaths = new Set(resolved.sources.map((s) => s.path));
@@ -306,26 +311,6 @@ async function compileMemoryContext(
   }
 
   return memory;
-}
-
-/**
- * Convert ContextNode[] to ContextSource[] for the resolve system shim.
- * Deduplicates by source path since multiple nodes come from one file.
- */
-function nodesToSources(nodes: ContextNode[]): import('../compiler/types.js').ContextSource[] {
-  const seen = new Set<string>();
-  const sources: import('../compiler/types.js').ContextSource[] = [];
-  for (const node of nodes) {
-    if (!seen.has(node.origin.source)) {
-      seen.add(node.origin.source);
-      sources.push({
-        path: node.origin.source,
-        kind: 'reference',
-        relativePath: node.origin.relativePath,
-      });
-    }
-  }
-  return sources;
 }
 
 /**

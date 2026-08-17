@@ -97,10 +97,63 @@ export function isNestedPath(relativePath: string): boolean {
   return relativePath.includes(path.sep) || relativePath.includes('/');
 }
 
+/** Whether a relative path points to a memory/Profile file. */
+export function isProfilePath(relativePath: string): boolean {
+  return relativePath.startsWith('memory/Profile/') || relativePath.startsWith('memory\\Profile\\');
+}
+
 /** Slugify a heading into a node ID */
 export function slugify(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+// ── Node-to-Source Conversion ──────────────────────────────────
+
+/**
+ * Map a ContextNode's origin to the appropriate ContextSource kind.
+ * Used by both the deprecated discoverSources wrapper and nodesToSources.
+ */
+export function nodeToSourceKind(
+  node: ContextNode,
+): 'constitution' | 'profile' | 'service' | 'reference' {
+  const { format, relativePath } = node.origin;
+  const basename = path.basename(relativePath);
+
+  if (format === 'constitution') return 'constitution';
+  if (format === 'markdown' && isProfilePath(relativePath)) return 'profile';
+  if (basename === 'SERVICES.md') return 'service';
+  // claude_md, cursor_rules, knowledge, and other markdown → reference
+  return 'reference';
+}
+
+/**
+ * Convert ContextNode[] to ContextSource[].
+ * Deduplicates by source path since multiple nodes may come from one file.
+ * Preserves kind information from the node's origin format.
+ */
+export function nodesToSources(nodes: ContextNode[]): Array<{
+  path: string;
+  kind: 'constitution' | 'profile' | 'memory' | 'service' | 'reference';
+  relativePath: string;
+}> {
+  const seen = new Set<string>();
+  const sources: Array<{
+    path: string;
+    kind: 'constitution' | 'profile' | 'memory' | 'service' | 'reference';
+    relativePath: string;
+  }> = [];
+  for (const node of nodes) {
+    if (!seen.has(node.origin.source)) {
+      seen.add(node.origin.source);
+      sources.push({
+        path: node.origin.source,
+        kind: nodeToSourceKind(node),
+        relativePath: node.origin.relativePath,
+      });
+    }
+  }
+  return sources;
 }

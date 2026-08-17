@@ -7,7 +7,12 @@ import type {
   SerializedNode,
 } from './types.js';
 import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
-import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/types.js';
+import {
+  TIER_WEIGHTS,
+  nodesToSources,
+  type ContextNode,
+  type RankedNode,
+} from '../adapter/types.js';
 
 /**
  * @deprecated Use `discoverAndAdapt()` from '../adapter/index.js' instead.
@@ -16,19 +21,7 @@ import { TIER_WEIGHTS, type ContextNode, type RankedNode } from '../adapter/type
  */
 export async function discoverSources(workspaceRoot: string): Promise<ContextSource[]> {
   const nodes = await discoverAndAdapt(workspaceRoot);
-  const seen = new Set<string>();
-  const sources: ContextSource[] = [];
-  for (const node of nodes) {
-    if (!seen.has(node.origin.source)) {
-      seen.add(node.origin.source);
-      sources.push({
-        path: node.origin.source,
-        kind: 'reference',
-        relativePath: node.origin.relativePath,
-      });
-    }
-  }
-  return sources;
+  return nodesToSources(nodes) as ContextSource[];
 }
 
 // ── Ranking ─────────────────────────────────────────────────────
