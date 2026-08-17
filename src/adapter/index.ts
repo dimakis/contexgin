@@ -71,7 +71,16 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
     // Directory listing failed — skip spoke discovery
   }
 
-  // 4. memory/Profile/*.md
+  // 4. context/ files (rhythms, cadence) at workspace root
+  for (const contextFile of ['rhythms.yaml', 'cadence.yaml']) {
+    const rootContextPath = path.join(root, 'context', contextFile);
+    if (await fileExists(rootContextPath)) {
+      const nodes = await adaptFile(rootContextPath, root);
+      allNodes.push(...nodes);
+    }
+  }
+
+  // 5. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
   if (await dirExists(profileDir)) {
     const files = await fs.readdir(profileDir);
@@ -111,6 +120,7 @@ export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';
 export { knowledgeAdapter } from './knowledge.js';
 export { markdownAdapter } from './markdown.js';
+export { rhythmsAdapter } from './rhythms.js';
 export type {
   ContextNode,
   ContextNodeType,
