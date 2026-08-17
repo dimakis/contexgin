@@ -46,6 +46,11 @@ describe('findAdapter', () => {
     expect(adapter?.format).toBe('claude_md');
   });
 
+  it('selects workflow adapter for workflows/*.yaml', () => {
+    const adapter = findAdapter('/workspace/workflows/release.yaml');
+    expect(adapter?.format).toBe('workflow');
+  });
+
   it('returns undefined for non-handled files', () => {
     expect(findAdapter('foo.ts')).toBeUndefined();
     expect(findAdapter('foo.py')).toBeUndefined();

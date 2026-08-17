@@ -20,7 +20,13 @@ export type ContextTier =
   | 'historical'; // 0.3 — session notes, old decisions
 
 /** The source format a node was parsed from */
-export type SourceFormat = 'claude_md' | 'cursor_rules' | 'constitution' | 'knowledge' | 'markdown';
+export type SourceFormat =
+  | 'claude_md'
+  | 'cursor_rules'
+  | 'constitution'
+  | 'knowledge'
+  | 'workflow'
+  | 'markdown';
 
 /** Where a context node originated */
 export interface NodeOrigin {
