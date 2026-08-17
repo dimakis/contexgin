@@ -22,20 +22,21 @@ describe('ContextNode type system', () => {
     expect(types).toHaveLength(5);
   });
 
-  it('supports all five tiers', () => {
+  it('supports all six tiers', () => {
     const tiers: ContextTier[] = [
       'constitutional',
       'navigational',
+      'operational',
       'identity',
       'reference',
       'historical',
     ];
-    expect(tiers).toHaveLength(5);
+    expect(tiers).toHaveLength(6);
   });
 
-  it('supports all four source formats', () => {
-    const formats: SourceFormat[] = ['claude_md', 'cursor_rules', 'constitution', 'markdown'];
-    expect(formats).toHaveLength(4);
+  it('supports all five source formats', () => {
+    const formats: SourceFormat[] = ['claude_md', 'cursor_rules', 'constitution', 'knowledge', 'markdown'];
+    expect(formats).toHaveLength(5);
   });
 
   it('constructs a valid ContextNode', () => {
@@ -79,8 +80,8 @@ describe('ContextNode type system', () => {
 });
 
 describe('TIER_WEIGHTS', () => {
-  it('has weights for all five tiers', () => {
-    expect(Object.keys(TIER_WEIGHTS)).toHaveLength(5);
+  it('has weights for all six tiers', () => {
+    expect(Object.keys(TIER_WEIGHTS)).toHaveLength(6);
   });
 
   it('ranks constitutional highest', () => {
@@ -97,6 +98,7 @@ describe('TIER_WEIGHTS', () => {
     const ordered = [
       TIER_WEIGHTS.constitutional,
       TIER_WEIGHTS.navigational,
+      TIER_WEIGHTS.operational,
       TIER_WEIGHTS.identity,
       TIER_WEIGHTS.reference,
       TIER_WEIGHTS.historical,

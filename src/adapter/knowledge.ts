@@ -24,6 +24,10 @@ export const knowledgeAdapter: ContextAdapter = {
     const raw = await fs.readFile(filePath, 'utf-8');
     const content = stripFrontmatter(raw);
     const nodes = parseMarkdown(content);
+    // `kind: 'reference'` is source-level metadata consumed by the extractor to
+    // drive section splitting heuristics. It does not affect the semantic
+    // classification: nodes are assigned `type: 'operational'` by the adapter
+    // after extraction, which is what the ranker and trimmer use.
     const sections = extractAllLevel2(nodes, {
       path: filePath,
       kind: 'reference',

@@ -855,7 +855,7 @@ describe('real-world: mgmt workspace', () => {
     if (await skipIfMissing()) return;
 
     const validTypes = ['structural', 'operational', 'identity', 'governance', 'reference'];
-    const validTiers = ['constitutional', 'navigational', 'identity', 'reference', 'historical'];
+    const validTiers = ['constitutional', 'navigational', 'operational', 'identity', 'reference', 'historical'];
 
     const nodes = await discoverAndAdapt(mgmtRoot);
     for (const node of nodes) {
