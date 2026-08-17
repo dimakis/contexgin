@@ -83,7 +83,7 @@ export const rhythmsAdapter: ContextAdapter = {
         origin: {
           source: filePath,
           relativePath,
-          format: 'rhythms' as const,
+          format: 'rhythms',
           headingPath: [period],
         },
         tokenEstimate: estimateTokens(content),
