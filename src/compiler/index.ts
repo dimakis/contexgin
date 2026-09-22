@@ -139,35 +139,13 @@ export function trimNodesToBudget(
 ): { included: RankedNode[]; trimmed: RankedNode[] } {
   const included: RankedNode[] = [];
   const trimmed: RankedNode[] = [];
-  let used = 0;
-
-  // Reserve budget for group heading overhead (## Heading\n\n per unique type)
-  const seenTypes = new Set<string>();
 
   for (const node of nodes) {
-    let overhead = 0;
-    if (!seenTypes.has(node.type)) {
-      const heading = TYPE_GROUP_HEADINGS[node.type] || node.type;
-      overhead = estimateTokens(`## ${heading}\n\n`);
-    }
-
-    // Per-node heading overhead (### Title (spoke)\n\n) when content doesn't already have one
-    let nodeHeadingOverhead = 0;
-    if (nodeNeedsHeading(node)) {
-      const title = (node.origin.headingPath ?? [node.id]).slice(-1)[0];
-      const qualifier = spokeQualifier(node);
-      const heading = qualifier ? `### ${title} (${qualifier})\n\n` : `### ${title}\n\n`;
-      nodeHeadingOverhead = estimateTokens(heading);
-    }
-
-    const separatorOverhead = included.length > 0 ? estimateTokens('\n\n') : 0;
-    if (used + node.tokenEstimate + nodeHeadingOverhead + overhead + separatorOverhead <= budget) {
-      if (!seenTypes.has(node.type)) {
-        seenTypes.add(node.type);
-        used += overhead;
-      }
+    // Measure the exact assembled candidate. Adding separately rounded estimates
+    // can reject a payload whose final rendered string fits the same estimator.
+    const candidate = [...included, node];
+    if (estimateTokens(assembleGroupedPayload(candidate)) <= budget) {
       included.push(node);
-      used += node.tokenEstimate + nodeHeadingOverhead + separatorOverhead;
     } else {
       trimmed.push(node);
     }

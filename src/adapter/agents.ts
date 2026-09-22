@@ -16,10 +16,19 @@ export const agentsAdapter: ContextAdapter = {
     }
     // Reject links in any component, including links that remain inside the workspace.
     let current = path.resolve(workspaceRoot);
-    for (const component of relative.split(path.sep)) {
+    const components = relative.split(path.sep);
+    for (const [index, component] of components.entries()) {
       current = path.join(current, component);
-      if ((await fs.lstat(current)).isSymbolicLink()) {
+      const entry = await fs.lstat(current);
+      if (entry.isSymbolicLink()) {
         throw new Error(`AGENTS.md symlink is unsupported: ${relative}`);
+      }
+      const finalEntry = index === components.length - 1;
+      if (finalEntry && !entry.isFile()) {
+        throw new Error(`AGENTS.md must be a regular file: ${relative}`);
+      }
+      if (!finalEntry && !entry.isDirectory()) {
+        throw new Error(`AGENTS.md parent must be a directory: ${relative}`);
       }
     }
     const real = await fs.realpath(resolved);

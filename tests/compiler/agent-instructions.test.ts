@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { compile, discoverSources } from '../../src/compiler/index.js';
+
+const execFileAsync = promisify(execFile);
 
 let root: string;
 beforeEach(async () => {
@@ -67,6 +71,13 @@ describe('canonical agent instructions', () => {
     await file('AGENTS.md', 'REQUIRED_SENTINEL '.repeat(100));
     await expect(run({ tokenBudget: 10 })).rejects.toThrow(/required.*budget/i);
   });
+  it('accepts canonical guidance at its exact assembled token budget', async () => {
+    await file('AGENTS.md', 'x');
+    const measured = await run();
+    const exact = await run({ tokenBudget: measured.bootTokens });
+    expect(exact.bootPayload).toBe(measured.bootPayload);
+    expect(exact.bootTokens).toBe(measured.bootTokens);
+  });
   it('reserves budget for canonical guidance before ordinary knowledge', async () => {
     await file('AGENTS.md', 'REQUIRED_SENTINEL');
     await file('README.md', '## Architecture\n\n' + 'optional '.repeat(80));
@@ -124,6 +135,10 @@ describe('instruction edge cases', () => {
     await file('AGENTS.md', '');
     await file('CLAUDE.md', '## Old\n\nOLD');
     await expect(run()).rejects.toThrow(/empty/i);
+  });
+  it('rejects a FIFO canonical instruction entry before reading it', async () => {
+    await execFileAsync('mkfifo', [join(root, 'AGENTS.md')]);
+    await expect(run()).rejects.toThrow(/regular file/i);
   });
   it('keeps legacy one-level discovery deterministic and applies per-directory precedence', async () => {
     await file('z/AGENTS.md', 'Z_SENTINEL');

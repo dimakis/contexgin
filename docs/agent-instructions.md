@@ -54,6 +54,10 @@ Token counts are estimates, not provider billing counts. The serialized node
 retains `required` so a subsequent compilation cannot silently drop it. Ordinary
 optional nodes retain the existing relevance trimming behavior.
 
+Agent recipes can control canonical instructions with `boot.agentInstructions`.
+When that field is omitted, it inherits `boot.claudeMd` so existing recipes keep
+the same behavior when a workspace migrates from CLAUDE.md to AGENTS.md.
+
 ## Boundaries
 
 This change establishes compiler behavior only. It does not prove native provider
