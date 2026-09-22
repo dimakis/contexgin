@@ -14,7 +14,8 @@ export interface SessionInfo {
 
 /** User input to the agent */
 export type AgentInput =
-  { type: 'text'; text: string } | { type: 'image'; data: string; mediaType: string };
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mediaType: string };
 
 /** Unified event stream from any provider */
 export type AgentEvent =
