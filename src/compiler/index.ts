@@ -160,13 +160,14 @@ export function trimNodesToBudget(
       nodeHeadingOverhead = estimateTokens(heading);
     }
 
-    if (used + node.tokenEstimate + nodeHeadingOverhead + overhead <= budget) {
+    const separatorOverhead = included.length > 0 ? estimateTokens('\n\n') : 0;
+    if (used + node.tokenEstimate + nodeHeadingOverhead + overhead + separatorOverhead <= budget) {
       if (!seenTypes.has(node.type)) {
         seenTypes.add(node.type);
         used += overhead;
       }
       included.push(node);
-      used += node.tokenEstimate + nodeHeadingOverhead;
+      used += node.tokenEstimate + nodeHeadingOverhead + separatorOverhead;
     } else {
       trimmed.push(node);
     }

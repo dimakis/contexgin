@@ -141,3 +141,9 @@ describe('instruction edge cases', () => {
     await expect(run({ scopePath: 'linked' })).rejects.toThrow(/scope.*symlink/i);
   });
 });
+
+it('counts separators between required files in the budget', async () => {
+  await file('AGENTS.md', '# AA');
+  await file('app/AGENTS.md', '# BB');
+  await expect(run({ tokenBudget: 6 })).rejects.toThrow(/required.*budget/i);
+});
