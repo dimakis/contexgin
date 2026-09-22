@@ -31,6 +31,12 @@ describe('canonical agent instructions', () => {
     expect(result.nodes?.[0].origin.format).toBe('agents_md');
     expect((await discoverSources(root)).map((s) => s.relativePath)).toContain('AGENTS.md');
   });
+  it('preserves canonical boundary whitespace exactly', async () => {
+    const content = '  indented first line\n\nlast line  \n';
+    await file('AGENTS.md', content);
+    const result = await run();
+    expect(result.nodes?.[0].content).toBe(content);
+  });
   it('preserves CLAUDE-only legacy behavior', async () => {
     await file('CLAUDE.md', '## Required\n\nLEGACY_SENTINEL');
     expect((await run()).bootPayload).toContain('LEGACY_SENTINEL');

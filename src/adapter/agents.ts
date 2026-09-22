@@ -33,8 +33,8 @@ export const agentsAdapter: ContextAdapter = {
     }
     const real = await fs.realpath(resolved);
     if (!real.startsWith(root + path.sep)) throw new Error('AGENTS.md escapes workspace');
-    const content = (await fs.readFile(resolved, 'utf8')).trim();
-    if (!content) throw new Error(`Canonical instructions are empty: ${relative}`);
+    const content = await fs.readFile(resolved, 'utf8');
+    if (!content.trim()) throw new Error(`Canonical instructions are empty: ${relative}`);
     return [
       {
         id: 'agent-instructions',
