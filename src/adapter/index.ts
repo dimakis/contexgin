@@ -9,24 +9,54 @@ import type { ContextNode } from './types.js';
 import { adaptFile } from './registry.js';
 
 /** Files that adapters know how to handle at workspace root level */
-const ROOT_FILES = ['CONSTITUTION.md', 'CLAUDE.md', 'SERVICES.md', 'README.md', 'KNOWLEDGE.md'];
+const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 'KNOWLEDGE.md'];
 
 /**
  * Discover context sources in a workspace and adapt them all into ContextNodes.
  *
  * Discovery order:
- * 1. Root-level known files (CONSTITUTION.md, CLAUDE.md, etc.)
+ * 1. Root-level known files (AGENTS.md preferred over CLAUDE.md)
  * 2. .cursor/rules/*.mdc files
- * 3. Spoke-level CONSTITUTION.md and CLAUDE.md (one level deep)
+ * 3. Spoke constitutions and project instructions (see docs/agent-instructions.md)
  * 4. memory/Profile/*.md files
  */
-export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNode[]> {
+export async function discoverAndAdapt(
+  workspaceRoot: string,
+  scopePath?: string,
+): Promise<ContextNode[]> {
   const root = path.resolve(workspaceRoot);
+  const scope = scopePath === undefined ? undefined : path.resolve(root, scopePath);
+  if (scope && scope !== root && !scope.startsWith(root + path.sep)) {
+    throw new Error('Instruction scope must be inside the workspace');
+  }
+  if (scope) {
+    let current = root;
+    for (const part of path.relative(root, scope).split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      const info = await fs.lstat(current);
+      if (info.isSymbolicLink() || !info.isDirectory()) {
+        throw new Error('Instruction scope must be a directory without symlinks');
+      }
+    }
+  }
   const ignorePatterns = await loadIgnorePatterns(root);
   const allNodes: ContextNode[] = [];
 
+  async function readInstructions(directory: string): Promise<void> {
+    const agents = path.join(directory, 'AGENTS.md');
+    // Presence determines precedence even when the canonical file is ignored.
+    const canonical = await entryExists(agents);
+    const selected = canonical ? agents : path.join(directory, 'CLAUDE.md');
+    if (shouldIgnore(path.relative(root, selected), ignorePatterns)) return;
+    if (await entryExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
+  }
+
   // 1. Root-level files
   for (const file of ROOT_FILES) {
+    if (file === 'AGENTS.md') {
+      await readInstructions(root);
+      continue;
+    }
     if (shouldIgnore(file, ignorePatterns)) continue;
     const fullPath = path.join(root, file);
     if (await fileExists(fullPath)) {
@@ -38,7 +68,7 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
   // 2. .cursor/rules/*.mdc
   const cursorRulesDir = path.join(root, '.cursor', 'rules');
   if (await dirExists(cursorRulesDir)) {
-    const files = await fs.readdir(cursorRulesDir);
+    const files = (await fs.readdir(cursorRulesDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.mdc')) continue;
       const relPath = path.join('.cursor', 'rules', file);
@@ -50,8 +80,10 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
   }
 
   // 3. Spoke-level files (one directory deep)
-  try {
-    const entries = await fs.readdir(root, { withFileTypes: true });
+  {
+    const entries = (await fs.readdir(root, { withFileTypes: true })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') {
@@ -59,22 +91,33 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
       }
       if (shouldIgnore(entry.name + '/', ignorePatterns)) continue;
 
-      for (const spokeFile of ['CONSTITUTION.md', 'CLAUDE.md']) {
+      if (!scope) await readInstructions(path.join(root, entry.name));
+      for (const spokeFile of ['CONSTITUTION.md']) {
         const fullPath = path.join(root, entry.name, spokeFile);
-        if (await fileExists(fullPath)) {
+        if (
+          !shouldIgnore(path.relative(root, fullPath), ignorePatterns) &&
+          (await fileExists(fullPath))
+        ) {
           const nodes = await adaptFile(fullPath, root);
           allNodes.push(...nodes);
         }
       }
     }
-  } catch {
-    // Directory listing failed — skip spoke discovery
+  }
+  if (scope) {
+    let directory = root;
+    for (const part of path.relative(root, scope).split(path.sep).filter(Boolean)) {
+      directory = path.join(directory, part);
+      if (!shouldIgnore(path.relative(root, directory) + '/', ignorePatterns)) {
+        await readInstructions(directory);
+      }
+    }
   }
 
   // 4. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
   if (await dirExists(profileDir)) {
-    const files = await fs.readdir(profileDir);
+    const files = (await fs.readdir(profileDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
       const relPath = path.join('memory', 'Profile', file);
@@ -86,6 +129,16 @@ export async function discoverAndAdapt(workspaceRoot: string): Promise<ContextNo
   }
 
   return allNodes;
+}
+
+async function entryExists(p: string): Promise<boolean> {
+  try {
+    await fs.lstat(p);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
+  }
 }
 
 async function fileExists(p: string): Promise<boolean> {
@@ -106,6 +159,7 @@ async function dirExists(p: string): Promise<boolean> {
 
 // Re-exports
 export { findAdapter, adaptFile } from './registry.js';
+export { agentsAdapter } from './agents.js';
 export { claudeAdapter } from './claude.js';
 export { cursorAdapter } from './cursor.js';
 export { constitutionAdapter } from './constitution.js';

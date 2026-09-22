@@ -191,8 +191,7 @@ export class GoalRegistry {
   addContribution(goalId: string, input: AddContributionInput): UsageContribution {
     // Verify goal exists
     const goal = this.store.get('SELECT id FROM goals WHERE id = ?', goalId) as
-      | { id: string }
-      | undefined;
+      { id: string } | undefined;
 
     if (!goal) {
       throw new Error(`Goal not found: ${goalId}`);
