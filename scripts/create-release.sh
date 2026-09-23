@@ -81,13 +81,17 @@ if ! bootstrap_with_retry; then
 fi
 
 for _ in {1..20}; do
-  if curl -fsS http://127.0.0.1:4195/health >/dev/null; then
+  if curl -fsS http://127.0.0.1:4195/health >/dev/null && \
+    curl -fsS --max-time 15 \
+      -H 'content-type: application/json' \
+      -d '{"spoke":"/Users/dsaridak/tools/mitzo","budget":1000}' \
+      http://127.0.0.1:4195/compile >/dev/null; then
     echo "Released $SOURCE_COMMIT from $REMOTE_REF to $RELEASE_DIR"
     exit 0
   fi
   sleep 0.5
 done
 
-echo "ContexGin health check failed; restoring previous launchd deployment" >&2
+echo "ContexGin health or configured-root compile check failed; restoring previous deployment" >&2
 rollback
 exit 1

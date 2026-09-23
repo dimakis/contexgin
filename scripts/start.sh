@@ -25,6 +25,8 @@ fi
 
 exec node dist/cli.js serve \
   /Users/dsaridak/redhat/mgmt \
+  /Users/dsaridak/redhat/openshell \
+  /Users/dsaridak/tools/mitzo \
   /Users/dsaridak/projects/contexgin \
   /Users/dsaridak/projects/centaur \
   --db /Users/dsaridak/.local/share/contexgin/graph.db \

@@ -614,6 +614,38 @@ context:
       }
     });
 
+    it('compiles context for a configured hub root path', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().spoke).toContain('workspace');
+    });
+
+    it('compiles an approved root that is absent from the graph', async () => {
+      const root = path.join(tmpDir, 'root-without-constitution');
+      await fs.mkdir(root, { recursive: true });
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Repository guidance\n');
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().spoke).toBe(root);
+    });
+
     it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });

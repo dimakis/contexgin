@@ -68,7 +68,7 @@ export interface HealthResponse {
 }
 
 export interface CompileRequest {
-  /** Spoke path or id to compile context for */
+  /** Configured workspace/hub/spoke path or id to compile context for */
   spoke: string;
   /** Optional task description for relevance ranking */
   task?: string;
