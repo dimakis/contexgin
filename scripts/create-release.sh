@@ -6,6 +6,24 @@ SOURCE_REF="${1:-HEAD}"
 RELEASE_ROOT="${CONTEXGIN_RELEASE_ROOT:-$HOME/projects/contexgin-releases}"
 PLIST_DEST="$HOME/Library/LaunchAgents/com.contexgin.server.plist"
 DOMAIN="gui/$(id -u)"
+LABEL="com.contexgin.server"
+
+bootout_and_wait() {
+  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  for _ in {1..50}; do
+    launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || return 0
+    sleep 0.1
+  done
+  return 1
+}
+
+bootstrap_with_retry() {
+  for _ in {1..10}; do
+    launchctl bootstrap "$DOMAIN" "$PLIST_DEST" && return 0
+    sleep 0.2
+  done
+  return 1
+}
 
 git -C "$SOURCE_ROOT" fetch --prune origin main
 SOURCE_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --verify "$SOURCE_REF^{commit}")"
@@ -45,18 +63,18 @@ if [ -f "$PLIST_DEST" ]; then
 fi
 
 rollback() {
-  launchctl bootout "$DOMAIN/com.contexgin.server" 2>/dev/null || true
+  bootout_and_wait || true
   if [ -n "$PLIST_PREVIOUS" ]; then
     mv "$PLIST_PREVIOUS" "$PLIST_DEST"
-    launchctl bootstrap "$DOMAIN" "$PLIST_DEST"
+    bootstrap_with_retry
   elif [ -f "$PLIST_DEST" ]; then
     mv "$PLIST_DEST" "${PLIST_DEST}.failed"
   fi
 }
 
-launchctl bootout "$DOMAIN/com.contexgin.server" 2>/dev/null || true
+bootout_and_wait
 mv "$PLIST_NEXT" "$PLIST_DEST"
-if ! launchctl bootstrap "$DOMAIN" "$PLIST_DEST"; then
+if ! bootstrap_with_retry; then
   echo "ContexGin launchd registration failed; restoring previous deployment" >&2
   rollback
   exit 1
