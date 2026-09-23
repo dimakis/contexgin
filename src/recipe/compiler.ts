@@ -122,6 +122,12 @@ async function compileBootContext(
       return config.constitution !== false;
     }
 
+    // Canonical instructions use their own switch when provided. Falling back to
+    // claudeMd preserves existing recipe behavior as workspaces migrate files.
+    if (basename === 'AGENTS.md') {
+      return (config.agentInstructions ?? config.claudeMd) !== false;
+    }
+
     // CLAUDE.md — exclude if explicitly disabled
     if (basename === 'CLAUDE.md') {
       return config.claudeMd !== false;

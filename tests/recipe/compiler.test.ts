@@ -99,6 +99,30 @@ describe('compileAgent', () => {
     expect(result.bootContext.sources).not.toContain('CLAUDE.md');
   });
 
+  it('keeps claudeMd false compatible after migration to AGENTS.md', async () => {
+    await fs.rm(path.join(tmpDir, 'CLAUDE.md'));
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), 'MIGRATED_INSTRUCTIONS');
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 8000, claudeMd: false };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.sources).not.toContain('AGENTS.md');
+    expect(result.bootContext.content).not.toContain('MIGRATED_INSTRUCTIONS');
+  });
+
+  it('can configure canonical instructions independently of legacy CLAUDE.md', async () => {
+    await fs.rm(path.join(tmpDir, 'CLAUDE.md'));
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), 'CANONICAL_INSTRUCTIONS');
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 8000, agentInstructions: false };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.sources).not.toContain('AGENTS.md');
+    expect(result.bootContext.content).not.toContain('CANONICAL_INSTRUCTIONS');
+  });
+
   it('compiles context blocks from files', async () => {
     const blockFile = path.join(tmpDir, 'block.md');
     await fs.writeFile(blockFile, '# Context Block\n\nSome context here.');

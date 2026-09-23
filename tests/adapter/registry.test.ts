@@ -137,7 +137,11 @@ describe('discoverAndAdapt', () => {
       expect(nodes.length).toBeGreaterThan(5);
 
       const formats = new Set(nodes.map((n) => n.origin.format));
-      expect(formats).toContain('claude_md');
+      const hasCanonical = await fs.access(path.join(mgmtRoot, 'AGENTS.md')).then(
+        () => true,
+        () => false,
+      );
+      expect(formats).toContain(hasCanonical ? 'agents_md' : 'claude_md');
       expect(formats).toContain('constitution');
 
       // All nodes should be valid

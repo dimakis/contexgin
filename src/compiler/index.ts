@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { estimateTokens } from './trimmer.js';
 import type {
   CompileOptions,
@@ -138,34 +139,13 @@ export function trimNodesToBudget(
 ): { included: RankedNode[]; trimmed: RankedNode[] } {
   const included: RankedNode[] = [];
   const trimmed: RankedNode[] = [];
-  let used = 0;
-
-  // Reserve budget for group heading overhead (## Heading\n\n per unique type)
-  const seenTypes = new Set<string>();
 
   for (const node of nodes) {
-    let overhead = 0;
-    if (!seenTypes.has(node.type)) {
-      const heading = TYPE_GROUP_HEADINGS[node.type] || node.type;
-      overhead = estimateTokens(`## ${heading}\n\n`);
-    }
-
-    // Per-node heading overhead (### Title (spoke)\n\n) when content doesn't already have one
-    let nodeHeadingOverhead = 0;
-    if (nodeNeedsHeading(node)) {
-      const title = (node.origin.headingPath ?? [node.id]).slice(-1)[0];
-      const qualifier = spokeQualifier(node);
-      const heading = qualifier ? `### ${title} (${qualifier})\n\n` : `### ${title}\n\n`;
-      nodeHeadingOverhead = estimateTokens(heading);
-    }
-
-    if (used + node.tokenEstimate + nodeHeadingOverhead + overhead <= budget) {
-      if (!seenTypes.has(node.type)) {
-        seenTypes.add(node.type);
-        used += overhead;
-      }
+    // Measure the exact assembled candidate. Adding separately rounded estimates
+    // can reject a payload whose final rendered string fits the same estimator.
+    const candidate = [...included, node];
+    if (estimateTokens(assembleGroupedPayload(candidate)) <= budget) {
       included.push(node);
-      used += node.tokenEstimate + nodeHeadingOverhead;
     } else {
       trimmed.push(node);
     }
@@ -202,6 +182,7 @@ function nodeToExtractedSection(node: ContextNode): ExtractedSection {
 function nodeToSerialized(node: ContextNode): SerializedNode {
   return {
     id: node.id,
+    ...(node.required ? { required: true } : {}),
     type: node.type,
     tier: node.tier,
     content: node.content,
@@ -230,12 +211,18 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
     // Pre-adapted nodes — skip discovery and adaptation entirely
     allNodes = options.nodes;
   } else if (options.sources) {
+    const paths = new Set(options.sources.map((s) => path.resolve(s.path)));
     const nodeArrays = await Promise.all(
-      options.sources.map((s) => adaptFile(s.path, workspaceRoot)),
+      [...paths]
+        .filter(
+          (p) =>
+            path.basename(p) !== 'CLAUDE.md' || !paths.has(path.join(path.dirname(p), 'AGENTS.md')),
+        )
+        .map((p) => adaptFile(p, workspaceRoot)),
     );
     allNodes = nodeArrays.flat();
   } else {
-    allNodes = await discoverAndAdapt(workspaceRoot);
+    allNodes = await discoverAndAdapt(workspaceRoot, options.scopePath);
   }
 
   // Step 2: Rank
@@ -257,8 +244,32 @@ export async function compile(options: CompileOptions): Promise<CompiledContext>
       )
     : ranked;
 
-  // Step 4: Trim to budget
-  const { included, trimmed } = trimNodesToBudget(filtered, tokenBudget);
+  // Required nodes are admitted before optional knowledge; never silently trim them.
+  const matchesSelector = (node: ContextNode, selector: string[]) => {
+    const hp = node.origin.headingPath ?? [node.id];
+    return (
+      (selector.length === 1 && selector[0].toLowerCase() === node.id.toLowerCase()) ||
+      (selector.length > 0 &&
+        selector.length <= hp.length &&
+        selector.every((s, i) => s.toLowerCase() === hp[i].toLowerCase()))
+    );
+  };
+  for (const selector of options.required ?? []) {
+    if (!filtered.some((node) => matchesSelector(node, selector))) {
+      throw new Error(`Required context missing or excluded: ${selector.join(' > ')}`);
+    }
+  }
+  const isRequired = (node: ContextNode) =>
+    node.required || options.required?.some((selector) => matchesSelector(node, selector));
+  const required = filtered.filter(isRequired);
+  const optional = filtered.filter((n) => !isRequired(n));
+  const { included, trimmed } = trimNodesToBudget([...required, ...optional], tokenBudget);
+  if (required.some((n) => !included.includes(n))) {
+    const minimum = estimateTokens(assembleGroupedPayload(required));
+    throw new Error(
+      `Required context exceeds token budget ${tokenBudget}; needs at least ${minimum} estimated tokens. Increase the budget or reduce required guidance. Sources: ${[...new Set(required.map((n) => n.origin.relativePath))].join(', ')}`,
+    );
+  }
 
   // Step 5: Assemble grouped payload
   const bootPayload = assembleGroupedPayload(included);
