@@ -23,7 +23,8 @@ REMOTE_REF="$(git -C "$SOURCE_ROOT" branch -r --contains "$SOURCE_COMMIT" | sed 
 mkdir -p "$RELEASE_ROOT"
 RELEASE_DIR="$RELEASE_ROOT/$(printf '%s' "$SOURCE_COMMIT" | cut -c1-12)"
 if [ ! -e "$RELEASE_DIR" ]; then
-  git -C "$SOURCE_ROOT" worktree add --detach "$RELEASE_DIR" "$SOURCE_COMMIT"
+  git clone --no-local --no-checkout "$SOURCE_ROOT" "$RELEASE_DIR"
+  git -C "$RELEASE_DIR" checkout --detach "$SOURCE_COMMIT"
   (
     cd "$RELEASE_DIR"
     npm ci
@@ -48,12 +49,18 @@ rollback() {
   if [ -n "$PLIST_PREVIOUS" ]; then
     mv "$PLIST_PREVIOUS" "$PLIST_DEST"
     launchctl bootstrap "$DOMAIN" "$PLIST_DEST"
+  elif [ -f "$PLIST_DEST" ]; then
+    mv "$PLIST_DEST" "${PLIST_DEST}.failed"
   fi
 }
 
 launchctl bootout "$DOMAIN/com.contexgin.server" 2>/dev/null || true
 mv "$PLIST_NEXT" "$PLIST_DEST"
-launchctl bootstrap "$DOMAIN" "$PLIST_DEST"
+if ! launchctl bootstrap "$DOMAIN" "$PLIST_DEST"; then
+  echo "ContexGin launchd registration failed; restoring previous deployment" >&2
+  rollback
+  exit 1
+fi
 
 for _ in {1..20}; do
   if curl -fsS http://127.0.0.1:4195/health >/dev/null; then

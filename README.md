@@ -101,7 +101,7 @@ npm install github:dimakis/contexgin
 
 Run `./scripts/create-release.sh <ref>` to deploy the daemon. The command
 fetches current `origin/main`, requires the selected commit to contain main and
-exist on a remote branch, builds a detached release worktree, updates launchd
+exist on a remote branch, builds a self-contained detached release clone, updates launchd
 atomically, verifies `/health`, and restores the previous plist if the new
 release does not become healthy. The production start script also refuses a
 mutable, modified, or revision-mismatched checkout.
