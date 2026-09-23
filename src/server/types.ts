@@ -60,6 +60,8 @@ export interface ServerState {
 
 export interface HealthResponse {
   status: 'ok' | 'building';
+  /** Immutable deployed revision, when supplied by the service manager. */
+  deploymentCommit: string | null;
   uptime: number;
   hubs: number;
   spokes: number;

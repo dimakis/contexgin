@@ -328,45 +328,8 @@ Sample health response:
 
 ### Production Deployment (launchd)
 
-1. Create the start script at `scripts/start.sh`:
-
-```bash
-#!/bin/bash
-export PATH="/opt/homebrew/bin:$PATH"
-cd /path/to/contexgin
-exec node dist/cli.js serve \
-  ~/my-workspace \
-  --db ~/.local/share/contexgin/graph.db \
-  --port 4195
-```
-
-2. Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>com.contexgin.server</string>
-    <key>ProgramArguments</key><array>
-        <string>/bin/bash</string>
-        <string>/path/to/contexgin/scripts/start.sh</string>
-    </array>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>/path/to/contexgin/logs/stdout.log</string>
-    <key>StandardErrorPath</key><string>/path/to/contexgin/logs/stderr.log</string>
-</dict>
-</plist>
-```
-
-3. Load and start:
-
-```bash
-mkdir -p ~/.local/share/contexgin logs
-launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
-curl http://127.0.0.1:4195/health  # verify
-```
+Use `./scripts/create-release.sh <ref>` as described in [Production deployment](#production-deployment).
+It is the only supported production entry point; do not install a plist from a mutable checkout.
 
 For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).
 
