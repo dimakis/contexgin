@@ -75,6 +75,32 @@ function findSection(lines: string[], pattern: RegExp): string[] {
   return result;
 }
 
+function findSections(lines: string[], pattern: RegExp): string[] {
+  let collecting = false;
+  let headingLevel = 0;
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const headingMatch = /^(#{1,6})\s+/.exec(line);
+    if (
+      headingMatch &&
+      pattern.test(line) &&
+      (!collecting || headingMatch[1].length <= headingLevel)
+    ) {
+      collecting = true;
+      headingLevel = headingMatch[1].length;
+      result.push(line);
+      continue;
+    }
+    if (collecting && headingMatch && headingMatch[1].length <= headingLevel) {
+      collecting = false;
+    }
+    if (collecting) result.push(line);
+  }
+
+  return result;
+}
+
 // ── Table Parsing ────────────────────────────────────────────────
 
 interface TableRow {
@@ -252,17 +278,20 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
 function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const lines = content.split('\n');
   const boundaryHeading = /^#{1,6}\s+.*(boundar|confidential|excluded)/i;
-  const section = findSection(lines, boundaryHeading);
+  const section = findSections(lines, boundaryHeading);
   const boundaries: Boundary[] = [];
+  const boundaryRootLevel = Math.min(
+    ...section
+      .filter((line) => boundaryHeading.test(line))
+      .map((line) => /^#+/.exec(line)![0].length),
+  );
 
   // Boundaries are typically bullet lists, not tables
-  const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
   const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
-  const basePolicyLines = [sectionHeading];
+  let basePolicyLines: string[] = [];
   let activePolicyLines = [...basePolicyLines];
   let inSubsection = false;
   const policyByHeadingLevel = new Map<number, string[]>();
-  policyByHeadingLevel.set(/^#+/.exec(sectionHeading)?.[0].length ?? 1, basePolicyLines);
   let currentBullet: string | null = null;
   let currentBulletHasBlank = false;
   let currentBulletIndent = 0;
@@ -287,8 +316,17 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     }
     if (/^#{1,6}\s+/.test(line)) {
       finishBullet();
-      inSubsection = true;
       const headingLevel = /^#+/.exec(trimmed)![0].length;
+      if (headingLevel === boundaryRootLevel && boundaryHeading.test(line)) {
+        basePolicyLines = [trimmed];
+        activePolicyLines = basePolicyLines;
+        inSubsection = false;
+        policyByHeadingLevel.clear();
+        policyByHeadingLevel.set(headingLevel, basePolicyLines);
+        sawBullet = false;
+        continue;
+      }
+      inSubsection = true;
       for (const level of policyByHeadingLevel.keys()) {
         if (level >= headingLevel) policyByHeadingLevel.delete(level);
       }

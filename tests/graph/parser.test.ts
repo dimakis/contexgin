@@ -424,6 +424,21 @@ All following data is hard confidential.
       expect(result.boundaries[0].level).toBe('hard');
     });
 
+    it('preserves adjacent boundary and confidentiality sections', () => {
+      const content = `## Boundaries
+
+- Shareable with reports
+
+## Confidentiality
+
+- Payroll never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');
