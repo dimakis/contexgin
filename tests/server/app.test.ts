@@ -682,6 +682,35 @@ context:
       expect(response.json().context).not.toContain('AMBIGUOUS_SPOKE_CONTEXT');
     });
 
+    it('rejects a hub name shared by multiple configured roots', async () => {
+      const first = await createTestWorkspace(path.join(tmpDir, 'first'));
+      const second = await createTestWorkspace(path.join(tmpDir, 'second'));
+      await fs.writeFile(path.join(first, 'AGENTS.md'), '# First\n\nFIRST_HUB\n');
+      await fs.writeFile(path.join(second, 'AGENTS.md'), '# Second\n\nSECOND_HUB\n');
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [first, second],
+        dbPath: ':memory:',
+      });
+      await server.rebuild();
+
+      const ambiguous = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: 'workspace', budget: 4000 },
+      });
+      expect(ambiguous.statusCode).toBe(404);
+
+      const exact = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: second, budget: 4000 },
+      });
+      expect(exact.statusCode).toBe(200);
+      expect(exact.json().context).toContain('SECOND_HUB');
+      expect(exact.json().context).not.toContain('FIRST_HUB');
+    });
+
     it('excludes profiles when a declared memory spoke has no constitution', async () => {
       const root = await createTestWorkspace(tmpDir);
       const constitutionPath = path.join(root, 'CONSTITUTION.md');

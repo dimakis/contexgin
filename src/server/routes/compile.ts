@@ -23,12 +23,11 @@ async function resolveWorkspace(
   const expanded = query.replace(/^~(?=$|\/)/, process.env.HOME || '');
   const resolvedQuery = path.resolve(expanded);
 
-  const hub = state.graph.hubs.find(
-    (candidate) =>
-      candidate.id === query ||
-      candidate.name === query ||
-      path.resolve(candidate.path) === resolvedQuery,
+  const exactHub = state.graph.hubs.find(
+    (candidate) => candidate.id === query || path.resolve(candidate.path) === resolvedQuery,
   );
+  const namedHubs = state.graph.hubs.filter((candidate) => candidate.name === query);
+  const hub = exactHub ?? (namedHubs.length === 1 ? namedHubs[0] : undefined);
   if (hub) {
     const containingSpoke = (targetPath: string) =>
       hub.spokes
