@@ -682,6 +682,42 @@ context:
       expect(response.json().context).not.toContain('AMBIGUOUS_SPOKE_CONTEXT');
     });
 
+    it('excludes profiles when a declared memory spoke has no constitution', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const constitutionPath = path.join(root, 'CONSTITUTION.md');
+      const constitution = await fs.readFile(constitutionPath, 'utf8');
+      await fs.writeFile(
+        constitutionPath,
+        constitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `memory/` | Private | Own constitution | Memory |',
+        ),
+      );
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'memory', 'Profile', 'private.md'),
+        'UNATTESTED_PROFILE_SECRET\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const memory = server.state.graph!.hubs[0].spokes.find((spoke) => spoke.name === 'memory');
+      expect(memory).toBeDefined();
+      expect(memory!.constitution).toBeNull();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('UNATTESTED_PROFILE_SECRET');
+    });
+
     it('compiles an approved root that is absent from the graph', async () => {
       const root = path.join(tmpDir, 'root-without-constitution');
       await fs.mkdir(root, { recursive: true });

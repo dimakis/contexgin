@@ -36,7 +36,9 @@ async function resolveWorkspace(
       id: hub.id,
       path: hub.path,
       rootOnly: true,
-      includeProfiles: Boolean(profileSpoke && profileSpoke.confidentiality !== 'hard'),
+      includeProfiles: Boolean(
+        profileSpoke?.constitution && profileSpoke.confidentiality !== 'hard',
+      ),
     };
   }
 
