@@ -313,6 +313,19 @@ Path | What belongs here
       expect(result.boundaries[1].excludedFrom).toEqual([]);
     });
 
+    it('classifies a confidentiality rule across wrapped bullet lines', () => {
+      const content = `## Confidentiality
+
+- Personal data
+  never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toContain('Personal data never leaves this spoke');
+      expect(result.boundaries[0].excludedFrom).toEqual([]);
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');

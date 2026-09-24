@@ -257,12 +257,17 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
 
   // Boundaries are typically bullet lists, not tables
   const bulletItems: string[] = [];
+  let currentBullet: string | null = null;
   for (const line of section) {
     const match = /^\s*[-*]\s+(.+)/.exec(line);
     if (match) {
-      bulletItems.push(match[1]);
+      if (currentBullet) bulletItems.push(currentBullet);
+      currentBullet = match[1];
+    } else if (currentBullet && /^\s+\S/.test(line)) {
+      currentBullet += ` ${line.trim()}`;
     }
   }
+  if (currentBullet) bulletItems.push(currentBullet);
 
   if (bulletItems.length > 0) {
     const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
