@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import * as path from 'node:path';
 import { compile } from '../../compiler/index.js';
+import type { ContextSource } from '../../compiler/types.js';
 import { findSpoke } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
@@ -9,7 +10,7 @@ function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
   query: string,
-): { id: string; path: string } | null {
+): { id: string; path: string; sources?: ContextSource[] } | null {
   if (!state.graph) return null;
 
   const spoke = findSpoke(state.graph, query);
@@ -24,7 +25,19 @@ function resolveWorkspace(
       candidate.name === query ||
       path.resolve(candidate.path) === resolvedQuery,
   );
-  if (hub) return hub;
+  if (hub) {
+    return {
+      id: hub.id,
+      path: hub.path,
+      sources: [
+        {
+          path: hub.constitution.sourcePath,
+          kind: 'constitution',
+          relativePath: path.relative(hub.path, hub.constitution.sourcePath),
+        },
+      ],
+    };
+  }
 
   // A configured root can be valid compiler input even when it has no
   // CONSTITUTION.md and therefore is intentionally absent from the graph.
@@ -61,6 +74,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState, config: S
     try {
       const compiled = await compile({
         workspaceRoot: workspace.path,
+        sources: workspace.sources,
         tokenBudget: budget,
         taskHint: task,
       });

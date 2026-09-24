@@ -12,6 +12,8 @@ describe('deployment contract', () => {
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
     expect(script).toContain("awk 'NF == 1 { print $1; exit }'");
     expect(script).toContain('refs/heads/$REMOTE_BRANCH:refs/remotes/origin/$REMOTE_BRANCH');
+    expect(script).toContain('"$SOURCE_COMMIT" "refs/remotes/origin/$REMOTE_BRANCH"');
+    expect(script).toContain('scripts/render-launchd-plist.py');
     expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
     expect(script).toContain('LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"');
     expect(script).not.toContain('LOCK_FILE="$RELEASE_ROOT');
@@ -45,6 +47,23 @@ describe('deployment contract', () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('another ContexGin deployment is active');
+  });
+
+  it('renders launchd paths with plist-aware escaping', () => {
+    const root = mkdtempSync(join(tmpdir(), 'contexgin-plist-'));
+    const rendered = join(root, 'rendered.plist');
+    const release = join(root, 'release & | path');
+    execFileSync('python3', [
+      join(repoRoot, 'scripts/render-launchd-plist.py'),
+      join(repoRoot, 'infra/com.contexgin.server.plist'),
+      rendered,
+      release,
+      'a'.repeat(40),
+    ]);
+
+    const xml = readFileSync(rendered, 'utf8');
+    expect(xml).toContain('release &amp; | path');
+    expect(xml).toContain('a'.repeat(40));
   });
 
   it('rejects staged source drift and modified generated artifacts or dependencies', () => {

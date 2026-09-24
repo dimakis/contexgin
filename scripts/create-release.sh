@@ -92,6 +92,11 @@ if [ ! -e "$RELEASE_DIR" ]; then
   git -C "$RELEASE_TEMP/release" remote set-url origin "$ORIGIN_URL"
   git -C "$RELEASE_TEMP/release" fetch --no-tags origin \
     "+refs/heads/$REMOTE_BRANCH:refs/remotes/origin/$REMOTE_BRANCH"
+  git -C "$RELEASE_TEMP/release" merge-base --is-ancestor \
+    "$SOURCE_COMMIT" "refs/remotes/origin/$REMOTE_BRANCH" || {
+    echo "Refusing release: $SOURCE_COMMIT is no longer published on $REMOTE_REF" >&2
+    exit 1
+  }
   git -C "$RELEASE_TEMP/release" checkout --detach "$SOURCE_COMMIT"
   (
     cd "$RELEASE_TEMP/release"
@@ -106,8 +111,11 @@ fi
 mkdir -p "$RELEASE_DIR/logs"
 
 PLIST_NEXT="$(mktemp "$HOME/Library/LaunchAgents/.com.contexgin.server.XXXXXX")"
-sed -e "s|__RELEASE_DIR__|$RELEASE_DIR|g" -e "s|__SOURCE_COMMIT__|$SOURCE_COMMIT|g" \
-  "$RELEASE_DIR/infra/com.contexgin.server.plist" > "$PLIST_NEXT"
+python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
+  "$RELEASE_DIR/infra/com.contexgin.server.plist" \
+  "$PLIST_NEXT" \
+  "$RELEASE_DIR" \
+  "$SOURCE_COMMIT"
 plutil -lint "$PLIST_NEXT" >/dev/null
 
 if [ -f "$PLIST_DEST" ]; then
