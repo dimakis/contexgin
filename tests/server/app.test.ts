@@ -797,6 +797,15 @@ context:
       );
       await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
       await fs.writeFile(path.join(root, 'memory', 'Profile', 'private.md'), 'PROFILE_SECRET\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# GRAPHLESS_CURSOR_SECRET\n',
+      );
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
 
@@ -811,6 +820,7 @@ context:
       expect(response.json().context).toContain('ROOT_ONLY');
       expect(response.json().context).not.toContain('CHILD_SECRET');
       expect(response.json().context).not.toContain('PROFILE_SECRET');
+      expect(response.json().context).not.toContain('GRAPHLESS_CURSOR_SECRET');
     });
 
     it('rejects a configured root that does not exist', async () => {
