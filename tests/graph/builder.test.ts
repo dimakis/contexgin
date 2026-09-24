@@ -144,6 +144,18 @@ describe('buildGraph', () => {
       expect(auth.confidentiality).toBe('hard');
     });
 
+    it('does not promote a neutral rule because a sibling rule is targeted hard', async () => {
+      const root = await createFixtureWorkspace(tmpDir);
+      await fs.appendFile(
+        path.join(root, 'auth', 'CONSTITUTION.md'),
+        '\n## Boundaries\n\n- Never flows into `api/`.\n- Shareable with reports.\n',
+      );
+      const graph = await buildGraph([root]);
+      const auth = graph.hubs[0].spokes.find((spoke) => spoke.name === 'auth')!;
+
+      expect(auth.confidentiality).toBe('none');
+    });
+
     it('records violation for missing spoke constitution', async () => {
       const root = await createFixtureWorkspace(tmpDir);
       const graph = await buildGraph([root]);

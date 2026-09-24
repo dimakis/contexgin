@@ -251,7 +251,8 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
 
 function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const lines = content.split('\n');
-  const section = findSection(lines, /^#{1,6}\s+.*(boundar|confidential|excluded)/i);
+  const boundaryHeading = /^#{1,6}\s+.*(boundar|confidential|excluded)/i;
+  const section = findSection(lines, boundaryHeading);
   const boundaries: Boundary[] = [];
 
   // Boundaries are typically bullet lists, not tables
@@ -264,7 +265,8 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   }
 
   if (bulletItems.length > 0) {
-    const sectionLevel = inferConfidentialityLevel(section);
+    const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
+    const sectionLevel = inferConfidentialityLevel([sectionHeading]);
     for (const item of bulletItems) {
       // Look for backtick-enclosed spoke references
       const refs = [...item.matchAll(/`([^`]+\/)`/g)];

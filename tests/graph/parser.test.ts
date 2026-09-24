@@ -299,6 +299,20 @@ Path | What belongs here
       expect(result.boundaries[0].level).toBe('soft');
     });
 
+    it('does not inherit confidentiality from a sibling bullet', () => {
+      const content = `## Confidentiality
+
+- Never flows into \`api/\`
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual(['api/']);
+      expect(result.boundaries[1].level).toBe('none');
+      expect(result.boundaries[1].excludedFrom).toEqual([]);
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');
