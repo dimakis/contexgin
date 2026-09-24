@@ -11,6 +11,7 @@ describe('deployment contract', () => {
     const script = readFileSync(join(repoRoot, 'scripts/create-release.sh'), 'utf8');
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
     expect(script).toContain("awk 'NF == 1 { print $1; exit }'");
+    expect(script).toContain('refs/heads/$REMOTE_BRANCH:refs/remotes/origin/$REMOTE_BRANCH');
     expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
     expect(script).toContain('LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"');
     expect(script).not.toContain('LOCK_FILE="$RELEASE_ROOT');
