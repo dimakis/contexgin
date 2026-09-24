@@ -38,6 +38,9 @@ describe('deployment contract', () => {
     expect(script).toContain('lsof -nP -iTCP:"$port" -sTCP:LISTEN -t');
     expect(script).toContain('grep -Fxq "$job_pid"');
     expect(script).toContain('CONTEXGIN_LEGACY_WORKING_DIRECTORY');
+    expect(script).toContain('CONTEXGIN_LEGACY_PORT');
+    expect(script).toContain('previous plist has no port');
+    expect(script).not.toContain('PREVIOUS_PORT="${PREVIOUS_PORT:-4195}"');
     expect(script).toContain(
       'plutil -insert WorkingDirectory -string "$PREVIOUS_WORKING_DIRECTORY" "$PLIST_PREVIOUS"',
     );

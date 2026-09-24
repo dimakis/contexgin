@@ -116,8 +116,10 @@ restores both the previous revision and its configuration.
 For the first guarded deployment over an older launchd plist that has no
 `WorkingDirectory`, the script derives the checkout from the absolute program path
 when possible. Otherwise, set `CONTEXGIN_LEGACY_WORKING_DIRECTORY` to the existing
-checkout for that one migration. Rollback verifies the restored launchd job, its
-working directory, and ownership of the listening port before accepting it.
+checkout for that one migration. If the old plist does not record its listener,
+also set `CONTEXGIN_LEGACY_PORT` to the old service port (including `4195` when it
+used the default). Rollback verifies the restored launchd job, its working
+directory, and ownership of the listening port before accepting it.
 
 ## Library Usage
 

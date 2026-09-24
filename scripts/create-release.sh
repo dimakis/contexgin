@@ -194,7 +194,20 @@ if [ -f "$PLIST_DEST" ]; then
   cp "$PLIST_DEST" "$PLIST_PREVIOUS"
   PREVIOUS_COMMIT="$(plutil -extract EnvironmentVariables.CONTEXGIN_DEPLOYMENT_COMMIT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   PREVIOUS_PORT="$(plutil -extract EnvironmentVariables.CONTEXGIN_PORT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
-  PREVIOUS_PORT="${PREVIOUS_PORT:-4195}"
+  if [ -z "$PREVIOUS_PORT" ]; then
+    PREVIOUS_PORT="${CONTEXGIN_LEGACY_PORT:-}"
+    [ -n "$PREVIOUS_PORT" ] || {
+      echo "Refusing release: previous plist has no port; set CONTEXGIN_LEGACY_PORT for the first guarded deployment" >&2
+      exit 1
+    }
+  fi
+  case "$PREVIOUS_PORT" in
+    *[!0-9]*|'') echo "Refusing release: previous ContexGin port is invalid" >&2; exit 1 ;;
+  esac
+  [ "$PREVIOUS_PORT" -ge 1 ] && [ "$PREVIOUS_PORT" -le 65535 ] || {
+    echo "Refusing release: previous ContexGin port is invalid" >&2
+    exit 1
+  }
   PREVIOUS_WORKING_DIRECTORY="$(plutil -extract WorkingDirectory raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   if [ -z "$PREVIOUS_WORKING_DIRECTORY" ]; then
     PREVIOUS_PROGRAM="$(plutil -extract ProgramArguments.0 raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
