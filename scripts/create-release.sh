@@ -17,6 +17,8 @@ RELEASE_TEMP=""
 CUTOVER_ACTIVE=0
 PLIST_PREVIOUS=""
 PLIST_NEXT=""
+PREVIOUS_COMMIT=""
+PREVIOUS_PORT="4195"
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
 if [ "$SERVE_DB_PATH" != ":memory:" ]; then
@@ -47,11 +49,38 @@ bootstrap_with_retry() {
   return 1
 }
 
+wait_for_deployment_health() {
+  local port="$1"
+  local expected_commit="$2"
+  local health_json
+  for _ in {1..20}; do
+    health_json="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/health" 2>/dev/null || true)"
+    if [ -n "$expected_commit" ]; then
+      node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
+    elif [ -n "$health_json" ]; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
 rollback() {
-  bootout_and_wait || true
+  if ! bootout_and_wait; then
+    echo "ROLLBACK FAILED: rejected ContexGin job could not be stopped" >&2
+    return 1
+  fi
   if [ -n "$PLIST_PREVIOUS" ] && [ -f "$PLIST_PREVIOUS" ]; then
     mv "$PLIST_PREVIOUS" "$PLIST_DEST"
-    bootstrap_with_retry || true
+    PLIST_PREVIOUS=""
+    if ! bootstrap_with_retry; then
+      echo "ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped" >&2
+      return 1
+    fi
+    if ! wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT"; then
+      echo "ROLLBACK FAILED: previous ContexGin deployment did not become healthy" >&2
+      return 1
+    fi
   elif [ -f "$PLIST_DEST" ]; then
     mv "$PLIST_DEST" "${PLIST_DEST}.failed"
   fi
@@ -59,11 +88,18 @@ rollback() {
 
 cleanup() {
   local status=$?
+  local rollback_failed=0
   trap - EXIT INT TERM HUP
-  if [ "$CUTOVER_ACTIVE" = "1" ]; then rollback; fi
+  if [ "$CUTOVER_ACTIVE" = "1" ] && ! rollback; then
+    rollback_failed=1
+    status=1
+  fi
   [ -z "$PLIST_NEXT" ] || [ ! -f "$PLIST_NEXT" ] || mv "$PLIST_NEXT" "${PLIST_NEXT}.abandoned"
   if [ -n "$RELEASE_TEMP" ] && [ -d "$RELEASE_TEMP" ]; then rm -rf -- "$RELEASE_TEMP"; fi
   rm -f -- "$LOCK_FILE"
+  if [ "$rollback_failed" = "1" ]; then
+    echo "ContexGin rollback failed; inspect $PLIST_DEST and retained release directories" >&2
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -136,6 +172,9 @@ plutil -lint "$PLIST_NEXT" >/dev/null
 if [ -f "$PLIST_DEST" ]; then
   PLIST_PREVIOUS="$(mktemp "$HOME/Library/LaunchAgents/.com.contexgin.previous.XXXXXX")"
   cp "$PLIST_DEST" "$PLIST_PREVIOUS"
+  PREVIOUS_COMMIT="$(plutil -extract EnvironmentVariables.CONTEXGIN_DEPLOYMENT_COMMIT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
+  PREVIOUS_PORT="$(plutil -extract EnvironmentVariables.CONTEXGIN_PORT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
+  PREVIOUS_PORT="${PREVIOUS_PORT:-4195}"
 fi
 
 CUTOVER_ACTIVE=1

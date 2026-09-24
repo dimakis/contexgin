@@ -30,6 +30,13 @@ describe('deployment contract', () => {
     expect(script).toContain('CONTEXGIN_PROBE_ROOT');
     expect(script).toContain('mkdir -p "$(dirname "$SERVE_DB_PATH")"');
     expect(script).toContain('CONTEXGIN_DB_PATH must be absolute or :memory:');
+    expect(script).toContain('wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT"');
+    expect(script).toContain('ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped');
+    expect(script).toContain(
+      'ROLLBACK FAILED: previous ContexGin deployment did not become healthy',
+    );
+    expect(script).not.toContain('bootout_and_wait || true');
+    expect(script).not.toContain('bootstrap_with_retry || true');
     expect(script).not.toContain('/Users/dsaridak');
     expect(readFileSync(join(repoRoot, 'scripts/start.sh'), 'utf8')).not.toContain(
       '/Users/dsaridak',
