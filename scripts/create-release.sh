@@ -19,6 +19,12 @@ PLIST_PREVIOUS=""
 PLIST_NEXT=""
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
+if [ "$SERVE_DB_PATH" != ":memory:" ]; then
+  case "$SERVE_DB_PATH" in
+    /*) mkdir -p "$(dirname "$SERVE_DB_PATH")" ;;
+    *) echo "Refusing release: CONTEXGIN_DB_PATH must be absolute or :memory:" >&2; exit 1 ;;
+  esac
+fi
 if ! shlock -f "$LOCK_FILE" -p "$$"; then
   echo "Refusing release: another ContexGin deployment is active" >&2
   exit 1

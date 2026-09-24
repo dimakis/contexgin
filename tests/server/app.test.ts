@@ -636,6 +636,11 @@ context:
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
 
+      const memorySpoke = server.state.graph!.hubs[0].spokes.find(
+        (spoke) => spoke.name === 'memory',
+      );
+      expect(memorySpoke?.confidentiality).toBe('hard');
+
       const response = await server.app.inject({
         method: 'POST',
         url: '/compile',
@@ -652,7 +657,14 @@ context:
     it('compiles an approved root that is absent from the graph', async () => {
       const root = path.join(tmpDir, 'root-without-constitution');
       await fs.mkdir(root, { recursive: true });
-      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Repository guidance\n');
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Repository guidance\n\nROOT_ONLY\n');
+      await fs.mkdir(path.join(root, 'private-child'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'private-child', 'AGENTS.md'),
+        '# Private child\n\nCHILD_SECRET\n',
+      );
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(path.join(root, 'memory', 'Profile', 'private.md'), 'PROFILE_SECRET\n');
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
 
@@ -664,6 +676,9 @@ context:
 
       expect(response.statusCode).toBe(200);
       expect(response.json().spoke).toBe(root);
+      expect(response.json().context).toContain('ROOT_ONLY');
+      expect(response.json().context).not.toContain('CHILD_SECRET');
+      expect(response.json().context).not.toContain('PROFILE_SECRET');
     });
 
     it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {

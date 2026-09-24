@@ -52,7 +52,10 @@ function resolveWorkspace(
   if (configuredRoot) {
     const expandedRoot = configuredRoot.replace(/^~(?=$|\/)/, process.env.HOME || '');
     const rootPath = path.resolve(expandedRoot);
-    return { id: rootPath, path: rootPath };
+    // Without a hub constitution there is no graph boundary model. Compile
+    // only root-owned sources and suppress nested profiles rather than
+    // treating one-level children as implicitly shareable.
+    return { id: rootPath, path: rootPath, rootOnly: true, includeProfiles: false };
   }
 
   return null;

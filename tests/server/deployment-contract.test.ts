@@ -28,6 +28,8 @@ describe('deployment contract', () => {
     expect(script).not.toContain('RELEASE_DIR}.invalid');
     expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
     expect(script).toContain('CONTEXGIN_PROBE_ROOT');
+    expect(script).toContain('mkdir -p "$(dirname "$SERVE_DB_PATH")"');
+    expect(script).toContain('CONTEXGIN_DB_PATH must be absolute or :memory:');
     expect(script).not.toContain('/Users/dsaridak');
     expect(readFileSync(join(repoRoot, 'scripts/start.sh'), 'utf8')).not.toContain(
       '/Users/dsaridak',
