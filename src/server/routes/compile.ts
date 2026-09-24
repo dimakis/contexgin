@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { discoverAndAdapt } from '../../adapter/index.js';
 import { compile } from '../../compiler/index.js';
@@ -6,11 +7,11 @@ import { findSpoke } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
 
-function resolveWorkspace(
+async function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
   query: string,
-): { id: string; path: string; rootOnly?: boolean; includeProfiles?: boolean } | null {
+): Promise<{ id: string; path: string; rootOnly?: boolean; includeProfiles?: boolean } | null> {
   if (!state.graph) return null;
 
   const spoke = findSpoke(state.graph, query);
@@ -52,6 +53,12 @@ function resolveWorkspace(
   if (configuredRoot) {
     const expandedRoot = configuredRoot.replace(/^~(?=$|\/)/, process.env.HOME || '');
     const rootPath = path.resolve(expandedRoot);
+    try {
+      const stat = await fs.stat(rootPath);
+      if (!stat.isDirectory()) return null;
+    } catch {
+      return null;
+    }
     // Without a hub constitution there is no graph boundary model. Compile
     // only root-owned sources and suppress nested profiles rather than
     // treating one-level children as implicitly shareable.
@@ -72,7 +79,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState, config: S
       return reply.status(400).send({ error: 'Missing required field: spoke' });
     }
 
-    const workspace = resolveWorkspace(state, config, spokeQuery);
+    const workspace = await resolveWorkspace(state, config, spokeQuery);
     if (!workspace) {
       return reply.status(404).send({ error: `Workspace not found: ${spokeQuery}` });
     }

@@ -672,6 +672,25 @@ context:
       expect(response.json().context).not.toContain('PROFILE_SECRET');
     });
 
+    it('rejects a configured root that does not exist', async () => {
+      const missingRoot = path.join(tmpDir, 'missing-root');
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [missingRoot],
+        dbPath: ':memory:',
+      });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: missingRoot, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toContain('Workspace not found');
+    });
+
     it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
