@@ -340,6 +340,23 @@ All following data is hard confidential.
       expect(result.boundaries.every((boundary) => boundary.excludedFrom.length === 0)).toBe(true);
     });
 
+    it('tracks confidentiality independently across subsections', () => {
+      const content = `## Boundaries
+
+### Shareable
+
+- Team directory
+
+### Hard confidential
+
+- Employee records
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');

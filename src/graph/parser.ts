@@ -57,7 +57,7 @@ function findSection(lines: string[], pattern: RegExp): string[] {
   for (const line of lines) {
     const headingMatch = /^(#{1,6})\s+/.exec(line);
 
-    if (headingMatch && pattern.test(line)) {
+    if (!collecting && headingMatch && pattern.test(line)) {
       collecting = true;
       headingLevel = headingMatch[1].length;
       continue;
@@ -256,11 +256,20 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const boundaries: Boundary[] = [];
 
   // Boundaries are typically bullet lists, not tables
-  const bulletItems: string[] = [];
-  const sectionPolicyLines: string[] = [];
+  const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
+  const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
+  let activePolicyLines = [sectionHeading];
   let currentBullet: string | null = null;
   let sawBullet = false;
   let inComment = false;
+  const finishBullet = () => {
+    if (!currentBullet) return;
+    bulletItems.push({
+      text: currentBullet,
+      fallbackLevel: inferConfidentialityLevel(activePolicyLines),
+    });
+    currentBullet = null;
+  };
   for (const line of section) {
     const trimmed = line.trim();
     if (trimmed.startsWith('<!--')) inComment = true;
@@ -268,30 +277,34 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       if (trimmed.endsWith('-->')) inComment = false;
       continue;
     }
+    if (/^#{1,6}\s+/.test(line)) {
+      finishBullet();
+      activePolicyLines = [trimmed];
+      sawBullet = false;
+      continue;
+    }
     const match = /^\s*[-*]\s+(.+)/.exec(line);
     if (match) {
-      if (currentBullet) bulletItems.push(currentBullet);
+      finishBullet();
       currentBullet = match[1];
       sawBullet = true;
     } else if (currentBullet && /^\s+\S/.test(line)) {
       currentBullet += ` ${line.trim()}`;
     } else if (!sawBullet && trimmed) {
-      sectionPolicyLines.push(trimmed);
+      activePolicyLines.push(trimmed);
     }
   }
-  if (currentBullet) bulletItems.push(currentBullet);
+  finishBullet();
 
   if (bulletItems.length > 0) {
-    const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
-    const sectionLevel = inferConfidentialityLevel([sectionHeading, ...sectionPolicyLines]);
     for (const item of bulletItems) {
       // Look for backtick-enclosed spoke references
-      const refs = [...item.matchAll(/`([^`]+\/)`/g)];
-      const itemLevel = inferConfidentialityLevel([item]);
+      const refs = [...item.text.matchAll(/`([^`]+\/)`/g)];
+      const itemLevel = inferConfidentialityLevel([item.text]);
       boundaries.push({
         spokeId: nodeId,
-        level: itemLevel === 'none' ? sectionLevel : itemLevel,
-        description: item,
+        level: itemLevel === 'none' ? item.fallbackLevel : itemLevel,
+        description: item.text,
         excludedFrom: refs.map((ref) => ref[1]),
       });
     }
