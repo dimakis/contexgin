@@ -351,6 +351,19 @@ never leaves this spoke
       expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
     });
 
+    it('classifies a confidentiality rule across a tab-indented list paragraph', () => {
+      const content = `## Boundaries
+
+- Personal data
+
+\tnever leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
+    });
+
     it('keeps nested exclusions attached to their parent boundary', () => {
       const content = `## Boundaries
 

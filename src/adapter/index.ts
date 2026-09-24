@@ -72,13 +72,17 @@ export async function discoverAndAdapt(
 
   // 2. .cursor/rules/*.mdc
   const cursorRulesDir = path.join(root, '.cursor', 'rules');
-  if (options.includeCursorRules !== false && (await dirExists(cursorRulesDir))) {
+  if (
+    options.includeCursorRules !== false &&
+    (await directoryExistsWithoutSymlinks(root, cursorRulesDir))
+  ) {
     const files = (await fs.readdir(cursorRulesDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.mdc')) continue;
       const relPath = path.join('.cursor', 'rules', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(cursorRulesDir, file);
+      if (!(await regularFileWithoutSymlink(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
@@ -122,13 +126,17 @@ export async function discoverAndAdapt(
 
   // 4. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
-  if (options.includeProfiles !== false && (await dirExists(profileDir))) {
+  if (
+    options.includeProfiles !== false &&
+    (await directoryExistsWithoutSymlinks(root, profileDir))
+  ) {
     const files = (await fs.readdir(profileDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
       const relPath = path.join('memory', 'Profile', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(profileDir, file);
+      if (!(await regularFileWithoutSymlink(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
@@ -155,9 +163,27 @@ async function fileExists(p: string): Promise<boolean> {
   }
 }
 
-async function dirExists(p: string): Promise<boolean> {
+async function regularFileWithoutSymlink(p: string): Promise<boolean> {
   try {
-    return (await fs.stat(p)).isDirectory();
+    const info = await fs.lstat(p);
+    return info.isFile() && !info.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+async function directoryExistsWithoutSymlinks(root: string, directory: string): Promise<boolean> {
+  const relative = path.relative(root, directory);
+  if (relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return false;
+
+  let current = root;
+  try {
+    for (const part of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      const info = await fs.lstat(current);
+      if (!info.isDirectory() || info.isSymbolicLink()) return false;
+    }
+    return true;
   } catch {
     return false;
   }

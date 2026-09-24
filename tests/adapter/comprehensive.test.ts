@@ -556,6 +556,26 @@ describe('discovery scope', () => {
       },
     );
   });
+
+  it('does not follow profile or cursor-rule symlinks', async () => {
+    await withTempWorkspace(
+      async (dir) => {
+        const confidential = await writeFile(
+          dir,
+          'confidential/secret.md',
+          '## Secret\n\nSYMLINK_SECRET\n',
+        );
+        await fs.mkdir(path.join(dir, 'memory', 'Profile'), { recursive: true });
+        await fs.mkdir(path.join(dir, '.cursor', 'rules'), { recursive: true });
+        await fs.symlink(confidential, path.join(dir, 'memory', 'Profile', 'linked.md'));
+        await fs.symlink(confidential, path.join(dir, '.cursor', 'rules', 'linked.mdc'));
+      },
+      async (dir) => {
+        const nodes = await discoverAndAdapt(dir);
+        expect(nodes.some((node) => node.content.includes('SYMLINK_SECRET'))).toBe(false);
+      },
+    );
+  });
 });
 
 // ── Task Hint Boosting ──────────────────────────────────────────

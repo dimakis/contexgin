@@ -354,7 +354,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       sawBullet = true;
     } else if (currentBullet && !trimmed) {
       currentBulletHasBlank = true;
-    } else if (currentBullet && (!currentBulletHasBlank || /^\s{2,}\S/.test(line))) {
+    } else if (currentBullet && (!currentBulletHasBlank || /^(?: {2,}|\t)\S/.test(line))) {
       // CommonMark permits paragraph continuation text without indentation,
       // and indented paragraphs after a blank. Preserve both forms.
       currentBullet += ` ${line.trim()}`;
