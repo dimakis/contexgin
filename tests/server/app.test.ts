@@ -685,6 +685,21 @@ context:
     it('rejects a hub name shared by multiple configured roots', async () => {
       const first = await createTestWorkspace(path.join(tmpDir, 'first'));
       const second = await createTestWorkspace(path.join(tmpDir, 'second'));
+      const firstConstitution = path.join(first, 'CONSTITUTION.md');
+      const firstContent = await fs.readFile(firstConstitution, 'utf8');
+      await fs.writeFile(
+        firstConstitution,
+        firstContent.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `workspace/` | Engineers | Own constitution | Colliding spoke |',
+        ),
+      );
+      await fs.mkdir(path.join(first, 'workspace'));
+      await fs.writeFile(
+        path.join(first, 'workspace', 'CONSTITUTION.md'),
+        '# Workspace spoke\n\n## Purpose\n\nName collision.\n',
+      );
       await fs.writeFile(path.join(first, 'AGENTS.md'), '# First\n\nFIRST_HUB\n');
       await fs.writeFile(path.join(second, 'AGENTS.md'), '# Second\n\nSECOND_HUB\n');
       server = await createServer({

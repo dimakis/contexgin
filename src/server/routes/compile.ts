@@ -27,6 +27,7 @@ async function resolveWorkspace(
     (candidate) => candidate.id === query || path.resolve(candidate.path) === resolvedQuery,
   );
   const namedHubs = state.graph.hubs.filter((candidate) => candidate.name === query);
+  if (!exactHub && namedHubs.length > 1) return null;
   const hub = exactHub ?? (namedHubs.length === 1 ? namedHubs[0] : undefined);
   if (hub) {
     const containingSpoke = (targetPath: string) =>
