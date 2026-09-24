@@ -257,21 +257,33 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
 
   // Boundaries are typically bullet lists, not tables
   const bulletItems: string[] = [];
+  const sectionPolicyLines: string[] = [];
   let currentBullet: string | null = null;
+  let sawBullet = false;
+  let inComment = false;
   for (const line of section) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('<!--')) inComment = true;
+    if (inComment) {
+      if (trimmed.endsWith('-->')) inComment = false;
+      continue;
+    }
     const match = /^\s*[-*]\s+(.+)/.exec(line);
     if (match) {
       if (currentBullet) bulletItems.push(currentBullet);
       currentBullet = match[1];
+      sawBullet = true;
     } else if (currentBullet && /^\s+\S/.test(line)) {
       currentBullet += ` ${line.trim()}`;
+    } else if (!sawBullet && trimmed) {
+      sectionPolicyLines.push(trimmed);
     }
   }
   if (currentBullet) bulletItems.push(currentBullet);
 
   if (bulletItems.length > 0) {
     const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
-    const sectionLevel = inferConfidentialityLevel([sectionHeading]);
+    const sectionLevel = inferConfidentialityLevel([sectionHeading, ...sectionPolicyLines]);
     for (const item of bulletItems) {
       // Look for backtick-enclosed spoke references
       const refs = [...item.matchAll(/`([^`]+\/)`/g)];

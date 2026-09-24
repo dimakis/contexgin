@@ -326,6 +326,20 @@ Path | What belongs here
       expect(result.boundaries[0].excludedFrom).toEqual([]);
     });
 
+    it('uses section policy prose without contaminating sibling bullets', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+- Employee records
+- Payroll details
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries.every((boundary) => boundary.level === 'hard')).toBe(true);
+      expect(result.boundaries.every((boundary) => boundary.excludedFrom.length === 0)).toBe(true);
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');
