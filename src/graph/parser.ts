@@ -260,6 +260,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
   let activePolicyLines = [sectionHeading];
   let currentBullet: string | null = null;
+  let currentBulletHasBlank = false;
   let sawBullet = false;
   let inComment = false;
   const finishBullet = () => {
@@ -269,6 +270,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       fallbackLevel: inferConfidentialityLevel(activePolicyLines),
     });
     currentBullet = null;
+    currentBulletHasBlank = false;
   };
   for (const line of section) {
     const trimmed = line.trim();
@@ -287,11 +289,15 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     if (match) {
       finishBullet();
       currentBullet = match[1];
+      currentBulletHasBlank = false;
       sawBullet = true;
-    } else if (currentBullet && trimmed) {
-      // CommonMark permits paragraph continuation text in list items without
-      // indentation. Preserve it so a wrapped "never" policy cannot vanish.
+    } else if (currentBullet && !trimmed) {
+      currentBulletHasBlank = true;
+    } else if (currentBullet && (!currentBulletHasBlank || /^\s{2,}\S/.test(line))) {
+      // CommonMark permits paragraph continuation text without indentation,
+      // and indented paragraphs after a blank. Preserve both forms.
       currentBullet += ` ${line.trim()}`;
+      currentBulletHasBlank = false;
     } else if (currentBullet) {
       finishBullet();
     } else if (!sawBullet && trimmed) {
