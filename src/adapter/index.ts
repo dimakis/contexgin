@@ -53,7 +53,7 @@ export async function discoverAndAdapt(
     const canonical = await entryExists(agents);
     const selected = canonical ? agents : path.join(directory, 'CLAUDE.md');
     if (shouldIgnore(path.relative(root, selected), ignorePatterns)) return;
-    if (await entryExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
+    if (await fileExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
   }
 
   // 1. Root-level files
@@ -82,7 +82,7 @@ export async function discoverAndAdapt(
       const relPath = path.join('.cursor', 'rules', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(cursorRulesDir, file);
-      if (!(await regularFileWithoutSymlink(fullPath))) continue;
+      if (!(await fileExists(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
@@ -136,7 +136,7 @@ export async function discoverAndAdapt(
       const relPath = path.join('memory', 'Profile', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(profileDir, file);
-      if (!(await regularFileWithoutSymlink(fullPath))) continue;
+      if (!(await fileExists(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
@@ -156,14 +156,6 @@ async function entryExists(p: string): Promise<boolean> {
 }
 
 async function fileExists(p: string): Promise<boolean> {
-  try {
-    return (await fs.stat(p)).isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function regularFileWithoutSymlink(p: string): Promise<boolean> {
   try {
     const info = await fs.lstat(p);
     return info.isFile() && !info.isSymbolicLink();
