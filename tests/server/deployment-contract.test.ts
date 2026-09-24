@@ -35,6 +35,12 @@ describe('deployment contract', () => {
     );
     expect(script).toContain('launchctl print "$DOMAIN/$LABEL"');
     expect(script).toContain('working directory = $expected_working_directory');
+    expect(script).toContain('lsof -nP -iTCP:"$port" -sTCP:LISTEN -t');
+    expect(script).toContain('grep -Fxq "$job_pid"');
+    expect(script).toContain('CONTEXGIN_LEGACY_WORKING_DIRECTORY');
+    expect(script).toContain(
+      'wait_for_deployment_health "$SERVE_PORT" "$SOURCE_COMMIT" "$RELEASE_DIR"',
+    );
     expect(script).toContain('ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped');
     expect(script).toContain(
       'ROLLBACK FAILED: previous ContexGin deployment did not become healthy',

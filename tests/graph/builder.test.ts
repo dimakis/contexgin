@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { buildGraph } from '../../src/graph/builder.js';
+import { isAccessible } from '../../src/graph/query.js';
 
 // ── Fixtures ─────────────────────────────────────────────────────
 
@@ -114,6 +115,21 @@ describe('buildGraph', () => {
       expect(auth!.constitution).not.toBeNull();
       expect(auth!.constitution!.purpose).toBe('Authentication and token management.');
       expect(auth!.parentId).toBe(root);
+    });
+
+    it('keeps targeted hard exclusions selective instead of making the whole spoke hard', async () => {
+      const root = await createFixtureWorkspace(tmpDir);
+      await fs.appendFile(
+        path.join(root, 'auth', 'CONSTITUTION.md'),
+        '\n## Boundaries\n\n- Never flows into `api/`.\n',
+      );
+      const graph = await buildGraph([root]);
+      const auth = graph.hubs[0].spokes.find((spoke) => spoke.name === 'auth')!;
+      const api = graph.hubs[0].spokes.find((spoke) => spoke.name === 'api')!;
+
+      expect(auth.confidentiality).toBe('none');
+      expect(isAccessible(graph, api.id, auth.id)).toBe(false);
+      expect(isAccessible(graph, graph.hubs[0].id, auth.id)).toBe(true);
     });
 
     it('records violation for missing spoke constitution', async () => {

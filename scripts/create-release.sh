@@ -56,6 +56,8 @@ wait_for_deployment_health() {
   local expected_working_directory="$3"
   local health_json
   local job_output
+  local job_pid
+  local listener_pids
   for _ in {1..20}; do
     job_output="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null || true)"
     if ! printf '%s\n' "$job_output" | grep -Eq '^[[:space:]]+state = running$'; then
@@ -63,6 +65,12 @@ wait_for_deployment_health() {
       continue
     fi
     if ! printf '%s\n' "$job_output" | grep -Fq "working directory = $expected_working_directory"; then
+      sleep 0.5
+      continue
+    fi
+    job_pid="$(printf '%s\n' "$job_output" | awk '$1 == "pid" && $2 == "=" { print $3; exit }')"
+    listener_pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+    if [ -z "$job_pid" ] || ! printf '%s\n' "$listener_pids" | grep -Fxq "$job_pid"; then
       sleep 0.5
       continue
     fi
@@ -188,8 +196,19 @@ if [ -f "$PLIST_DEST" ]; then
   PREVIOUS_PORT="$(plutil -extract EnvironmentVariables.CONTEXGIN_PORT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   PREVIOUS_PORT="${PREVIOUS_PORT:-4195}"
   PREVIOUS_WORKING_DIRECTORY="$(plutil -extract WorkingDirectory raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
+  if [ -z "$PREVIOUS_WORKING_DIRECTORY" ]; then
+    PREVIOUS_PROGRAM="$(plutil -extract ProgramArguments.0 raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
+    if [ -n "$PREVIOUS_PROGRAM" ] && [ "${PREVIOUS_PROGRAM#/}" != "$PREVIOUS_PROGRAM" ]; then
+      PREVIOUS_WORKING_DIRECTORY="$(git -C "$(dirname "$PREVIOUS_PROGRAM")" rev-parse --show-toplevel 2>/dev/null || true)"
+    fi
+    PREVIOUS_WORKING_DIRECTORY="${PREVIOUS_WORKING_DIRECTORY:-${CONTEXGIN_LEGACY_WORKING_DIRECTORY:-}}"
+  fi
   [ -n "$PREVIOUS_WORKING_DIRECTORY" ] || {
-    echo "Refusing release: previous ContexGin plist has no working directory for rollback verification" >&2
+    echo "Refusing release: cannot derive the legacy working directory; set CONTEXGIN_LEGACY_WORKING_DIRECTORY for the first guarded deployment" >&2
+    exit 1
+  }
+  [ "${PREVIOUS_WORKING_DIRECTORY#/}" != "$PREVIOUS_WORKING_DIRECTORY" ] && [ -d "$PREVIOUS_WORKING_DIRECTORY" ] || {
+    echo "Refusing release: previous ContexGin working directory is not an existing absolute directory" >&2
     exit 1
   }
 fi
@@ -206,21 +225,18 @@ if ! bootstrap_with_retry; then
   exit 1
 fi
 
-for _ in {1..20}; do
-  HEALTH_JSON="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$SERVE_PORT/health" 2>/dev/null || true)"
+if wait_for_deployment_health "$SERVE_PORT" "$SOURCE_COMMIT" "$RELEASE_DIR"; then
   PROBE_BODY="$(node -e 'process.stdout.write(JSON.stringify({spoke:process.argv[1],budget:12000}))' "$PROBE_ROOT")"
-  if node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$HEALTH_JSON" "$SOURCE_COMMIT" 2>/dev/null && \
-    curl -fsS --max-time 15 \
-      -H 'content-type: application/json' \
-      -d "$PROBE_BODY" \
-      "http://127.0.0.1:$SERVE_PORT/compile" >/dev/null; then
+  if curl -fsS --connect-timeout 2 --max-time 15 \
+    -H 'content-type: application/json' \
+    -d "$PROBE_BODY" \
+    "http://127.0.0.1:$SERVE_PORT/compile" >/dev/null; then
     CUTOVER_ACTIVE=0
     [ -z "$PLIST_PREVIOUS" ] || [ ! -f "$PLIST_PREVIOUS" ] || mv "$PLIST_PREVIOUS" "${PLIST_PREVIOUS}.retired"
     echo "Released $SOURCE_COMMIT from $REMOTE_REF to $RELEASE_DIR"
     exit 0
   fi
-  sleep 0.5
-done
+fi
 
 echo "ContexGin health or configured-root compile check failed; restoring previous deployment" >&2
 exit 1

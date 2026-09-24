@@ -113,6 +113,12 @@ the persistent graph, listener, and post-cutover compile probe. The deploy comma
 records the effective service settings in the installed launchd plist, so rollback
 restores both the previous revision and its configuration.
 
+For the first guarded deployment over an older launchd plist that has no
+`WorkingDirectory`, the script derives the checkout from the absolute program path
+when possible. Otherwise, set `CONTEXGIN_LEGACY_WORKING_DIRECTORY` to the existing
+checkout for that one migration. Rollback verifies the restored launchd job, its
+working directory, and ownership of the listening port before accepting it.
+
 ## Library Usage
 
 ### Compile context for a workspace
