@@ -10,6 +10,7 @@ describe('deployment contract', () => {
   it('serializes deploys and has atomic release, rollback, and commit attestation guards', () => {
     const script = readFileSync(join(repoRoot, 'scripts/create-release.sh'), 'utf8');
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
+    expect(script).toContain("awk 'NF == 1 { print $1; exit }'");
     expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
     expect(script).toContain('LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"');
     expect(script).not.toContain('LOCK_FILE="$RELEASE_ROOT');
