@@ -14,9 +14,6 @@ async function resolveWorkspace(
 ): Promise<{ id: string; path: string; rootOnly?: boolean; includeProfiles?: boolean } | null> {
   if (!state.graph) return null;
 
-  const spoke = findSpoke(state.graph, query);
-  if (spoke) return spoke;
-
   const expanded = query.replace(/^~(?=$|\/)/, process.env.HOME || '');
   const resolvedQuery = path.resolve(expanded);
 
@@ -42,6 +39,9 @@ async function resolveWorkspace(
       includeProfiles: Boolean(profileSpoke && profileSpoke.confidentiality !== 'hard'),
     };
   }
+
+  const spoke = findSpoke(state.graph, query);
+  if (spoke) return spoke;
 
   // A configured root can be valid compiler input even when it has no
   // CONSTITUTION.md and therefore is intentionally absent from the graph.
