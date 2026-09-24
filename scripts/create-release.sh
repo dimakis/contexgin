@@ -72,12 +72,19 @@ REMOTE_REF="$(git -C "$SOURCE_ROOT" branch -r --contains "$SOURCE_COMMIT" | sed 
 }
 
 RELEASE_DIR="$RELEASE_ROOT/$(printf '%s' "$SOURCE_COMMIT" | cut -c1-12)"
+dist_sha256() {
+  (
+    cd "$1"
+    find dist -type f -exec shasum -a 256 {} \; | LC_ALL=C sort | shasum -a 256 | awk '{print $1}'
+  )
+}
 release_is_valid() {
   [ -d "$RELEASE_DIR/.git" ] &&
     [ "$(git -C "$RELEASE_DIR" rev-parse HEAD 2>/dev/null)" = "$SOURCE_COMMIT" ] &&
     ! git -C "$RELEASE_DIR" symbolic-ref --quiet HEAD >/dev/null 2>&1 &&
     git -C "$RELEASE_DIR" diff-index --quiet HEAD -- &&
-    [ -s "$RELEASE_DIR/.dist.sha256" ]
+    [ -s "$RELEASE_DIR/.dist.sha256" ] &&
+    [ "$(dist_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.dist.sha256")" ]
 }
 if [ -e "$RELEASE_DIR" ] && ! release_is_valid; then
   mv "$RELEASE_DIR" "${RELEASE_DIR}.invalid.$(date +%s)"
@@ -90,7 +97,7 @@ if [ ! -e "$RELEASE_DIR" ]; then
     cd "$RELEASE_TEMP/release"
     npm ci
     npm run build
-    find dist -type f -exec shasum -a 256 {} \; | LC_ALL=C sort | shasum -a 256 | awk '{print $1}' > .dist.sha256
+    dist_sha256 . > .dist.sha256
   )
   mv "$RELEASE_TEMP/release" "$RELEASE_DIR"
   rmdir "$RELEASE_TEMP"
@@ -121,7 +128,7 @@ if ! bootstrap_with_retry; then
 fi
 
 for _ in {1..20}; do
-  HEALTH_JSON="$(curl -fsS http://127.0.0.1:4195/health 2>/dev/null || true)"
+  HEALTH_JSON="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:4195/health 2>/dev/null || true)"
   if node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$HEALTH_JSON" "$SOURCE_COMMIT" 2>/dev/null && \
     curl -fsS --max-time 15 \
       -H 'content-type: application/json' \

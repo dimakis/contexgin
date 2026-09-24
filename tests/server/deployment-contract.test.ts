@@ -17,6 +17,10 @@ describe('deployment contract', () => {
     expect(script).toContain('mktemp -d "$RELEASE_ROOT/.build.XXXXXX"');
     expect(script).toContain('CUTOVER_ACTIVE=1');
     expect(script).toContain('h.deploymentCommit!==process.argv[2]');
+    expect(script).toContain(
+      '[ "$(dist_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.dist.sha256")" ]',
+    );
+    expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
   });
 
   it('rejects an overlapping invocation before touching Git or launchd', () => {
