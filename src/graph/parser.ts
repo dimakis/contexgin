@@ -261,6 +261,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   let activePolicyLines = [sectionHeading];
   let currentBullet: string | null = null;
   let currentBulletHasBlank = false;
+  let currentBulletIndent = 0;
   let sawBullet = false;
   let inComment = false;
   const finishBullet = () => {
@@ -271,6 +272,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     });
     currentBullet = null;
     currentBulletHasBlank = false;
+    currentBulletIndent = 0;
   };
   for (const line of section) {
     const trimmed = line.trim();
@@ -285,11 +287,15 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       sawBullet = false;
       continue;
     }
-    const match = /^\s*[-*]\s+(.+)/.exec(line);
-    if (match) {
-      finishBullet();
-      currentBullet = match[1];
+    const match = /^(\s*)[-*]\s+(.+)/.exec(line);
+    if (match && currentBullet && match[1].length > currentBulletIndent) {
+      currentBullet += ` ${match[2]}`;
       currentBulletHasBlank = false;
+    } else if (match) {
+      finishBullet();
+      currentBullet = match[2];
+      currentBulletHasBlank = false;
+      currentBulletIndent = match[1].length;
       sawBullet = true;
     } else if (currentBullet && !trimmed) {
       currentBulletHasBlank = true;

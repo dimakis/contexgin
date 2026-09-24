@@ -351,6 +351,20 @@ never leaves this spoke
       expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
     });
 
+    it('keeps nested exclusions attached to their parent boundary', () => {
+      const content = `## Boundaries
+
+- Never share with:
+  - \`api/\`
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual(['api/']);
+      expect(result.boundaries[1].level).toBe('none');
+    });
+
     it('uses section policy prose without contaminating sibling bullets', () => {
       const content = `## Boundaries
 
