@@ -361,6 +361,8 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       currentBulletHasBlank = false;
     } else if (currentBullet) {
       finishBullet();
+      if (trimmed) activePolicyLines.push(trimmed);
+      sawBullet = false;
     } else if (!sawBullet && trimmed) {
       activePolicyLines.push(trimmed);
       if (!inSubsection) basePolicyLines.push(trimmed);

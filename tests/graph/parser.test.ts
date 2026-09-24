@@ -439,6 +439,21 @@ All following data is hard confidential.
       expect(result.boundaries[1].level).toBe('hard');
     });
 
+    it('applies policy prose between boundary list blocks', () => {
+      const content = `## Boundaries
+
+- Team directory
+
+All following data is hard confidential.
+
+- Payroll
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');
