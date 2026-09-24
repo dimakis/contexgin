@@ -7,6 +7,14 @@ import { findSpoke } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
 
+async function isDirectory(directory: string): Promise<boolean> {
+  try {
+    return (await fs.stat(directory)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 async function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
@@ -30,6 +38,11 @@ async function resolveWorkspace(
   if (!exactHub && namedHubs.length > 1) return null;
   const hub = exactHub ?? (namedHubs.length === 1 ? namedHubs[0] : undefined);
   if (hub) {
+    // The graph is a snapshot. A workspace can be removed or unmounted after
+    // rebuild, so never turn stale graph metadata into a successful empty
+    // compilation.
+    if (!(await isDirectory(hub.path))) return null;
+
     const containingSpoke = (targetPath: string) =>
       hub.spokes
         .filter(
@@ -69,7 +82,7 @@ async function resolveWorkspace(
   }
 
   const spoke = findSpoke(state.graph, query);
-  if (spoke) return spoke;
+  if (spoke) return (await isDirectory(spoke.path)) ? spoke : null;
 
   // A configured root can be valid compiler input even when it has no
   // CONSTITUTION.md and therefore is intentionally absent from the graph.
@@ -81,12 +94,7 @@ async function resolveWorkspace(
   if (configuredRoot) {
     const expandedRoot = configuredRoot.replace(/^~(?=$|\/)/, process.env.HOME || '');
     const rootPath = path.resolve(expandedRoot);
-    try {
-      const stat = await fs.stat(rootPath);
-      if (!stat.isDirectory()) return null;
-    } catch {
-      return null;
-    }
+    if (!(await isDirectory(rootPath))) return null;
     // Without a hub constitution there is no graph boundary model. Compile
     // only root-owned sources and suppress nested profiles rather than
     // treating one-level children as implicitly shareable.

@@ -886,6 +886,23 @@ context:
       expect(response.json().error).toContain('Workspace not found');
     });
 
+    it('rejects a graph-backed hub that disappears after rebuild', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      await fs.rm(root, { recursive: true });
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toContain('Workspace not found');
+    });
+
     it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
