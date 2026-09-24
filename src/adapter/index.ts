@@ -23,7 +23,7 @@ const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 
 export async function discoverAndAdapt(
   workspaceRoot: string,
   scopePath?: string,
-  options: { includeSpokes?: boolean } = {},
+  options: { includeSpokes?: boolean; includeProfiles?: boolean } = {},
 ): Promise<ContextNode[]> {
   const root = path.resolve(workspaceRoot);
   const scope = scopePath === undefined ? undefined : path.resolve(root, scopePath);
@@ -118,7 +118,7 @@ export async function discoverAndAdapt(
 
   // 4. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
-  if (await dirExists(profileDir)) {
+  if (options.includeProfiles !== false && (await dirExists(profileDir))) {
     const files = (await fs.readdir(profileDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.md')) continue;

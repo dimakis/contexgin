@@ -10,7 +10,7 @@ function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
   query: string,
-): { id: string; path: string; rootOnly?: boolean } | null {
+): { id: string; path: string; rootOnly?: boolean; includeProfiles?: boolean } | null {
   if (!state.graph) return null;
 
   const spoke = findSpoke(state.graph, query);
@@ -26,10 +26,19 @@ function resolveWorkspace(
       path.resolve(candidate.path) === resolvedQuery,
   );
   if (hub) {
+    const profilePath = path.join(hub.path, 'memory', 'Profile');
+    const profileSpoke = hub.spokes
+      .filter(
+        (spoke) =>
+          profilePath === path.resolve(spoke.path) ||
+          profilePath.startsWith(path.resolve(spoke.path) + path.sep),
+      )
+      .sort((left, right) => right.path.length - left.path.length)[0];
     return {
       id: hub.id,
       path: hub.path,
       rootOnly: true,
+      includeProfiles: !profileSpoke || profileSpoke.confidentiality !== 'hard',
     };
   }
 
@@ -67,7 +76,10 @@ export function compileRoute(app: FastifyInstance, state: ServerState, config: S
 
     try {
       const nodes = workspace.rootOnly
-        ? await discoverAndAdapt(workspace.path, undefined, { includeSpokes: false })
+        ? await discoverAndAdapt(workspace.path, undefined, {
+            includeSpokes: false,
+            includeProfiles: workspace.includeProfiles,
+          })
         : undefined;
       const compiled = await compile({
         workspaceRoot: workspace.path,

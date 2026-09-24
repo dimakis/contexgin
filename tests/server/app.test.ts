@@ -616,8 +616,23 @@ context:
 
     it('compiles context for a configured hub root path', async () => {
       const root = await createTestWorkspace(tmpDir);
+      const hubConstitution = await fs.readFile(path.join(root, 'CONSTITUTION.md'), 'utf8');
+      await fs.writeFile(
+        path.join(root, 'CONSTITUTION.md'),
+        hubConstitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `memory/` | Private | Hard boundary | Private profiles |',
+        ),
+      );
       await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nROOT_GUIDANCE\n');
       await fs.writeFile(path.join(root, 'svc', 'AGENTS.md'), '# Private\n\nSPOKE_SECRET\n');
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'memory', 'CONSTITUTION.md'),
+        '# Memory\n\n## Purpose\n\nPrivate memory.\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(path.join(root, 'memory', 'Profile', 'private.md'), 'PROFILE_SECRET\n');
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
 
@@ -631,6 +646,7 @@ context:
       expect(response.json().spoke).toContain('workspace');
       expect(response.json().context).toContain('ROOT_GUIDANCE');
       expect(response.json().context).not.toContain('SPOKE_SECRET');
+      expect(response.json().context).not.toContain('PROFILE_SECRET');
     });
 
     it('compiles an approved root that is absent from the graph', async () => {
