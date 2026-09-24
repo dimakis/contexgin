@@ -170,5 +170,18 @@ describe('deployment contract', () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('runtime inputs do not match');
+
+    writeFileSync(join(root, 'node_modules/example/index.js'), 'dependency\n');
+    result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
+      env: {
+        ...process.env,
+        CONTEXGIN_DEPLOYMENT_COMMIT: pinned,
+        CONTEXGIN_RUNTIME_SHA256: digest,
+        CONTEXGIN_ROOTS: '/valid/root::/other/root',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('must not contain empty workspace roots');
   });
 });

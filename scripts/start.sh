@@ -34,6 +34,12 @@ fi
 
 DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
 ROOTS_VALUE="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
+case ":$ROOTS_VALUE:" in
+  *::* )
+    echo "CONTEXGIN_ROOTS must not contain empty workspace roots" >&2
+    exit 1
+    ;;
+esac
 IFS=':' read -r -a ROOTS <<< "$ROOTS_VALUE"
 [ "${#ROOTS[@]}" -gt 0 ] || {
   echo "CONTEXGIN_ROOTS must contain at least one workspace root" >&2

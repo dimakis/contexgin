@@ -258,7 +258,9 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   // Boundaries are typically bullet lists, not tables
   const sectionHeading = lines.find((line) => boundaryHeading.test(line)) || '';
   const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
-  let activePolicyLines = [sectionHeading];
+  const basePolicyLines = [sectionHeading];
+  let activePolicyLines = [...basePolicyLines];
+  let inSubsection = false;
   let currentBullet: string | null = null;
   let currentBulletHasBlank = false;
   let currentBulletIndent = 0;
@@ -283,7 +285,11 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     }
     if (/^#{1,6}\s+/.test(line)) {
       finishBullet();
-      activePolicyLines = [trimmed];
+      inSubsection = true;
+      const explicitPolicy =
+        inferConfidentialityLevel([trimmed]) !== 'none' ||
+        /\b(shareable|public|unrestricted)\b/i.test(trimmed);
+      activePolicyLines = explicitPolicy ? [trimmed] : [...basePolicyLines, trimmed];
       sawBullet = false;
       continue;
     }
@@ -308,6 +314,7 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       finishBullet();
     } else if (!sawBullet && trimmed) {
       activePolicyLines.push(trimmed);
+      if (!inSubsection) basePolicyLines.push(trimmed);
     }
   }
   finishBullet();

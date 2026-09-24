@@ -396,6 +396,20 @@ All following data is hard confidential.
       expect(result.boundaries[1].level).toBe('hard');
     });
 
+    it('inherits section policy through neutral organizational subsections', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+### Employee records
+
+- Payroll
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+    });
+
     it('returns empty for missing section', () => {
       const content = `## Purpose\nPublic library.`;
       const result = parseConstitutionContent(content, '/test.md', 'test');
