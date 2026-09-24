@@ -616,15 +616,6 @@ context:
 
     it('compiles context for a configured hub root path', async () => {
       const root = await createTestWorkspace(tmpDir);
-      const hubConstitution = await fs.readFile(path.join(root, 'CONSTITUTION.md'), 'utf8');
-      await fs.writeFile(
-        path.join(root, 'CONSTITUTION.md'),
-        hubConstitution.replace(
-          '| `svc/` | Engineers | Own constitution | Service layer |',
-          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
-            '| `memory/` | Private | Hard boundary | Private profiles |',
-        ),
-      );
       await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nROOT_GUIDANCE\n');
       await fs.writeFile(path.join(root, 'svc', 'AGENTS.md'), '# Private\n\nSPOKE_SECRET\n');
       await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
@@ -636,10 +627,10 @@ context:
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
 
-      const memorySpoke = server.state.graph!.hubs[0].spokes.find(
+      const hasMemorySpoke = server.state.graph!.hubs[0].spokes.some(
         (spoke) => spoke.name === 'memory',
       );
-      expect(memorySpoke?.confidentiality).toBe('hard');
+      expect(hasMemorySpoke).toBe(false);
 
       const response = await server.app.inject({
         method: 'POST',

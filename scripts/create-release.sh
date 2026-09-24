@@ -19,6 +19,7 @@ PLIST_PREVIOUS=""
 PLIST_NEXT=""
 PREVIOUS_COMMIT=""
 PREVIOUS_PORT="4195"
+PREVIOUS_WORKING_DIRECTORY=""
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
 if [ "$SERVE_DB_PATH" != ":memory:" ]; then
@@ -52,8 +53,19 @@ bootstrap_with_retry() {
 wait_for_deployment_health() {
   local port="$1"
   local expected_commit="$2"
+  local expected_working_directory="$3"
   local health_json
+  local job_output
   for _ in {1..20}; do
+    job_output="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null || true)"
+    if ! printf '%s\n' "$job_output" | grep -Eq '^[[:space:]]+state = running$'; then
+      sleep 0.5
+      continue
+    fi
+    if ! printf '%s\n' "$job_output" | grep -Fq "working directory = $expected_working_directory"; then
+      sleep 0.5
+      continue
+    fi
     health_json="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/health" 2>/dev/null || true)"
     if [ -n "$expected_commit" ]; then
       node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
@@ -77,7 +89,7 @@ rollback() {
       echo "ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped" >&2
       return 1
     fi
-    if ! wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT"; then
+    if ! wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT" "$PREVIOUS_WORKING_DIRECTORY"; then
       echo "ROLLBACK FAILED: previous ContexGin deployment did not become healthy" >&2
       return 1
     fi
@@ -175,6 +187,11 @@ if [ -f "$PLIST_DEST" ]; then
   PREVIOUS_COMMIT="$(plutil -extract EnvironmentVariables.CONTEXGIN_DEPLOYMENT_COMMIT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   PREVIOUS_PORT="$(plutil -extract EnvironmentVariables.CONTEXGIN_PORT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   PREVIOUS_PORT="${PREVIOUS_PORT:-4195}"
+  PREVIOUS_WORKING_DIRECTORY="$(plutil -extract WorkingDirectory raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
+  [ -n "$PREVIOUS_WORKING_DIRECTORY" ] || {
+    echo "Refusing release: previous ContexGin plist has no working directory for rollback verification" >&2
+    exit 1
+  }
 fi
 
 CUTOVER_ACTIVE=1

@@ -38,7 +38,7 @@ function resolveWorkspace(
       id: hub.id,
       path: hub.path,
       rootOnly: true,
-      includeProfiles: !profileSpoke || profileSpoke.confidentiality !== 'hard',
+      includeProfiles: Boolean(profileSpoke && profileSpoke.confidentiality !== 'hard'),
     };
   }
 
