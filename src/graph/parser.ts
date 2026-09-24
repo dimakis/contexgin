@@ -75,28 +75,25 @@ function findSection(lines: string[], pattern: RegExp): string[] {
   return result;
 }
 
-function findSections(lines: string[], pattern: RegExp): string[] {
-  let collecting = false;
+function findSections(lines: string[], pattern: RegExp): string[][] {
+  let current: string[] | null = null;
   let headingLevel = 0;
-  const result: string[] = [];
+  const result: string[][] = [];
 
   for (const line of lines) {
     const headingMatch = /^(#{1,6})\s+/.exec(line);
-    if (
-      headingMatch &&
-      pattern.test(line) &&
-      (!collecting || headingMatch[1].length <= headingLevel)
-    ) {
-      collecting = true;
+    if (current && headingMatch && headingMatch[1].length <= headingLevel) {
+      result.push(current);
+      current = null;
+    }
+    if (!current && headingMatch && pattern.test(line)) {
       headingLevel = headingMatch[1].length;
-      result.push(line);
-      continue;
+      current = [line];
+    } else if (current) {
+      current.push(line);
     }
-    if (collecting && headingMatch && headingMatch[1].length <= headingLevel) {
-      collecting = false;
-    }
-    if (collecting) result.push(line);
   }
+  if (current) result.push(current);
 
   return result;
 }
@@ -278,13 +275,18 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
 function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const lines = content.split('\n');
   const boundaryHeading = /^#{1,6}\s+.*(boundar|confidential|excluded)/i;
-  const section = findSections(lines, boundaryHeading);
-  const boundaries: Boundary[] = [];
-  const boundaryRootLevel = Math.min(
-    ...section
-      .filter((line) => boundaryHeading.test(line))
-      .map((line) => /^#+/.exec(line)![0].length),
+  return findSections(lines, boundaryHeading).flatMap((section) =>
+    extractBoundarySection(section, nodeId, boundaryHeading),
   );
+}
+
+function extractBoundarySection(
+  section: string[],
+  nodeId: string,
+  boundaryHeading: RegExp,
+): Boundary[] {
+  const boundaries: Boundary[] = [];
+  const boundaryRootLevel = /^#+/.exec(section[0].trim())![0].length;
 
   // Boundaries are typically bullet lists, not tables
   const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
@@ -306,6 +308,10 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     currentBullet = null;
     currentBulletHasBlank = false;
     currentBulletIndent = 0;
+  };
+  const recordPolicyProse = (text: string) => {
+    const level = inferConfidentialityLevel([text]);
+    if (level !== 'none') bulletItems.push({ text, fallbackLevel: level });
   };
   for (const line of section) {
     const trimmed = line.trim();
@@ -361,11 +367,15 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       currentBulletHasBlank = false;
     } else if (currentBullet) {
       finishBullet();
-      if (trimmed) activePolicyLines.push(trimmed);
+      if (trimmed) {
+        activePolicyLines.push(trimmed);
+        recordPolicyProse(trimmed);
+      }
       sawBullet = false;
     } else if (!sawBullet && trimmed) {
       activePolicyLines.push(trimmed);
       if (!inSubsection) basePolicyLines.push(trimmed);
+      recordPolicyProse(trimmed);
     }
   }
   finishBullet();

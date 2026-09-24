@@ -387,7 +387,7 @@ All following data is hard confidential.
 - Payroll details
 `;
       const result = parseConstitutionContent(content, '/test.md', 'career');
-      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries).toHaveLength(3);
       expect(result.boundaries.every((boundary) => boundary.level === 'hard')).toBe(true);
       expect(result.boundaries.every((boundary) => boundary.excludedFrom.length === 0)).toBe(true);
     });
@@ -419,7 +419,7 @@ All following data is hard confidential.
 - Payroll
 `;
       const result = parseConstitutionContent(content, '/test.md', 'test');
-      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries).toHaveLength(2);
       expect(result.boundaries[0].level).toBe('hard');
     });
 
@@ -452,6 +452,37 @@ All following data is hard confidential.
       expect(result.boundaries[1].level).toBe('hard');
     });
 
+    it('preserves global policy separately from exclusion bullets', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+- Never flow into \`api/\`
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual([]);
+      expect(result.boundaries[1].excludedFrom).toEqual(['api/']);
+    });
+
+    it('resets policy for an independently nested boundary section', () => {
+      const content = `## Boundaries
+
+- Payroll never leaves this spoke
+
+## Operations
+
+### Confidentiality
+
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[1].level).toBe('none');
+    });
+
     it('applies policy prose between boundary list blocks', () => {
       const content = `## Boundaries
 
@@ -462,9 +493,10 @@ All following data is hard confidential.
 - Payroll
 `;
       const result = parseConstitutionContent(content, '/test.md', 'test');
-      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries).toHaveLength(3);
       expect(result.boundaries[0].level).toBe('none');
       expect(result.boundaries[1].level).toBe('hard');
+      expect(result.boundaries[2].level).toBe('hard');
     });
 
     it('returns empty for missing section', () => {
