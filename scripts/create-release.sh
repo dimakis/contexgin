@@ -72,19 +72,14 @@ REMOTE_REF="$(git -C "$SOURCE_ROOT" for-each-ref --format='%(refname:short) %(sy
 }
 
 RELEASE_DIR="$RELEASE_ROOT/$(printf '%s' "$SOURCE_COMMIT" | cut -c1-12)"
-dist_sha256() {
-  (
-    cd "$1"
-    find dist -type f -exec shasum -a 256 {} \; | LC_ALL=C sort | shasum -a 256 | awk '{print $1}'
-  )
-}
+runtime_sha256() { "$1/scripts/runtime-sha256.sh" "$1"; }
 release_is_valid() {
   [ -d "$RELEASE_DIR/.git" ] &&
     [ "$(git -C "$RELEASE_DIR" rev-parse HEAD 2>/dev/null)" = "$SOURCE_COMMIT" ] &&
     ! git -C "$RELEASE_DIR" symbolic-ref --quiet HEAD >/dev/null 2>&1 &&
     git -C "$RELEASE_DIR" diff-index --quiet HEAD -- &&
-    [ -s "$RELEASE_DIR/.dist.sha256" ] &&
-    [ "$(dist_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.dist.sha256")" ]
+    [ -s "$RELEASE_DIR/.runtime.sha256" ] &&
+    [ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]
 }
 if [ -e "$RELEASE_DIR" ] && ! release_is_valid; then
   mv "$RELEASE_DIR" "${RELEASE_DIR}.invalid.$(date +%s)"
@@ -102,7 +97,7 @@ if [ ! -e "$RELEASE_DIR" ]; then
     cd "$RELEASE_TEMP/release"
     npm ci
     npm run build
-    dist_sha256 . > .dist.sha256
+    scripts/runtime-sha256.sh . > .runtime.sha256
   )
   mv "$RELEASE_TEMP/release" "$RELEASE_DIR"
   rmdir "$RELEASE_TEMP"

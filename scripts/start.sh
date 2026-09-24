@@ -21,10 +21,10 @@ if [ -n "${CONTEXGIN_DEPLOYMENT_COMMIT:-}" ]; then
     echo "production must run from a detached release worktree" >&2
     exit 1
   fi
-  EXPECTED_DIST_SHA256="$(cat .dist.sha256)"
-  ACTUAL_DIST_SHA256="$(find dist -type f -exec shasum -a 256 {} \; | LC_ALL=C sort | shasum -a 256 | awk '{print $1}')"
-  [ "$ACTUAL_DIST_SHA256" = "$EXPECTED_DIST_SHA256" ] || {
-    echo "deployment build artifacts do not match the release" >&2
+  EXPECTED_RUNTIME_SHA256="$(cat .runtime.sha256)"
+  ACTUAL_RUNTIME_SHA256="$(scripts/runtime-sha256.sh .)"
+  [ "$ACTUAL_RUNTIME_SHA256" = "$EXPECTED_RUNTIME_SHA256" ] || {
+    echo "deployment runtime inputs do not match the release" >&2
     exit 1
   }
 fi

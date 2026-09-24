@@ -20,7 +20,7 @@ describe('deployment contract', () => {
     expect(script).toContain('CUTOVER_ACTIVE=1');
     expect(script).toContain('h.deploymentCommit!==process.argv[2]');
     expect(script).toContain(
-      '[ "$(dist_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.dist.sha256")" ]',
+      '[ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]',
     );
     expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
   });
@@ -47,30 +47,29 @@ describe('deployment contract', () => {
     expect(result.stderr).toContain('another ContexGin deployment is active');
   });
 
-  it('rejects staged source drift and modified generated artifacts', () => {
+  it('rejects staged source drift and modified generated artifacts or dependencies', () => {
     const root = mkdtempSync(join(tmpdir(), 'contexgin-start-'));
     mkdirSync(join(root, 'scripts'));
     mkdirSync(join(root, 'dist'));
+    mkdirSync(join(root, 'node_modules/example'), { recursive: true });
     cpSync(join(repoRoot, 'scripts/start.sh'), join(root, 'scripts/start.sh'));
+    cpSync(join(repoRoot, 'scripts/runtime-sha256.sh'), join(root, 'scripts/runtime-sha256.sh'));
     writeFileSync(join(root, 'tracked.txt'), 'clean\n');
     writeFileSync(join(root, 'dist/cli.js'), 'clean\n');
-    writeFileSync(join(root, '.gitignore'), 'dist/\n');
+    writeFileSync(join(root, 'node_modules/example/index.js'), 'dependency\n');
+    writeFileSync(join(root, '.gitignore'), 'dist/\nnode_modules/\n');
     execFileSync('git', ['init'], { cwd: root });
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: root });
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: root });
     execFileSync('git', ['add', '.'], { cwd: root });
     execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '-m', 'fixture'], { cwd: root });
     execFileSync('git', ['checkout', '--detach'], { cwd: root });
-    const digest = execFileSync(
-      'bash',
-      [
-        '-c',
-        "find dist -type f -exec shasum -a 256 {} \\; | LC_ALL=C sort | shasum -a 256 | awk '{print $1}'",
-      ],
-      { cwd: root, encoding: 'utf8' },
-    ).trim();
-    writeFileSync(join(root, '.dist.sha256'), `${digest}\n`);
-    execFileSync('git', ['add', '.dist.sha256'], { cwd: root });
+    const digest = execFileSync(join(root, 'scripts/runtime-sha256.sh'), [root], {
+      cwd: root,
+      encoding: 'utf8',
+    }).trim();
+    writeFileSync(join(root, '.runtime.sha256'), `${digest}\n`);
+    execFileSync('git', ['add', '.runtime.sha256'], { cwd: root });
     execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '-m', 'digest'], { cwd: root });
     const pinned = execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: root,
@@ -94,6 +93,15 @@ describe('deployment contract', () => {
       encoding: 'utf8',
     });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('build artifacts do not match');
+    expect(result.stderr).toContain('runtime inputs do not match');
+
+    writeFileSync(join(root, 'dist/cli.js'), 'clean\n');
+    writeFileSync(join(root, 'node_modules/example/index.js'), 'tampered dependency\n');
+    result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
+      env: { ...process.env, CONTEXGIN_DEPLOYMENT_COMMIT: pinned },
+      encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('runtime inputs do not match');
   });
 });
