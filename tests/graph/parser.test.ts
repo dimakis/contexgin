@@ -276,9 +276,11 @@ Path | What belongs here
 - Never appears in reports
 `;
       const result = parseConstitutionContent(content, '/test.md', 'career');
-      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries).toHaveLength(2);
       expect(result.boundaries[0].level).toBe('hard');
       expect(result.boundaries[0].excludedFrom).toContain('jira_process/');
+      expect(result.boundaries[1].level).toBe('hard');
+      expect(result.boundaries[1].excludedFrom).toEqual([]);
     });
 
     it('detects hard confidentiality from "never" keyword', () => {
@@ -295,6 +297,206 @@ Path | What belongs here
 `;
       const result = parseConstitutionContent(content, '/test.md', 'internal');
       expect(result.boundaries[0].level).toBe('soft');
+    });
+
+    it('does not inherit confidentiality from a sibling bullet', () => {
+      const content = `## Confidentiality
+
+- Never flows into \`api/\`
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual(['api/']);
+      expect(result.boundaries[1].level).toBe('none');
+      expect(result.boundaries[1].excludedFrom).toEqual([]);
+    });
+
+    it('classifies a confidentiality rule across wrapped bullet lines', () => {
+      const content = `## Confidentiality
+
+- Personal data
+  never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toContain('Personal data never leaves this spoke');
+      expect(result.boundaries[0].excludedFrom).toEqual([]);
+    });
+
+    it('classifies a confidentiality rule across a lazy bullet continuation', () => {
+      const content = `## Boundaries
+
+- Personal data
+never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
+    });
+
+    it('classifies a confidentiality rule across list-item paragraphs', () => {
+      const content = `## Boundaries
+
+- Personal data
+
+  never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
+    });
+
+    it('classifies a confidentiality rule across a tab-indented list paragraph', () => {
+      const content = `## Boundaries
+
+- Personal data
+
+\tnever leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
+    });
+
+    it('keeps nested exclusions attached to their parent boundary', () => {
+      const content = `## Boundaries
+
+- Never share with:
+  - \`api/\`
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual(['api/']);
+      expect(result.boundaries[1].level).toBe('none');
+    });
+
+    it('uses section policy prose without contaminating sibling bullets', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+- Employee records
+- Payroll details
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(3);
+      expect(result.boundaries.every((boundary) => boundary.level === 'hard')).toBe(true);
+      expect(result.boundaries.every((boundary) => boundary.excludedFrom.length === 0)).toBe(true);
+    });
+
+    it('tracks confidentiality independently across subsections', () => {
+      const content = `## Boundaries
+
+### Shareable
+
+- Team directory
+
+### Hard confidential
+
+- Employee records
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'career');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+    });
+
+    it('inherits section policy through neutral organizational subsections', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+### Employee records
+
+- Payroll
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+    });
+
+    it('inherits explicit policy through nested neutral subsections', () => {
+      const content = `## Boundaries
+
+### Hard confidential
+
+#### Employee records
+
+- Payroll
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+    });
+
+    it('preserves adjacent boundary and confidentiality sections', () => {
+      const content = `## Boundaries
+
+- Shareable with reports
+
+## Confidentiality
+
+- Payroll never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+    });
+
+    it('preserves global policy separately from exclusion bullets', () => {
+      const content = `## Boundaries
+
+All following data is hard confidential.
+
+- Never flow into \`api/\`
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].excludedFrom).toEqual([]);
+      expect(result.boundaries[1].excludedFrom).toEqual(['api/']);
+    });
+
+    it('resets policy for an independently nested boundary section', () => {
+      const content = `## Boundaries
+
+- Payroll never leaves this spoke
+
+## Operations
+
+### Confidentiality
+
+- Shareable with reports
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[1].level).toBe('none');
+    });
+
+    it('applies policy prose between boundary list blocks', () => {
+      const content = `## Boundaries
+
+- Team directory
+
+All following data is hard confidential.
+
+- Payroll
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(3);
+      expect(result.boundaries[0].level).toBe('none');
+      expect(result.boundaries[1].level).toBe('hard');
+      expect(result.boundaries[2].level).toBe('hard');
     });
 
     it('returns empty for missing section', () => {

@@ -1,10 +1,116 @@
 import type { FastifyInstance } from 'fastify';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { discoverAndAdapt } from '../../adapter/index.js';
 import { compile } from '../../compiler/index.js';
 import { findSpoke } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
-import type { ServerState, CompileRequest, CompileResponse } from '../types.js';
+import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
 
-export function compileRoute(app: FastifyInstance, state: ServerState): void {
+async function isDirectory(directory: string): Promise<boolean> {
+  try {
+    return (await fs.stat(directory)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWorkspace(
+  state: ServerState,
+  config: ServerConfig,
+  query: string,
+): Promise<{
+  id: string;
+  path: string;
+  rootOnly?: boolean;
+  includeProfiles?: boolean;
+  includeCursorRules?: boolean;
+} | null> {
+  if (!state.graph) return null;
+
+  const expanded = query.replace(/^~(?=$|\/)/, process.env.HOME || '');
+  const resolvedQuery = path.resolve(expanded);
+
+  const exactHub = state.graph.hubs.find(
+    (candidate) => candidate.id === query || path.resolve(candidate.path) === resolvedQuery,
+  );
+  const namedHubs = state.graph.hubs.filter((candidate) => candidate.name === query);
+  if (!exactHub && namedHubs.length > 1) return null;
+  const hub = exactHub ?? (namedHubs.length === 1 ? namedHubs[0] : undefined);
+  if (hub) {
+    // The graph is a snapshot. A workspace can be removed or unmounted after
+    // rebuild, so never turn stale graph metadata into a successful empty
+    // compilation.
+    if (!(await isDirectory(hub.path))) return null;
+
+    const containingSpoke = (targetPath: string) =>
+      hub.spokes
+        .filter(
+          (spoke) =>
+            targetPath === path.resolve(spoke.path) ||
+            targetPath.startsWith(path.resolve(spoke.path) + path.sep),
+        )
+        .sort((left, right) => right.path.length - left.path.length)[0];
+    const profilePath = path.join(hub.path, 'memory', 'Profile');
+    const profileSpoke = containingSpoke(profilePath);
+    const cursorPath = path.join(hub.path, '.cursor');
+    const cursorSpoke = containingSpoke(path.join(cursorPath, 'rules'));
+    let includeCursorRules = false;
+    if (cursorSpoke) {
+      includeCursorRules = Boolean(
+        cursorSpoke.constitution && cursorSpoke.confidentiality !== 'hard',
+      );
+    } else {
+      try {
+        // A constitution whose directory is absent from the hub declaration is
+        // still a confidentiality boundary. Fail closed instead of treating
+        // its rules as unowned hub content.
+        await fs.stat(path.join(cursorPath, 'CONSTITUTION.md'));
+      } catch (error) {
+        includeCursorRules = error instanceof Error && 'code' in error && error.code === 'ENOENT';
+      }
+    }
+    return {
+      id: hub.id,
+      path: hub.path,
+      rootOnly: true,
+      includeProfiles: Boolean(
+        profileSpoke?.constitution && profileSpoke.confidentiality !== 'hard',
+      ),
+      includeCursorRules,
+    };
+  }
+
+  const spoke = findSpoke(state.graph, query);
+  if (spoke) return (await isDirectory(spoke.path)) ? spoke : null;
+
+  // A configured root can be valid compiler input even when it has no
+  // CONSTITUTION.md and therefore is intentionally absent from the graph.
+  // Exact-path matching keeps /compile constrained to operator-approved roots.
+  const configuredRoot = config.roots.find((root) => {
+    const expandedRoot = root.replace(/^~(?=$|\/)/, process.env.HOME || '');
+    return path.resolve(expandedRoot) === resolvedQuery;
+  });
+  if (configuredRoot) {
+    const expandedRoot = configuredRoot.replace(/^~(?=$|\/)/, process.env.HOME || '');
+    const rootPath = path.resolve(expandedRoot);
+    if (!(await isDirectory(rootPath))) return null;
+    // Without a hub constitution there is no graph boundary model. Compile
+    // only root-owned sources and suppress nested profiles rather than
+    // treating one-level children as implicitly shareable.
+    return {
+      id: rootPath,
+      path: rootPath,
+      rootOnly: true,
+      includeProfiles: false,
+      includeCursorRules: false,
+    };
+  }
+
+  return null;
+}
+
+export function compileRoute(app: FastifyInstance, state: ServerState, config: ServerConfig): void {
   app.post<{ Body: CompileRequest }>('/compile', async (request, reply) => {
     if (!state.graph) {
       return reply.status(503).send({ error: 'Graph not built yet' });
@@ -15,15 +121,22 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
       return reply.status(400).send({ error: 'Missing required field: spoke' });
     }
 
-    // Find the spoke in the graph
-    const spoke = findSpoke(state.graph, spokeQuery);
-    if (!spoke) {
-      return reply.status(404).send({ error: `Spoke not found: ${spokeQuery}` });
+    const workspace = await resolveWorkspace(state, config, spokeQuery);
+    if (!workspace) {
+      return reply.status(404).send({ error: `Workspace not found: ${spokeQuery}` });
     }
 
     try {
+      const nodes = workspace.rootOnly
+        ? await discoverAndAdapt(workspace.path, undefined, {
+            includeSpokes: false,
+            includeProfiles: workspace.includeProfiles,
+            includeCursorRules: workspace.includeCursorRules,
+          })
+        : undefined;
       const compiled = await compile({
-        workspaceRoot: spoke.path,
+        workspaceRoot: workspace.path,
+        nodes,
         tokenBudget: budget,
         taskHint: task,
       });
@@ -31,7 +144,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState): void {
         context: compiled.bootPayload,
         tokens: compiled.bootTokens,
         sources: compiled.sources.length,
-        spoke: spoke.id,
+        spoke: workspace.id,
         nodes: compiled.nodes,
       };
       return response;

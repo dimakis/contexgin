@@ -1,13 +1,63 @@
 #!/bin/bash
-# ContexGin daemon start script (launched via launchd)
+set -euo pipefail
+# ContexGin daemon start script (launched via launchd).
 
 export PATH="/opt/homebrew/bin:$PATH"
 
-cd /Users/dsaridak/projects/contexgin
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
 
-exec node dist/cli.js serve \
-  /Users/dsaridak/redhat/mgmt \
-  /Users/dsaridak/projects/contexgin \
-  /Users/dsaridak/projects/centaur \
-  --db /Users/dsaridak/.local/share/contexgin/graph.db \
-  --port 4195
+if [ -n "${CONTEXGIN_DEPLOYMENT_COMMIT:-}" ]; then
+  ACTUAL_COMMIT="$(git rev-parse HEAD)"
+  [ "$ACTUAL_COMMIT" = "$CONTEXGIN_DEPLOYMENT_COMMIT" ] || {
+    echo "deployment revision mismatch: expected $CONTEXGIN_DEPLOYMENT_COMMIT, got $ACTUAL_COMMIT" >&2
+    exit 1
+  }
+  git diff-index --quiet HEAD -- || {
+    echo "deployment has tracked modifications" >&2
+    exit 1
+  }
+  if git symbolic-ref --quiet HEAD >/dev/null; then
+    echo "production must run from a detached release worktree" >&2
+    exit 1
+  fi
+  [ -n "${CONTEXGIN_RUNTIME_SHA256:-}" ] || {
+    echo "deployment runtime digest is missing" >&2
+    exit 1
+  }
+  ACTUAL_RUNTIME_SHA256="$(scripts/runtime-sha256.sh .)"
+  [ "$ACTUAL_RUNTIME_SHA256" = "$CONTEXGIN_RUNTIME_SHA256" ] || {
+    echo "deployment runtime inputs do not match the release" >&2
+    exit 1
+  }
+fi
+
+DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
+ROOTS_VALUE="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
+case ":$ROOTS_VALUE:" in
+  *::* )
+    echo "CONTEXGIN_ROOTS must not contain empty workspace roots" >&2
+    exit 1
+    ;;
+esac
+IFS=':' read -r -a ROOTS <<< "$ROOTS_VALUE"
+[ "${#ROOTS[@]}" -gt 0 ] || {
+  echo "CONTEXGIN_ROOTS must contain at least one workspace root" >&2
+  exit 1
+}
+for index in "${!ROOTS[@]}"; do
+  root="${ROOTS[$index]}"
+  case "$root" in
+    '~') root="$HOME" ;;
+    '~/'*) root="$HOME/${root#\~/}" ;;
+  esac
+  [ "${root#/}" != "$root" ] && [ -d "$root" ] || {
+    echo "every CONTEXGIN_ROOTS entry must be an existing absolute directory" >&2
+    exit 1
+  }
+  ROOTS[$index]="$(cd "$root" && pwd -P)"
+done
+
+exec node dist/cli.js serve "${ROOTS[@]}" \
+  --db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" \
+  --port "${CONTEXGIN_PORT:-4195}"

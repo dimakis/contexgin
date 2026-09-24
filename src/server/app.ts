@@ -41,7 +41,7 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
 
   // Register routes
   healthRoute(app, state);
-  compileRoute(app, state);
+  compileRoute(app, state, config);
   validateRoute(app, config);
   graphRoutes(app, state);
 

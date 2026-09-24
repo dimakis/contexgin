@@ -57,7 +57,7 @@ function findSection(lines: string[], pattern: RegExp): string[] {
   for (const line of lines) {
     const headingMatch = /^(#{1,6})\s+/.exec(line);
 
-    if (headingMatch && pattern.test(line)) {
+    if (!collecting && headingMatch && pattern.test(line)) {
       collecting = true;
       headingLevel = headingMatch[1].length;
       continue;
@@ -71,6 +71,29 @@ function findSection(lines: string[], pattern: RegExp): string[] {
       result.push(line);
     }
   }
+
+  return result;
+}
+
+function findSections(lines: string[], pattern: RegExp): string[][] {
+  let current: string[] | null = null;
+  let headingLevel = 0;
+  const result: string[][] = [];
+
+  for (const line of lines) {
+    const headingMatch = /^(#{1,6})\s+/.exec(line);
+    if (current && headingMatch && headingMatch[1].length <= headingLevel) {
+      result.push(current);
+      current = null;
+    }
+    if (!current && headingMatch && pattern.test(line)) {
+      headingLevel = headingMatch[1].length;
+      current = [line];
+    } else if (current) {
+      current.push(line);
+    }
+  }
+  if (current) result.push(current);
 
   return result;
 }
@@ -251,35 +274,124 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
 
 function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const lines = content.split('\n');
-  const section = findSection(lines, /^#{1,6}\s+.*(boundar|confidential|excluded)/i);
+  const boundaryHeading = /^#{1,6}\s+.*(boundar|confidential|excluded)/i;
+  return findSections(lines, boundaryHeading).flatMap((section) =>
+    extractBoundarySection(section, nodeId, boundaryHeading),
+  );
+}
+
+function extractBoundarySection(
+  section: string[],
+  nodeId: string,
+  boundaryHeading: RegExp,
+): Boundary[] {
   const boundaries: Boundary[] = [];
+  const boundaryRootLevel = /^#+/.exec(section[0].trim())![0].length;
 
   // Boundaries are typically bullet lists, not tables
-  const bulletItems: string[] = [];
+  const bulletItems: Array<{ text: string; fallbackLevel: ConfidentialityLevel }> = [];
+  let basePolicyLines: string[] = [];
+  let activePolicyLines = [...basePolicyLines];
+  let inSubsection = false;
+  const policyByHeadingLevel = new Map<number, string[]>();
+  let currentBullet: string | null = null;
+  let currentBulletHasBlank = false;
+  let currentBulletIndent = 0;
+  let sawBullet = false;
+  let inComment = false;
+  const finishBullet = () => {
+    if (!currentBullet) return;
+    bulletItems.push({
+      text: currentBullet,
+      fallbackLevel: inferConfidentialityLevel(activePolicyLines),
+    });
+    currentBullet = null;
+    currentBulletHasBlank = false;
+    currentBulletIndent = 0;
+  };
+  const recordPolicyProse = (text: string) => {
+    const level = inferConfidentialityLevel([text]);
+    if (level !== 'none') bulletItems.push({ text, fallbackLevel: level });
+  };
   for (const line of section) {
-    const match = /^\s*[-*]\s+(.+)/.exec(line);
-    if (match) {
-      bulletItems.push(match[1]);
+    const trimmed = line.trim();
+    if (trimmed.startsWith('<!--')) inComment = true;
+    if (inComment) {
+      if (trimmed.endsWith('-->')) inComment = false;
+      continue;
+    }
+    if (/^#{1,6}\s+/.test(line)) {
+      finishBullet();
+      const headingLevel = /^#+/.exec(trimmed)![0].length;
+      if (headingLevel === boundaryRootLevel && boundaryHeading.test(line)) {
+        basePolicyLines = [trimmed];
+        activePolicyLines = basePolicyLines;
+        inSubsection = false;
+        policyByHeadingLevel.clear();
+        policyByHeadingLevel.set(headingLevel, basePolicyLines);
+        sawBullet = false;
+        continue;
+      }
+      inSubsection = true;
+      for (const level of policyByHeadingLevel.keys()) {
+        if (level >= headingLevel) policyByHeadingLevel.delete(level);
+      }
+      const parentPolicy =
+        [...policyByHeadingLevel.entries()]
+          .filter(([level]) => level < headingLevel)
+          .sort(([left], [right]) => right - left)[0]?.[1] ?? basePolicyLines;
+      const explicitPolicy =
+        inferConfidentialityLevel([trimmed]) !== 'none' ||
+        /\b(shareable|public|unrestricted)\b/i.test(trimmed);
+      activePolicyLines = explicitPolicy ? [trimmed] : [...parentPolicy, trimmed];
+      policyByHeadingLevel.set(headingLevel, activePolicyLines);
+      sawBullet = false;
+      continue;
+    }
+    const match = /^(\s*)[-*]\s+(.+)/.exec(line);
+    if (match && currentBullet && match[1].length > currentBulletIndent) {
+      currentBullet += ` ${match[2]}`;
+      currentBulletHasBlank = false;
+    } else if (match) {
+      finishBullet();
+      currentBullet = match[2];
+      currentBulletHasBlank = false;
+      currentBulletIndent = match[1].length;
+      sawBullet = true;
+    } else if (currentBullet && !trimmed) {
+      currentBulletHasBlank = true;
+    } else if (currentBullet && (!currentBulletHasBlank || /^(?: {2,}|\t)\S/.test(line))) {
+      // CommonMark permits paragraph continuation text without indentation,
+      // and indented paragraphs after a blank. Preserve both forms.
+      currentBullet += ` ${line.trim()}`;
+      currentBulletHasBlank = false;
+    } else if (currentBullet) {
+      finishBullet();
+      if (trimmed) {
+        activePolicyLines.push(trimmed);
+        recordPolicyProse(trimmed);
+      }
+      sawBullet = false;
+    } else if (!sawBullet && trimmed) {
+      activePolicyLines.push(trimmed);
+      if (!inSubsection) basePolicyLines.push(trimmed);
+      recordPolicyProse(trimmed);
     }
   }
+  finishBullet();
 
   if (bulletItems.length > 0) {
-    // Extract spoke references from bullet items
-    const excludedFrom: string[] = [];
     for (const item of bulletItems) {
       // Look for backtick-enclosed spoke references
-      const refs = [...item.matchAll(/`([^`]+\/)`/g)];
-      for (const ref of refs) {
-        excludedFrom.push(ref[1]);
-      }
+      const refs = [...item.text.matchAll(/`([^`]+\/)`/g)];
+      const itemLevel = inferConfidentialityLevel([item.text]);
+      boundaries.push({
+        spokeId: nodeId,
+        level: itemLevel === 'none' ? item.fallbackLevel : itemLevel,
+        description: item.text,
+        excludedFrom: refs.map((ref) => ref[1]),
+      });
     }
-
-    boundaries.push({
-      spokeId: nodeId,
-      level: inferConfidentialityLevel(section),
-      description: bulletItems.join('; '),
-      excludedFrom,
-    });
   }
 
   return boundaries;

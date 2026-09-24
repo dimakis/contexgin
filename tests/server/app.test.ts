@@ -614,6 +614,295 @@ context:
       }
     });
 
+    it('compiles context for a configured hub root path', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nROOT_GUIDANCE\n');
+      await fs.writeFile(path.join(root, 'svc', 'AGENTS.md'), '# Private\n\nSPOKE_SECRET\n');
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'memory', 'CONSTITUTION.md'),
+        '# Memory\n\n## Purpose\n\nPrivate memory.\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(path.join(root, 'memory', 'Profile', 'private.md'), 'PROFILE_SECRET\n');
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const hasMemorySpoke = server.state.graph!.hubs[0].spokes.some(
+        (spoke) => spoke.name === 'memory',
+      );
+      expect(hasMemorySpoke).toBe(false);
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().spoke).toContain('workspace');
+      expect(response.json().context).toContain('ROOT_GUIDANCE');
+      expect(response.json().context).not.toContain('SPOKE_SECRET');
+      expect(response.json().context).not.toContain('PROFILE_SECRET');
+    });
+
+    it('prefers an exact hub name over an ambiguous spoke name', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const constitutionPath = path.join(root, 'CONSTITUTION.md');
+      const constitution = await fs.readFile(constitutionPath, 'utf8');
+      await fs.writeFile(
+        constitutionPath,
+        constitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `workspace/` | Engineers | Own constitution | Name collision |',
+        ),
+      );
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, 'workspace'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'workspace', 'CONSTITUTION.md'),
+        '# Collision spoke\n\n## Purpose\n\nAmbiguous spoke.\n',
+      );
+      await fs.writeFile(
+        path.join(root, 'workspace', 'AGENTS.md'),
+        '# Private spoke\n\nAMBIGUOUS_SPOKE_CONTEXT\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: path.basename(root), budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().spoke).toBe(root);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('AMBIGUOUS_SPOKE_CONTEXT');
+    });
+
+    it('rejects a hub name shared by multiple configured roots', async () => {
+      const first = await createTestWorkspace(path.join(tmpDir, 'first'));
+      const second = await createTestWorkspace(path.join(tmpDir, 'second'));
+      const firstConstitution = path.join(first, 'CONSTITUTION.md');
+      const firstContent = await fs.readFile(firstConstitution, 'utf8');
+      await fs.writeFile(
+        firstConstitution,
+        firstContent.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `workspace/` | Engineers | Own constitution | Colliding spoke |',
+        ),
+      );
+      await fs.mkdir(path.join(first, 'workspace'));
+      await fs.writeFile(
+        path.join(first, 'workspace', 'CONSTITUTION.md'),
+        '# Workspace spoke\n\n## Purpose\n\nName collision.\n',
+      );
+      await fs.writeFile(path.join(first, 'AGENTS.md'), '# First\n\nFIRST_HUB\n');
+      await fs.writeFile(path.join(second, 'AGENTS.md'), '# Second\n\nSECOND_HUB\n');
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [first, second],
+        dbPath: ':memory:',
+      });
+      await server.rebuild();
+
+      const ambiguous = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: 'workspace', budget: 4000 },
+      });
+      expect(ambiguous.statusCode).toBe(404);
+
+      const exact = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: second, budget: 4000 },
+      });
+      expect(exact.statusCode).toBe(200);
+      expect(exact.json().context).toContain('SECOND_HUB');
+      expect(exact.json().context).not.toContain('FIRST_HUB');
+    });
+
+    it('excludes profiles when a declared memory spoke has no constitution', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const constitutionPath = path.join(root, 'CONSTITUTION.md');
+      const constitution = await fs.readFile(constitutionPath, 'utf8');
+      await fs.writeFile(
+        constitutionPath,
+        constitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `memory/` | Private | Own constitution | Memory |',
+        ),
+      );
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'memory', 'Profile', 'private.md'),
+        'UNATTESTED_PROFILE_SECRET\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const memory = server.state.graph!.hubs[0].spokes.find((spoke) => spoke.name === 'memory');
+      expect(memory).toBeDefined();
+      expect(memory!.constitution).toBeNull();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('UNATTESTED_PROFILE_SECRET');
+    });
+
+    it('excludes cursor rules from a hard-confidential declared cursor spoke', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const constitutionPath = path.join(root, 'CONSTITUTION.md');
+      const constitution = await fs.readFile(constitutionPath, 'utf8');
+      await fs.writeFile(
+        constitutionPath,
+        constitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `.cursor/` | Private | Own constitution | Private rules |',
+        ),
+      );
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# PRIVATE_CURSOR_RULE\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const cursor = server.state.graph!.hubs[0].spokes.find((spoke) => spoke.name === '.cursor');
+      expect(cursor?.confidentiality).toBe('hard');
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('PRIVATE_CURSOR_RULE');
+    });
+
+    it('excludes cursor rules from a constituted but undeclared cursor directory', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# UNDECLARED_CURSOR_SECRET\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      expect(server.state.graph!.hubs[0].spokes.some((spoke) => spoke.name === '.cursor')).toBe(
+        false,
+      );
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('UNDECLARED_CURSOR_SECRET');
+    });
+
+    it('compiles an approved root that is absent from the graph', async () => {
+      const root = path.join(tmpDir, 'root-without-constitution');
+      await fs.mkdir(root, { recursive: true });
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Repository guidance\n\nROOT_ONLY\n');
+      await fs.mkdir(path.join(root, 'private-child'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'private-child', 'AGENTS.md'),
+        '# Private child\n\nCHILD_SECRET\n',
+      );
+      await fs.mkdir(path.join(root, 'memory', 'Profile'), { recursive: true });
+      await fs.writeFile(path.join(root, 'memory', 'Profile', 'private.md'), 'PROFILE_SECRET\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# GRAPHLESS_CURSOR_SECRET\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().spoke).toBe(root);
+      expect(response.json().context).toContain('ROOT_ONLY');
+      expect(response.json().context).not.toContain('CHILD_SECRET');
+      expect(response.json().context).not.toContain('PROFILE_SECRET');
+      expect(response.json().context).not.toContain('GRAPHLESS_CURSOR_SECRET');
+    });
+
+    it('rejects a configured root that does not exist', async () => {
+      const missingRoot = path.join(tmpDir, 'missing-root');
+      server = await createServer({
+        ...DEFAULT_CONFIG,
+        roots: [missingRoot],
+        dbPath: ':memory:',
+      });
+      await server.rebuild();
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: missingRoot, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toContain('Workspace not found');
+    });
+
+    it('rejects a graph-backed hub that disappears after rebuild', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      await fs.rm(root, { recursive: true });
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error).toContain('Workspace not found');
+    });
+
     it('uses DEFAULT_COMPILE_BUDGET when no budget is provided', async () => {
       const root = await createTestWorkspace(tmpDir);
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
