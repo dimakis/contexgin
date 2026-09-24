@@ -27,6 +27,8 @@ describe('deployment contract', () => {
     expect(script).toContain('Refusing release: immutable release directory is invalid');
     expect(script).not.toContain('RELEASE_DIR}.invalid');
     expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
+    expect(script).toContain('CONTEXGIN_STARTUP_TIMEOUT_SECONDS:-120');
+    expect(script).toContain('local deadline=$((SECONDS + STARTUP_TIMEOUT_SECONDS))');
     expect(script).toContain('CONTEXGIN_PROBE_ROOT');
     expect(script).toContain('mkdir -p "$(dirname "$SERVE_DB_PATH")"');
     expect(script).toContain('CONTEXGIN_DB_PATH must be absolute or :memory:');
@@ -74,6 +76,7 @@ describe('deployment contract', () => {
         HOME: home,
         PATH: `${bin}:${process.env.PATH}`,
         CONTEXGIN_RELEASE_ROOT: releases,
+        CONTEXGIN_ROOTS: home,
       },
       encoding: 'utf8',
     });
@@ -183,5 +186,17 @@ describe('deployment contract', () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('must not contain empty workspace roots');
+
+    result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
+      env: {
+        ...process.env,
+        CONTEXGIN_DEPLOYMENT_COMMIT: pinned,
+        CONTEXGIN_RUNTIME_SHA256: digest,
+        CONTEXGIN_ROOTS: '.',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('must be an existing absolute directory');
   });
 });

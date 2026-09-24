@@ -45,6 +45,18 @@ IFS=':' read -r -a ROOTS <<< "$ROOTS_VALUE"
   echo "CONTEXGIN_ROOTS must contain at least one workspace root" >&2
   exit 1
 }
+for index in "${!ROOTS[@]}"; do
+  root="${ROOTS[$index]}"
+  case "$root" in
+    '~') root="$HOME" ;;
+    '~/'*) root="$HOME/${root#\~/}" ;;
+  esac
+  [ "${root#/}" != "$root" ] && [ -d "$root" ] || {
+    echo "every CONTEXGIN_ROOTS entry must be an existing absolute directory" >&2
+    exit 1
+  }
+  ROOTS[$index]="$(cd "$root" && pwd -P)"
+done
 
 exec node dist/cli.js serve "${ROOTS[@]}" \
   --db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" \

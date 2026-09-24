@@ -261,6 +261,8 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   const basePolicyLines = [sectionHeading];
   let activePolicyLines = [...basePolicyLines];
   let inSubsection = false;
+  const policyByHeadingLevel = new Map<number, string[]>();
+  policyByHeadingLevel.set(/^#+/.exec(sectionHeading)?.[0].length ?? 1, basePolicyLines);
   let currentBullet: string | null = null;
   let currentBulletHasBlank = false;
   let currentBulletIndent = 0;
@@ -286,10 +288,19 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
     if (/^#{1,6}\s+/.test(line)) {
       finishBullet();
       inSubsection = true;
+      const headingLevel = /^#+/.exec(trimmed)![0].length;
+      for (const level of policyByHeadingLevel.keys()) {
+        if (level >= headingLevel) policyByHeadingLevel.delete(level);
+      }
+      const parentPolicy =
+        [...policyByHeadingLevel.entries()]
+          .filter(([level]) => level < headingLevel)
+          .sort(([left], [right]) => right - left)[0]?.[1] ?? basePolicyLines;
       const explicitPolicy =
         inferConfidentialityLevel([trimmed]) !== 'none' ||
         /\b(shareable|public|unrestricted)\b/i.test(trimmed);
-      activePolicyLines = explicitPolicy ? [trimmed] : [...basePolicyLines, trimmed];
+      activePolicyLines = explicitPolicy ? [trimmed] : [...parentPolicy, trimmed];
+      policyByHeadingLevel.set(headingLevel, activePolicyLines);
       sawBullet = false;
       continue;
     }

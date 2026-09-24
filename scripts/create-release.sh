@@ -12,7 +12,7 @@ DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/
 SERVE_ROOTS="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
 SERVE_DB_PATH="${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}"
 SERVE_PORT="${CONTEXGIN_PORT:-4195}"
-PROBE_ROOT="${CONTEXGIN_PROBE_ROOT:-${SERVE_ROOTS%%:*}}"
+STARTUP_TIMEOUT_SECONDS="${CONTEXGIN_STARTUP_TIMEOUT_SECONDS:-120}"
 RELEASE_TEMP=""
 CUTOVER_ACTIVE=0
 PLIST_PREVIOUS=""
@@ -20,6 +20,33 @@ PLIST_NEXT=""
 PREVIOUS_COMMIT=""
 PREVIOUS_PORT="4195"
 PREVIOUS_WORKING_DIRECTORY=""
+
+case "$STARTUP_TIMEOUT_SECONDS" in
+  *[!0-9]*|'') echo "Refusing release: CONTEXGIN_STARTUP_TIMEOUT_SECONDS must be an integer" >&2; exit 1 ;;
+esac
+[ "$STARTUP_TIMEOUT_SECONDS" -ge 10 ] && [ "$STARTUP_TIMEOUT_SECONDS" -le 600 ] || {
+  echo "Refusing release: CONTEXGIN_STARTUP_TIMEOUT_SECONDS must be between 10 and 600" >&2
+  exit 1
+}
+case ":$SERVE_ROOTS:" in
+  *::* ) echo "Refusing release: CONTEXGIN_ROOTS contains an empty workspace root" >&2; exit 1 ;;
+esac
+IFS=':' read -r -a SERVE_ROOT_LIST <<< "$SERVE_ROOTS"
+NORMALIZED_SERVE_ROOTS=""
+for root in "${SERVE_ROOT_LIST[@]}"; do
+  case "$root" in
+    '~') root="$HOME" ;;
+    '~/'*) root="$HOME/${root#\~/}" ;;
+  esac
+  [ "${root#/}" != "$root" ] && [ -d "$root" ] || {
+    echo "Refusing release: every CONTEXGIN_ROOTS entry must be an existing absolute directory" >&2
+    exit 1
+  }
+  root="$(cd "$root" && pwd -P)"
+  NORMALIZED_SERVE_ROOTS="${NORMALIZED_SERVE_ROOTS:+$NORMALIZED_SERVE_ROOTS:}$root"
+done
+SERVE_ROOTS="$NORMALIZED_SERVE_ROOTS"
+PROBE_ROOT="${CONTEXGIN_PROBE_ROOT:-${SERVE_ROOTS%%:*}}"
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
 if [ "$SERVE_DB_PATH" != ":memory:" ]; then
@@ -58,7 +85,8 @@ wait_for_deployment_health() {
   local job_output
   local job_pid
   local listener_pids
-  for _ in {1..20}; do
+  local deadline=$((SECONDS + STARTUP_TIMEOUT_SECONDS))
+  while [ "$SECONDS" -lt "$deadline" ]; do
     job_output="$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null || true)"
     if ! printf '%s\n' "$job_output" | grep -Eq '^[[:space:]]+state = running$'; then
       sleep 0.5
