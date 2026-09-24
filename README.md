@@ -106,6 +106,13 @@ atomically, verifies `/health`, and restores the previous plist if the new
 release does not become healthy. The production start script also refuses a
 mutable, modified, or revision-mismatched checkout.
 
+The default workspace roots are derived from the deploying account's `$HOME`.
+Override them with a colon-separated `CONTEXGIN_ROOTS` value; optional
+`CONTEXGIN_DB_PATH`, `CONTEXGIN_PORT`, and `CONTEXGIN_PROBE_ROOT` values configure
+the persistent graph, listener, and post-cutover compile probe. The deploy command
+records the effective service settings in the installed launchd plist, so rollback
+restores both the previous revision and its configuration.
+
 ## Library Usage
 
 ### Compile context for a workspace

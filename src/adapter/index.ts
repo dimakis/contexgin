@@ -23,6 +23,7 @@ const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 
 export async function discoverAndAdapt(
   workspaceRoot: string,
   scopePath?: string,
+  options: { includeSpokes?: boolean } = {},
 ): Promise<ContextNode[]> {
   const root = path.resolve(workspaceRoot);
   const scope = scopePath === undefined ? undefined : path.resolve(root, scopePath);
@@ -79,8 +80,9 @@ export async function discoverAndAdapt(
     }
   }
 
-  // 3. Spoke-level files (one directory deep)
-  {
+  // 3. Spoke-level files (one directory deep). Hub compilation can disable
+  // this entire phase so confidential spoke material is never read.
+  if (options.includeSpokes !== false) {
     const entries = (await fs.readdir(root, { withFileTypes: true })).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
@@ -104,7 +106,7 @@ export async function discoverAndAdapt(
       }
     }
   }
-  if (scope) {
+  if (scope && options.includeSpokes !== false) {
     let directory = root;
     for (const part of path.relative(root, scope).split(path.sep).filter(Boolean)) {
       directory = path.join(directory, part);

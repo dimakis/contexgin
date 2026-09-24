@@ -29,11 +29,14 @@ if [ -n "${CONTEXGIN_DEPLOYMENT_COMMIT:-}" ]; then
   }
 fi
 
-exec node dist/cli.js serve \
-  /Users/dsaridak/redhat/mgmt \
-  /Users/dsaridak/redhat/openshell \
-  /Users/dsaridak/tools/mitzo \
-  /Users/dsaridak/projects/contexgin \
-  /Users/dsaridak/projects/centaur \
-  --db /Users/dsaridak/.local/share/contexgin/graph.db \
-  --port 4195
+DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
+ROOTS_VALUE="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
+IFS=':' read -r -a ROOTS <<< "$ROOTS_VALUE"
+[ "${#ROOTS[@]}" -gt 0 ] || {
+  echo "CONTEXGIN_ROOTS must contain at least one workspace root" >&2
+  exit 1
+}
+
+exec node dist/cli.js serve "${ROOTS[@]}" \
+  --db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" \
+  --port "${CONTEXGIN_PORT:-4195}"

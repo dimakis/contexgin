@@ -1,31 +1,30 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.contexgin.server</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>__RELEASE_DIR__/scripts/start.sh</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>__RELEASE_DIR__</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>CONTEXGIN_DEPLOYMENT_COMMIT</key>
-        <string>__SOURCE_COMMIT__</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>ThrottleInterval</key>
-    <integer>10</integer>
-    <key>StandardOutPath</key>
-    <string>__RELEASE_DIR__/logs/server-stdout.log</string>
-    <key>StandardErrorPath</key>
-    <string>__RELEASE_DIR__/logs/server-stderr.log</string>
+  <key>Label</key>
+  <string>com.contexgin.server</string>
+  <key>ProgramArguments</key>
+  <array><string>__RELEASE_DIR__/scripts/start.sh</string></array>
+  <key>WorkingDirectory</key>
+  <string>__RELEASE_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>CONTEXGIN_DEPLOYMENT_COMMIT</key>
+    <string>__SOURCE_COMMIT__</string>
+    <key>CONTEXGIN_ROOTS</key>
+    <string>__SERVE_ROOTS__</string>
+    <key>CONTEXGIN_DB_PATH</key>
+    <string>__DB_PATH__</string>
+    <key>CONTEXGIN_PORT</key>
+    <string>__PORT__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>__RELEASE_DIR__/logs/server-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__RELEASE_DIR__/logs/server-stderr.log</string>
 </dict>
 </plist>

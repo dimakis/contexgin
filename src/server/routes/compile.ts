@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import * as path from 'node:path';
+import { discoverAndAdapt } from '../../adapter/index.js';
 import { compile } from '../../compiler/index.js';
-import type { ContextSource } from '../../compiler/types.js';
 import { findSpoke } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
@@ -10,7 +10,7 @@ function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
   query: string,
-): { id: string; path: string; sources?: ContextSource[] } | null {
+): { id: string; path: string; rootOnly?: boolean } | null {
   if (!state.graph) return null;
 
   const spoke = findSpoke(state.graph, query);
@@ -29,13 +29,7 @@ function resolveWorkspace(
     return {
       id: hub.id,
       path: hub.path,
-      sources: [
-        {
-          path: hub.constitution.sourcePath,
-          kind: 'constitution',
-          relativePath: path.relative(hub.path, hub.constitution.sourcePath),
-        },
-      ],
+      rootOnly: true,
     };
   }
 
@@ -72,9 +66,12 @@ export function compileRoute(app: FastifyInstance, state: ServerState, config: S
     }
 
     try {
+      const nodes = workspace.rootOnly
+        ? await discoverAndAdapt(workspace.path, undefined, { includeSpokes: false })
+        : undefined;
       const compiled = await compile({
         workspaceRoot: workspace.path,
-        sources: workspace.sources,
+        nodes,
         tokenBudget: budget,
         taskHint: task,
       });

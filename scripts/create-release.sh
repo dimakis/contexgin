@@ -8,6 +8,11 @@ PLIST_DEST="$HOME/Library/LaunchAgents/com.contexgin.server.plist"
 DOMAIN="gui/$(id -u)"
 LABEL="com.contexgin.server"
 LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"
+DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
+SERVE_ROOTS="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
+SERVE_DB_PATH="${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}"
+SERVE_PORT="${CONTEXGIN_PORT:-4195}"
+PROBE_ROOT="${CONTEXGIN_PROBE_ROOT:-${SERVE_ROOTS%%:*}}"
 RELEASE_TEMP=""
 CUTOVER_ACTIVE=0
 PLIST_PREVIOUS=""
@@ -82,7 +87,8 @@ release_is_valid() {
     [ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]
 }
 if [ -e "$RELEASE_DIR" ] && ! release_is_valid; then
-  mv "$RELEASE_DIR" "${RELEASE_DIR}.invalid.$(date +%s)"
+  echo "Refusing release: immutable release directory is invalid: $RELEASE_DIR" >&2
+  exit 1
 fi
 if [ ! -e "$RELEASE_DIR" ]; then
   RELEASE_TEMP="$(mktemp -d "$RELEASE_ROOT/.build.XXXXXX")"
@@ -115,7 +121,10 @@ python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$RELEASE_DIR/infra/com.contexgin.server.plist" \
   "$PLIST_NEXT" \
   "$RELEASE_DIR" \
-  "$SOURCE_COMMIT"
+  "$SOURCE_COMMIT" \
+  "$SERVE_ROOTS" \
+  "$SERVE_DB_PATH" \
+  "$SERVE_PORT"
 plutil -lint "$PLIST_NEXT" >/dev/null
 
 if [ -f "$PLIST_DEST" ]; then
@@ -136,12 +145,13 @@ if ! bootstrap_with_retry; then
 fi
 
 for _ in {1..20}; do
-  HEALTH_JSON="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:4195/health 2>/dev/null || true)"
+  HEALTH_JSON="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$SERVE_PORT/health" 2>/dev/null || true)"
+  PROBE_BODY="$(node -e 'process.stdout.write(JSON.stringify({spoke:process.argv[1],budget:12000}))' "$PROBE_ROOT")"
   if node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$HEALTH_JSON" "$SOURCE_COMMIT" 2>/dev/null && \
     curl -fsS --max-time 15 \
       -H 'content-type: application/json' \
-      -d '{"spoke":"/Users/dsaridak/tools/mitzo","budget":12000}' \
-      http://127.0.0.1:4195/compile >/dev/null; then
+      -d "$PROBE_BODY" \
+      "http://127.0.0.1:$SERVE_PORT/compile" >/dev/null; then
     CUTOVER_ACTIVE=0
     [ -z "$PLIST_PREVIOUS" ] || [ ! -f "$PLIST_PREVIOUS" ] || mv "$PLIST_PREVIOUS" "${PLIST_PREVIOUS}.retired"
     echo "Released $SOURCE_COMMIT from $REMOTE_REF to $RELEASE_DIR"

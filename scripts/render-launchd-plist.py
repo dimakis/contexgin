@@ -16,12 +16,20 @@ def replace(value: object, replacements: dict[str, str]) -> object:
     return value
 
 
-template, destination, release_dir, source_commit = map(Path, sys.argv[1:])
+template = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+release_dir = Path(sys.argv[3])
+source_commit = sys.argv[4]
+serve_roots = sys.argv[5]
+db_path = sys.argv[6]
+port = sys.argv[7]
 with template.open("rb") as stream:
     plist = plistlib.load(stream)
-rendered = replace(
-    plist,
-    {"__RELEASE_DIR__": str(release_dir), "__SOURCE_COMMIT__": str(source_commit)},
-)
+replacements = {"__RELEASE_DIR__": str(release_dir)}
+replacements["__SOURCE_COMMIT__"] = source_commit
+replacements["__SERVE_ROOTS__"] = serve_roots
+replacements["__DB_PATH__"] = db_path
+replacements["__PORT__"] = port
+rendered = replace(plist, replacements)
 with destination.open("wb") as stream:
     plistlib.dump(rendered, stream, sort_keys=False)

@@ -24,7 +24,14 @@ describe('deployment contract', () => {
     expect(script).toContain(
       '[ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]',
     );
+    expect(script).toContain('Refusing release: immutable release directory is invalid');
+    expect(script).not.toContain('RELEASE_DIR}.invalid');
     expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
+    expect(script).toContain('CONTEXGIN_PROBE_ROOT');
+    expect(script).not.toContain('/Users/dsaridak');
+    expect(readFileSync(join(repoRoot, 'scripts/start.sh'), 'utf8')).not.toContain(
+      '/Users/dsaridak',
+    );
   });
 
   it('rejects an overlapping invocation before touching Git or launchd', () => {
@@ -59,11 +66,16 @@ describe('deployment contract', () => {
       rendered,
       release,
       'a'.repeat(40),
+      '/workspace/one:/workspace/two & three',
+      '/state/graph & data.db',
+      '4195',
     ]);
 
     const xml = readFileSync(rendered, 'utf8');
     expect(xml).toContain('release &amp; | path');
     expect(xml).toContain('a'.repeat(40));
+    expect(xml).toContain('/workspace/one:/workspace/two &amp; three');
+    expect(xml).toContain('/state/graph &amp; data.db');
   });
 
   it('rejects staged source drift and modified generated artifacts or dependencies', () => {

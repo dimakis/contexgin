@@ -616,6 +616,7 @@ context:
 
     it('compiles context for a configured hub root path', async () => {
       const root = await createTestWorkspace(tmpDir);
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nROOT_GUIDANCE\n');
       await fs.writeFile(path.join(root, 'svc', 'AGENTS.md'), '# Private\n\nSPOKE_SECRET\n');
       server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
       await server.rebuild();
@@ -628,6 +629,7 @@ context:
 
       expect(response.statusCode).toBe(200);
       expect(response.json().spoke).toContain('workspace');
+      expect(response.json().context).toContain('ROOT_GUIDANCE');
       expect(response.json().context).not.toContain('SPOKE_SECRET');
     });
 
