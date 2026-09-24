@@ -288,8 +288,12 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
       finishBullet();
       currentBullet = match[1];
       sawBullet = true;
-    } else if (currentBullet && /^\s+\S/.test(line)) {
+    } else if (currentBullet && trimmed) {
+      // CommonMark permits paragraph continuation text in list items without
+      // indentation. Preserve it so a wrapped "never" policy cannot vanish.
       currentBullet += ` ${line.trim()}`;
+    } else if (currentBullet) {
+      finishBullet();
     } else if (!sawBullet && trimmed) {
       activePolicyLines.push(trimmed);
     }

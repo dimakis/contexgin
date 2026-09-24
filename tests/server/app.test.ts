@@ -757,6 +757,35 @@ context:
       expect(response.json().context).not.toContain('PRIVATE_CURSOR_RULE');
     });
 
+    it('excludes cursor rules from a constituted but undeclared cursor directory', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# UNDECLARED_CURSOR_SECRET\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      expect(server.state.graph!.hubs[0].spokes.some((spoke) => spoke.name === '.cursor')).toBe(
+        false,
+      );
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('UNDECLARED_CURSOR_SECRET');
+    });
+
     it('compiles an approved root that is absent from the graph', async () => {
       const root = path.join(tmpDir, 'root-without-constitution');
       await fs.mkdir(root, { recursive: true });

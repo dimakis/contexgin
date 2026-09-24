@@ -326,6 +326,18 @@ Path | What belongs here
       expect(result.boundaries[0].excludedFrom).toEqual([]);
     });
 
+    it('classifies a confidentiality rule across a lazy bullet continuation', () => {
+      const content = `## Boundaries
+
+- Personal data
+never leaves this spoke
+`;
+      const result = parseConstitutionContent(content, '/test.md', 'test');
+      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries[0].description).toBe('Personal data never leaves this spoke');
+    });
+
     it('uses section policy prose without contaminating sibling bullets', () => {
       const content = `## Boundaries
 

@@ -40,7 +40,23 @@ async function resolveWorkspace(
         .sort((left, right) => right.path.length - left.path.length)[0];
     const profilePath = path.join(hub.path, 'memory', 'Profile');
     const profileSpoke = containingSpoke(profilePath);
-    const cursorSpoke = containingSpoke(path.join(hub.path, '.cursor', 'rules'));
+    const cursorPath = path.join(hub.path, '.cursor');
+    const cursorSpoke = containingSpoke(path.join(cursorPath, 'rules'));
+    let includeCursorRules = false;
+    if (cursorSpoke) {
+      includeCursorRules = Boolean(
+        cursorSpoke.constitution && cursorSpoke.confidentiality !== 'hard',
+      );
+    } else {
+      try {
+        // A constitution whose directory is absent from the hub declaration is
+        // still a confidentiality boundary. Fail closed instead of treating
+        // its rules as unowned hub content.
+        await fs.stat(path.join(cursorPath, 'CONSTITUTION.md'));
+      } catch (error) {
+        includeCursorRules = error instanceof Error && 'code' in error && error.code === 'ENOENT';
+      }
+    }
     return {
       id: hub.id,
       path: hub.path,
@@ -48,9 +64,7 @@ async function resolveWorkspace(
       includeProfiles: Boolean(
         profileSpoke?.constitution && profileSpoke.confidentiality !== 'hard',
       ),
-      includeCursorRules: cursorSpoke
-        ? Boolean(cursorSpoke.constitution && cursorSpoke.confidentiality !== 'hard')
-        : true,
+      includeCursorRules,
     };
   }
 
