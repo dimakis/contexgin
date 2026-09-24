@@ -11,7 +11,13 @@ async function resolveWorkspace(
   state: ServerState,
   config: ServerConfig,
   query: string,
-): Promise<{ id: string; path: string; rootOnly?: boolean; includeProfiles?: boolean } | null> {
+): Promise<{
+  id: string;
+  path: string;
+  rootOnly?: boolean;
+  includeProfiles?: boolean;
+  includeCursorRules?: boolean;
+} | null> {
   if (!state.graph) return null;
 
   const expanded = query.replace(/^~(?=$|\/)/, process.env.HOME || '');
@@ -24,14 +30,17 @@ async function resolveWorkspace(
       path.resolve(candidate.path) === resolvedQuery,
   );
   if (hub) {
+    const containingSpoke = (targetPath: string) =>
+      hub.spokes
+        .filter(
+          (spoke) =>
+            targetPath === path.resolve(spoke.path) ||
+            targetPath.startsWith(path.resolve(spoke.path) + path.sep),
+        )
+        .sort((left, right) => right.path.length - left.path.length)[0];
     const profilePath = path.join(hub.path, 'memory', 'Profile');
-    const profileSpoke = hub.spokes
-      .filter(
-        (spoke) =>
-          profilePath === path.resolve(spoke.path) ||
-          profilePath.startsWith(path.resolve(spoke.path) + path.sep),
-      )
-      .sort((left, right) => right.path.length - left.path.length)[0];
+    const profileSpoke = containingSpoke(profilePath);
+    const cursorSpoke = containingSpoke(path.join(hub.path, '.cursor', 'rules'));
     return {
       id: hub.id,
       path: hub.path,
@@ -39,6 +48,9 @@ async function resolveWorkspace(
       includeProfiles: Boolean(
         profileSpoke?.constitution && profileSpoke.confidentiality !== 'hard',
       ),
+      includeCursorRules: cursorSpoke
+        ? Boolean(cursorSpoke.constitution && cursorSpoke.confidentiality !== 'hard')
+        : true,
     };
   }
 
@@ -91,6 +103,7 @@ export function compileRoute(app: FastifyInstance, state: ServerState, config: S
         ? await discoverAndAdapt(workspace.path, undefined, {
             includeSpokes: false,
             includeProfiles: workspace.includeProfiles,
+            includeCursorRules: workspace.includeCursorRules,
           })
         : undefined;
       const compiled = await compile({

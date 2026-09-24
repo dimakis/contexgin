@@ -718,6 +718,45 @@ context:
       expect(response.json().context).not.toContain('UNATTESTED_PROFILE_SECRET');
     });
 
+    it('excludes cursor rules from a hard-confidential declared cursor spoke', async () => {
+      const root = await createTestWorkspace(tmpDir);
+      const constitutionPath = path.join(root, 'CONSTITUTION.md');
+      const constitution = await fs.readFile(constitutionPath, 'utf8');
+      await fs.writeFile(
+        constitutionPath,
+        constitution.replace(
+          '| `svc/` | Engineers | Own constitution | Service layer |',
+          '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+            '| `.cursor/` | Private | Own constitution | Private rules |',
+        ),
+      );
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Hub guidance\n\nHUB_CONTEXT\n');
+      await fs.mkdir(path.join(root, '.cursor', 'rules'), { recursive: true });
+      await fs.writeFile(
+        path.join(root, '.cursor', 'CONSTITUTION.md'),
+        '# Cursor\n\n## Confidentiality\n\n- Hard confidential; never expose outside this spoke.\n',
+      );
+      await fs.writeFile(
+        path.join(root, '.cursor', 'rules', 'private.mdc'),
+        '# PRIVATE_CURSOR_RULE\n',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [root], dbPath: ':memory:' });
+      await server.rebuild();
+
+      const cursor = server.state.graph!.hubs[0].spokes.find((spoke) => spoke.name === '.cursor');
+      expect(cursor?.confidentiality).toBe('hard');
+
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('HUB_CONTEXT');
+      expect(response.json().context).not.toContain('PRIVATE_CURSOR_RULE');
+    });
+
     it('compiles an approved root that is absent from the graph', async () => {
       const root = path.join(tmpDir, 'root-without-constitution');
       await fs.mkdir(root, { recursive: true });

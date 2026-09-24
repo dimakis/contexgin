@@ -23,7 +23,11 @@ const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 
 export async function discoverAndAdapt(
   workspaceRoot: string,
   scopePath?: string,
-  options: { includeSpokes?: boolean; includeProfiles?: boolean } = {},
+  options: {
+    includeSpokes?: boolean;
+    includeProfiles?: boolean;
+    includeCursorRules?: boolean;
+  } = {},
 ): Promise<ContextNode[]> {
   const root = path.resolve(workspaceRoot);
   const scope = scopePath === undefined ? undefined : path.resolve(root, scopePath);
@@ -68,7 +72,7 @@ export async function discoverAndAdapt(
 
   // 2. .cursor/rules/*.mdc
   const cursorRulesDir = path.join(root, '.cursor', 'rules');
-  if (await dirExists(cursorRulesDir)) {
+  if (options.includeCursorRules !== false && (await dirExists(cursorRulesDir))) {
     const files = (await fs.readdir(cursorRulesDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.mdc')) continue;
