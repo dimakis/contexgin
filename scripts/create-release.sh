@@ -138,44 +138,46 @@ REMOTE_REF="$(git -C "$SOURCE_ROOT" for-each-ref --format='%(refname:short) %(sy
   exit 1
 }
 
-RELEASE_DIR="$RELEASE_ROOT/$(printf '%s' "$SOURCE_COMMIT" | cut -c1-12)"
 runtime_sha256() { "$1/scripts/runtime-sha256.sh" "$1"; }
+RELEASE_TEMP="$(mktemp -d "$RELEASE_ROOT/.build.XXXXXX")"
+git clone --no-local --no-checkout "$SOURCE_ROOT" "$RELEASE_TEMP/release"
+ORIGIN_URL="$(git -C "$SOURCE_ROOT" remote get-url origin)"
+REMOTE_BRANCH="${REMOTE_REF#origin/}"
+git -C "$RELEASE_TEMP/release" remote set-url origin "$ORIGIN_URL"
+git -C "$RELEASE_TEMP/release" fetch --no-tags origin \
+  "+refs/heads/$REMOTE_BRANCH:refs/remotes/origin/$REMOTE_BRANCH"
+git -C "$RELEASE_TEMP/release" merge-base --is-ancestor \
+  "$SOURCE_COMMIT" "refs/remotes/origin/$REMOTE_BRANCH" || {
+  echo "Refusing release: $SOURCE_COMMIT is no longer published on $REMOTE_REF" >&2
+  exit 1
+}
+git -C "$RELEASE_TEMP/release" checkout --detach "$SOURCE_COMMIT"
+(
+  cd "$RELEASE_TEMP/release"
+  npm ci
+  npm run build
+)
+BUILT_RUNTIME_SHA256="$(runtime_sha256 "$RELEASE_TEMP/release")"
+printf '%s\n' "$BUILT_RUNTIME_SHA256" > "$RELEASE_TEMP/release/.runtime.sha256"
+RELEASE_DIR="$RELEASE_ROOT/$(printf '%s' "$SOURCE_COMMIT" | cut -c1-12)-$BUILT_RUNTIME_SHA256"
 release_is_valid() {
   [ -d "$RELEASE_DIR/.git" ] &&
     [ "$(git -C "$RELEASE_DIR" rev-parse HEAD 2>/dev/null)" = "$SOURCE_COMMIT" ] &&
     ! git -C "$RELEASE_DIR" symbolic-ref --quiet HEAD >/dev/null 2>&1 &&
     git -C "$RELEASE_DIR" diff-index --quiet HEAD -- &&
-    [ -s "$RELEASE_DIR/.runtime.sha256" ] &&
-    [ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]
+    [ "$(runtime_sha256 "$RELEASE_DIR")" = "$BUILT_RUNTIME_SHA256" ]
 }
 if [ -e "$RELEASE_DIR" ] && ! release_is_valid; then
   echo "Refusing release: immutable release directory is invalid: $RELEASE_DIR" >&2
   exit 1
 fi
-if [ ! -e "$RELEASE_DIR" ]; then
-  RELEASE_TEMP="$(mktemp -d "$RELEASE_ROOT/.build.XXXXXX")"
-  git clone --no-local --no-checkout "$SOURCE_ROOT" "$RELEASE_TEMP/release"
-  ORIGIN_URL="$(git -C "$SOURCE_ROOT" remote get-url origin)"
-  REMOTE_BRANCH="${REMOTE_REF#origin/}"
-  git -C "$RELEASE_TEMP/release" remote set-url origin "$ORIGIN_URL"
-  git -C "$RELEASE_TEMP/release" fetch --no-tags origin \
-    "+refs/heads/$REMOTE_BRANCH:refs/remotes/origin/$REMOTE_BRANCH"
-  git -C "$RELEASE_TEMP/release" merge-base --is-ancestor \
-    "$SOURCE_COMMIT" "refs/remotes/origin/$REMOTE_BRANCH" || {
-    echo "Refusing release: $SOURCE_COMMIT is no longer published on $REMOTE_REF" >&2
-    exit 1
-  }
-  git -C "$RELEASE_TEMP/release" checkout --detach "$SOURCE_COMMIT"
-  (
-    cd "$RELEASE_TEMP/release"
-    npm ci
-    npm run build
-    scripts/runtime-sha256.sh . > .runtime.sha256
-  )
+if [ -e "$RELEASE_DIR" ]; then
+  rm -rf -- "$RELEASE_TEMP"
+else
   mv "$RELEASE_TEMP/release" "$RELEASE_DIR"
   rmdir "$RELEASE_TEMP"
-  RELEASE_TEMP=""
 fi
+RELEASE_TEMP=""
 mkdir -p "$RELEASE_DIR/logs"
 
 PLIST_NEXT="$(mktemp "$HOME/Library/LaunchAgents/.com.contexgin.server.XXXXXX")"
@@ -186,7 +188,8 @@ python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$SOURCE_COMMIT" \
   "$SERVE_ROOTS" \
   "$SERVE_DB_PATH" \
-  "$SERVE_PORT"
+  "$SERVE_PORT" \
+  "$BUILT_RUNTIME_SHA256"
 plutil -lint "$PLIST_NEXT" >/dev/null
 
 if [ -f "$PLIST_DEST" ]; then

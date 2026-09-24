@@ -21,9 +21,9 @@ describe('deployment contract', () => {
     expect(script).toContain('mktemp -d "$RELEASE_ROOT/.build.XXXXXX"');
     expect(script).toContain('CUTOVER_ACTIVE=1');
     expect(script).toContain('h.deploymentCommit!==process.argv[2]');
-    expect(script).toContain(
-      '[ "$(runtime_sha256 "$RELEASE_DIR")" = "$(cat "$RELEASE_DIR/.runtime.sha256")" ]',
-    );
+    expect(script).toContain('[ "$(runtime_sha256 "$RELEASE_DIR")" = "$BUILT_RUNTIME_SHA256" ]');
+    expect(script).toContain('RELEASE_DIR="$RELEASE_ROOT/$(printf');
+    expect(script).toContain('-$BUILT_RUNTIME_SHA256"');
     expect(script).toContain('Refusing release: immutable release directory is invalid');
     expect(script).not.toContain('RELEASE_DIR}.invalid');
     expect(script).toContain('curl -fsS --connect-timeout 2 --max-time 5');
@@ -94,6 +94,7 @@ describe('deployment contract', () => {
       '/workspace/one:/workspace/two & three',
       '/state/graph & data.db',
       '4195',
+      'b'.repeat(64),
     ]);
 
     const xml = readFileSync(rendered, 'utf8');
@@ -101,6 +102,7 @@ describe('deployment contract', () => {
     expect(xml).toContain('a'.repeat(40));
     expect(xml).toContain('/workspace/one:/workspace/two &amp; three');
     expect(xml).toContain('/state/graph &amp; data.db');
+    expect(xml).toContain('b'.repeat(64));
   });
 
   it('rejects staged source drift and modified generated artifacts or dependencies', () => {
@@ -124,9 +126,6 @@ describe('deployment contract', () => {
       cwd: root,
       encoding: 'utf8',
     }).trim();
-    writeFileSync(join(root, '.runtime.sha256'), `${digest}\n`);
-    execFileSync('git', ['add', '.runtime.sha256'], { cwd: root });
-    execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '-m', 'digest'], { cwd: root });
     const pinned = execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: root,
       encoding: 'utf8',
@@ -135,7 +134,11 @@ describe('deployment contract', () => {
     writeFileSync(join(root, 'tracked.txt'), 'staged\n');
     execFileSync('git', ['add', 'tracked.txt'], { cwd: root });
     let result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
-      env: { ...process.env, CONTEXGIN_DEPLOYMENT_COMMIT: pinned },
+      env: {
+        ...process.env,
+        CONTEXGIN_DEPLOYMENT_COMMIT: pinned,
+        CONTEXGIN_RUNTIME_SHA256: digest,
+      },
       encoding: 'utf8',
     });
     expect(result.status).not.toBe(0);
@@ -145,7 +148,11 @@ describe('deployment contract', () => {
     execFileSync('git', ['restore', 'tracked.txt'], { cwd: root });
     writeFileSync(join(root, 'dist/cli.js'), 'tampered\n');
     result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
-      env: { ...process.env, CONTEXGIN_DEPLOYMENT_COMMIT: pinned },
+      env: {
+        ...process.env,
+        CONTEXGIN_DEPLOYMENT_COMMIT: pinned,
+        CONTEXGIN_RUNTIME_SHA256: digest,
+      },
       encoding: 'utf8',
     });
     expect(result.status).not.toBe(0);
@@ -154,7 +161,11 @@ describe('deployment contract', () => {
     writeFileSync(join(root, 'dist/cli.js'), 'clean\n');
     writeFileSync(join(root, 'node_modules/example/index.js'), 'tampered dependency\n');
     result = spawnSync('bash', [join(root, 'scripts/start.sh')], {
-      env: { ...process.env, CONTEXGIN_DEPLOYMENT_COMMIT: pinned },
+      env: {
+        ...process.env,
+        CONTEXGIN_DEPLOYMENT_COMMIT: pinned,
+        CONTEXGIN_RUNTIME_SHA256: digest,
+      },
       encoding: 'utf8',
     });
     expect(result.status).not.toBe(0);

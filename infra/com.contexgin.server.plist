@@ -12,6 +12,8 @@
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>CONTEXGIN_DEPLOYMENT_COMMIT</key>
     <string>__SOURCE_COMMIT__</string>
+    <key>CONTEXGIN_RUNTIME_SHA256</key>
+    <string>__RUNTIME_SHA256__</string>
     <key>CONTEXGIN_ROOTS</key>
     <string>__SERVE_ROOTS__</string>
     <key>CONTEXGIN_DB_PATH</key>
