@@ -11,6 +11,8 @@ describe('deployment contract', () => {
     const script = readFileSync(join(repoRoot, 'scripts/create-release.sh'), 'utf8');
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
     expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
+    expect(script).toContain('LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"');
+    expect(script).not.toContain('LOCK_FILE="$RELEASE_ROOT');
     expect(script).toContain("trap 'exit 130' INT TERM HUP");
     expect(script).toContain('mktemp -d "$RELEASE_ROOT/.build.XXXXXX"');
     expect(script).toContain('CUTOVER_ACTIVE=1');
