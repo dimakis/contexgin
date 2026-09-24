@@ -7,13 +7,14 @@ RELEASE_ROOT="${CONTEXGIN_RELEASE_ROOT:-$HOME/projects/contexgin-releases}"
 PLIST_DEST="$HOME/Library/LaunchAgents/com.contexgin.server.plist"
 DOMAIN="gui/$(id -u)"
 LABEL="com.contexgin.server"
-LOCK_DIR="$RELEASE_ROOT/.deploy.lock"
+LOCK_FILE="$RELEASE_ROOT/.deploy.lock"
+RELEASE_TEMP=""
 CUTOVER_ACTIVE=0
 PLIST_PREVIOUS=""
 PLIST_NEXT=""
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+if ! shlock -f "$LOCK_FILE" -p "$$"; then
   echo "Refusing release: another ContexGin deployment is active" >&2
   exit 1
 fi
@@ -50,7 +51,8 @@ cleanup() {
   trap - EXIT INT TERM HUP
   if [ "$CUTOVER_ACTIVE" = "1" ]; then rollback; fi
   [ -z "$PLIST_NEXT" ] || [ ! -f "$PLIST_NEXT" ] || mv "$PLIST_NEXT" "${PLIST_NEXT}.abandoned"
-  rmdir "$LOCK_DIR" 2>/dev/null || true
+  if [ -n "$RELEASE_TEMP" ] && [ -d "$RELEASE_TEMP" ]; then rm -rf -- "$RELEASE_TEMP"; fi
+  rm -f -- "$LOCK_FILE"
   exit "$status"
 }
 trap cleanup EXIT
@@ -92,6 +94,7 @@ if [ ! -e "$RELEASE_DIR" ]; then
   )
   mv "$RELEASE_TEMP/release" "$RELEASE_DIR"
   rmdir "$RELEASE_TEMP"
+  RELEASE_TEMP=""
 fi
 mkdir -p "$RELEASE_DIR/logs"
 

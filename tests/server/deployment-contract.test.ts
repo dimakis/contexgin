@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync } from 'node:fs';
+import { chmodSync, cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ describe('deployment contract', () => {
   it('serializes deploys and has atomic release, rollback, and commit attestation guards', () => {
     const script = readFileSync(join(repoRoot, 'scripts/create-release.sh'), 'utf8');
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
-    expect(script).toContain('mkdir "$LOCK_DIR"');
+    expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
     expect(script).toContain("trap 'exit 130' INT TERM HUP");
     expect(script).toContain('mktemp -d "$RELEASE_ROOT/.build.XXXXXX"');
     expect(script).toContain('CUTOVER_ACTIVE=1');
@@ -20,9 +20,19 @@ describe('deployment contract', () => {
   it('rejects an overlapping invocation before touching Git or launchd', () => {
     const home = mkdtempSync(join(tmpdir(), 'contexgin-deploy-lock-'));
     const releases = join(home, 'releases');
-    mkdirSync(join(releases, '.deploy.lock'), { recursive: true });
+    mkdirSync(releases, { recursive: true });
+    writeFileSync(join(releases, '.deploy.lock'), `${process.pid}\n`);
+    const bin = join(home, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'shlock'), '#!/bin/sh\nexit 1\n');
+    chmodSync(join(bin, 'shlock'), 0o755);
     const result = spawnSync('bash', [join(repoRoot, 'scripts/create-release.sh')], {
-      env: { ...process.env, HOME: home, CONTEXGIN_RELEASE_ROOT: releases },
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${bin}:${process.env.PATH}`,
+        CONTEXGIN_RELEASE_ROOT: releases,
+      },
       encoding: 'utf8',
     });
     expect(result.status).not.toBe(0);
