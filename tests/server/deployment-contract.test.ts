@@ -39,6 +39,9 @@ describe('deployment contract', () => {
     expect(script).toContain('grep -Fxq "$job_pid"');
     expect(script).toContain('CONTEXGIN_LEGACY_WORKING_DIRECTORY');
     expect(script).toContain(
+      'plutil -insert WorkingDirectory -string "$PREVIOUS_WORKING_DIRECTORY" "$PLIST_PREVIOUS"',
+    );
+    expect(script).toContain(
       'wait_for_deployment_health "$SERVE_PORT" "$SOURCE_COMMIT" "$RELEASE_DIR"',
     );
     expect(script).toContain('ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped');

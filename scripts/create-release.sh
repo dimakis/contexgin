@@ -202,6 +202,9 @@ if [ -f "$PLIST_DEST" ]; then
       PREVIOUS_WORKING_DIRECTORY="$(git -C "$(dirname "$PREVIOUS_PROGRAM")" rev-parse --show-toplevel 2>/dev/null || true)"
     fi
     PREVIOUS_WORKING_DIRECTORY="${PREVIOUS_WORKING_DIRECTORY:-${CONTEXGIN_LEGACY_WORKING_DIRECTORY:-}}"
+    if [ -n "$PREVIOUS_WORKING_DIRECTORY" ]; then
+      plutil -insert WorkingDirectory -string "$PREVIOUS_WORKING_DIRECTORY" "$PLIST_PREVIOUS"
+    fi
   fi
   [ -n "$PREVIOUS_WORKING_DIRECTORY" ] || {
     echo "Refusing release: cannot derive the legacy working directory; set CONTEXGIN_LEGACY_WORKING_DIRECTORY for the first guarded deployment" >&2

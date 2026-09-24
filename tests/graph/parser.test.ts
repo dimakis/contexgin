@@ -276,9 +276,11 @@ Path | What belongs here
 - Never appears in reports
 `;
       const result = parseConstitutionContent(content, '/test.md', 'career');
-      expect(result.boundaries).toHaveLength(1);
+      expect(result.boundaries).toHaveLength(2);
       expect(result.boundaries[0].level).toBe('hard');
       expect(result.boundaries[0].excludedFrom).toContain('jira_process/');
+      expect(result.boundaries[1].level).toBe('hard');
+      expect(result.boundaries[1].excludedFrom).toEqual([]);
     });
 
     it('detects hard confidentiality from "never" keyword', () => {

@@ -132,6 +132,18 @@ describe('buildGraph', () => {
       expect(isAccessible(graph, graph.hubs[0].id, auth.id)).toBe(true);
     });
 
+    it('keeps a global hard rule global when mixed with a targeted exclusion', async () => {
+      const root = await createFixtureWorkspace(tmpDir);
+      await fs.appendFile(
+        path.join(root, 'auth', 'CONSTITUTION.md'),
+        '\n## Boundaries\n\n- Never flows into `api/`.\n- Never leaves this spoke.\n',
+      );
+      const graph = await buildGraph([root]);
+      const auth = graph.hubs[0].spokes.find((spoke) => spoke.name === 'auth')!;
+
+      expect(auth.confidentiality).toBe('hard');
+    });
+
     it('records violation for missing spoke constitution', async () => {
       const root = await createFixtureWorkspace(tmpDir);
       const graph = await buildGraph([root]);

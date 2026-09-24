@@ -264,22 +264,18 @@ function extractBoundaries(content: string, nodeId: string): Boundary[] {
   }
 
   if (bulletItems.length > 0) {
-    // Extract spoke references from bullet items
-    const excludedFrom: string[] = [];
+    const sectionLevel = inferConfidentialityLevel(section);
     for (const item of bulletItems) {
       // Look for backtick-enclosed spoke references
       const refs = [...item.matchAll(/`([^`]+\/)`/g)];
-      for (const ref of refs) {
-        excludedFrom.push(ref[1]);
-      }
+      const itemLevel = inferConfidentialityLevel([item]);
+      boundaries.push({
+        spokeId: nodeId,
+        level: itemLevel === 'none' ? sectionLevel : itemLevel,
+        description: item,
+        excludedFrom: refs.map((ref) => ref[1]),
+      });
     }
-
-    boundaries.push({
-      spokeId: nodeId,
-      level: inferConfidentialityLevel(section),
-      description: bulletItems.join('; '),
-      excludedFrom,
-    });
   }
 
   return boundaries;
