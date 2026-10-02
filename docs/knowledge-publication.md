@@ -9,8 +9,8 @@ adoption. Centaur owns review. The publisher does not require Centaur to run.
 2. Reviewed changes reach the configured accepted Git ref, usually `refs/heads/main`.
 3. GitHub sends a signed push webhook. ContexGin validates the exact body, repository,
    ref, and delivery id, commits the work to SQLite, and returns HTTP 202.
-4. The worker fetches the configured ref into its private bare mirror. State children cannot redirect writes through symlinks. Payload SHAs
-   never select the revision. Duplicate deliveries are ignored; bursts coalesce.
+4. The worker fetches the configured ref into its private bare mirror. State children cannot redirect writes through symlinks. Each acquisition owns a private Git ref, so overlapping workers cannot change its
+   selected revision. Payload SHAs never select the revision. Duplicate deliveries are ignored; bursts coalesce.
 5. Explicit portable `.md` paths are copied from Git blobs into private staging.
    Repository scripts and hooks are never run. Symlinks/submodules at selected Markdown
    paths fail validation. Non-Markdown assets in directory selections are omitted.

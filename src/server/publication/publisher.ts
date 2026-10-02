@@ -134,7 +134,7 @@ export class KnowledgePublisher {
   private timer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   private rescan = false;
-  readonly sources: KnowledgeSource[];
+  readonly sources: readonly KnowledgeSource[];
 
   constructor(private config: PublicationConfig) {
     if (!isAbsolute(config.root) || !Array.isArray(config.sources) || !config.sources.length)
@@ -168,6 +168,11 @@ export class KnowledgePublisher {
     config = { ...structuredClone(config), root: privateRoot(config) };
     this.config = config;
     this.sources = structuredClone(config.sources);
+    for (const source of this.sources) {
+      Object.freeze(source.paths);
+      Object.freeze(source);
+    }
+    Object.freeze(this.sources);
     const newParents = [config.root];
     let parent = dirname(config.root);
     while (!existsSync(parent)) {
@@ -369,132 +374,137 @@ export class KnowledgePublisher {
     checkChild(mirror);
     await mkdir(mirror, { recursive: true, mode: 0o700 });
     await this.git(mirror, ['init', '--bare']);
-    await this.git(mirror, [
-      'fetch',
-      '--no-tags',
-      '--force',
-      '--',
-      source.url,
-      `${source.ref}:refs/publication/accepted`,
-    ]);
-    const revision = (
-      await this.git(mirror, ['rev-parse', 'refs/publication/accepted^{commit}'])
-    ).toString();
-    const retained = this.current(source.id);
-    if (retained?.revision === revision && (await this.verify(retained, source))) return retained;
-    const records = (await this.git(mirror, ['ls-tree', '-rz', revision], true))
-      .toString()
-      .split('\0')
-      .filter(Boolean);
-    const files: { path: string; sha256: string; bytes: number }[] = [];
-    const staging = join(sourceRoot, `building-${randomUUID()}`);
-    const final = join(sourceRoot, `snapshot-${revision}-${randomUUID()}`);
-    await mkdir(join(staging, 'source'), { recursive: true, mode: 0o700 });
+    const fetchRef = `refs/publication/${randomUUID()}`;
     try {
-      let total = 0;
-      for (const record of records) {
-        const tab = record.indexOf('\t');
-        const [mode, type, oid] = record.slice(0, tab).split(' ');
-        const name = record.slice(tab + 1);
-        if (!source.paths.some((p) => (p.endsWith('/') ? name.startsWith(p) : name === p)))
-          continue;
-        if (
-          !name.endsWith('.md') &&
-          source.paths.some((p) => p.endsWith('/') && name.startsWith(p))
-        )
-          continue;
-        if (
-          !safePath(name) ||
-          !/^100(644|755)$/.test(mode) ||
-          type !== 'blob' ||
-          !name.endsWith('.md')
-        )
-          throw new Error('Portable paths must contain regular Markdown files');
-        const content = await this.git(mirror, ['cat-file', 'blob', oid], true);
-        total += content.length;
-        if (total > 64 * 1024 * 1024 || files.length >= 10_000)
-          throw new Error('Portable snapshot too large');
-        const target = join(staging, 'source', name);
-        await mkdir(join(target, '..'), { recursive: true, mode: 0o700 });
-        await writeFile(target, content, { mode: 0o600 });
-        files.push({ path: name, sha256: hash(content), bytes: content.length });
-      }
-      if (
-        !files.length ||
-        source.paths.some(
-          (p) => !files.some((f) => (p.endsWith('/') ? f.path.startsWith(p) : f.path === p)),
-        )
-      )
-        throw new Error('Portable paths missing');
-      const context = await compile({
-        workspaceRoot: join(staging, 'source'),
-        tokenBudget: 12_000,
-      });
-      // Compiler output uses staging-local paths. Publish paths relative to the snapshot.
-      const contextJson = encodeContext(context, join(staging, 'source'));
-      await writeFile(join(staging, 'context.json'), contextJson, { mode: 0o600 });
-      const manifest = JSON.stringify({
-        schema: 'contexgin-portable-v1',
-        source: source.id,
-        acceptedRef: source.ref,
-        sourceIdentity: hash(JSON.stringify(source)),
-        revision,
-        paths: source.paths,
-        files,
-        contextSha256: hash(contextJson),
-      });
-      await writeFile(join(staging, 'manifest.json'), manifest, { mode: 0o600 });
-      if (
-        !(await this.verify(
-          { revision, directory: staging, manifestSha256: hash(manifest) },
-          source,
-        ))
-      )
-        throw new Error('Snapshot verification failed');
-      // Flush file data and directory entries before committing the durable DB pointer.
-      const dirs = new Set<string>([staging, join(staging, 'source')]);
-      for (const file of [
-        ...files.map((f) => join('source', f.path)),
-        'context.json',
-        'manifest.json',
-      ]) {
-        const target = join(staging, file);
-        const handle = await open(target, 'r');
-        try {
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-        let parent = join(target, '..');
-        while (parent !== staging) {
-          dirs.add(parent);
-          parent = join(parent, '..');
-        }
-      }
-      for (const directory of [...dirs].sort((a, b) => b.length - a.length)) {
-        const handle = await open(directory, 'r');
-        try {
-          await handle.sync();
-        } finally {
-          await handle.close();
-        }
-      }
-      await rename(staging, final);
-      const parent = await open(sourceRoot, 'r');
+      await this.git(mirror, [
+        'fetch',
+        '--no-write-fetch-head',
+        '--no-tags',
+        '--force',
+        '--',
+        source.url,
+        `${source.ref}:${fetchRef}`,
+      ]);
+      const revision = (await this.git(mirror, ['rev-parse', `${fetchRef}^{commit}`])).toString();
+      const retained = this.current(source.id);
+      if (retained?.revision === revision && (await this.verify(retained, source))) return retained;
+      const records = (await this.git(mirror, ['ls-tree', '-rz', revision], true))
+        .toString()
+        .split('\0')
+        .filter(Boolean);
+      const files: { path: string; sha256: string; bytes: number }[] = [];
+      const staging = join(sourceRoot, `building-${randomUUID()}`);
+      const final = join(sourceRoot, `snapshot-${revision}-${randomUUID()}`);
+      await mkdir(join(staging, 'source'), { recursive: true, mode: 0o700 });
       try {
-        await parent.sync();
+        let total = 0;
+        for (const record of records) {
+          const tab = record.indexOf('\t');
+          const [mode, type, oid] = record.slice(0, tab).split(' ');
+          const name = record.slice(tab + 1);
+          if (!source.paths.some((p) => (p.endsWith('/') ? name.startsWith(p) : name === p)))
+            continue;
+          if (
+            !name.endsWith('.md') &&
+            source.paths.some((p) => p.endsWith('/') && name.startsWith(p))
+          )
+            continue;
+          if (
+            !safePath(name) ||
+            !/^100(644|755)$/.test(mode) ||
+            type !== 'blob' ||
+            !name.endsWith('.md')
+          )
+            throw new Error('Portable paths must contain regular Markdown files');
+          const content = await this.git(mirror, ['cat-file', 'blob', oid], true);
+          total += content.length;
+          if (total > 64 * 1024 * 1024 || files.length >= 10_000)
+            throw new Error('Portable snapshot too large');
+          const target = join(staging, 'source', name);
+          await mkdir(join(target, '..'), { recursive: true, mode: 0o700 });
+          await writeFile(target, content, { mode: 0o600 });
+          files.push({ path: name, sha256: hash(content), bytes: content.length });
+        }
+        if (
+          !files.length ||
+          source.paths.some(
+            (p) => !files.some((f) => (p.endsWith('/') ? f.path.startsWith(p) : f.path === p)),
+          )
+        )
+          throw new Error('Portable paths missing');
+        const context = await compile({
+          workspaceRoot: join(staging, 'source'),
+          tokenBudget: 12_000,
+        });
+        // Compiler output uses staging-local paths. Publish paths relative to the snapshot.
+        const contextJson = encodeContext(context, join(staging, 'source'));
+        await writeFile(join(staging, 'context.json'), contextJson, { mode: 0o600 });
+        const manifest = JSON.stringify({
+          schema: 'contexgin-portable-v1',
+          source: source.id,
+          acceptedRef: source.ref,
+          sourceIdentity: hash(JSON.stringify(source)),
+          revision,
+          paths: source.paths,
+          files,
+          contextSha256: hash(contextJson),
+        });
+        await writeFile(join(staging, 'manifest.json'), manifest, { mode: 0o600 });
+        if (
+          !(await this.verify(
+            { revision, directory: staging, manifestSha256: hash(manifest) },
+            source,
+          ))
+        )
+          throw new Error('Snapshot verification failed');
+        // Flush file data and directory entries before committing the durable DB pointer.
+        const dirs = new Set<string>([staging, join(staging, 'source')]);
+        for (const file of [
+          ...files.map((f) => join('source', f.path)),
+          'context.json',
+          'manifest.json',
+        ]) {
+          const target = join(staging, file);
+          const handle = await open(target, 'r');
+          try {
+            await handle.sync();
+          } finally {
+            await handle.close();
+          }
+          let parent = join(target, '..');
+          while (parent !== staging) {
+            dirs.add(parent);
+            parent = join(parent, '..');
+          }
+        }
+        for (const directory of [...dirs].sort((a, b) => b.length - a.length)) {
+          const handle = await open(directory, 'r');
+          try {
+            await handle.sync();
+          } finally {
+            await handle.close();
+          }
+        }
+        await rename(staging, final);
+        const parent = await open(sourceRoot, 'r');
+        try {
+          await parent.sync();
+        } finally {
+          await parent.close();
+        }
+        const rootHandle = await open(this.config.root, 'r');
+        try {
+          await rootHandle.sync();
+        } finally {
+          await rootHandle.close();
+        }
+        return { revision, directory: final, manifestSha256: hash(manifest) };
       } finally {
-        await parent.close();
+        await rm(staging, { recursive: true, force: true });
       }
-      const rootHandle = await open(this.config.root, 'r');
-      try {
-        await rootHandle.sync();
-      } finally {
-        await rootHandle.close();
-      }
-      return { revision, directory: final, manifestSha256: hash(manifest) };
     } finally {
-      await rm(staging, { recursive: true, force: true });
+      // Each acquisition owns its ref; an overlapping worker cannot change its revision.
+      await this.git(mirror, ['update-ref', '-d', fetchRef]).catch(() => undefined);
     }
   }
   private async verify(publication: Publication, source: KnowledgeSource): Promise<boolean> {

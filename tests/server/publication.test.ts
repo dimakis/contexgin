@@ -396,4 +396,32 @@ describe('knowledge publication', () => {
       context.sources.every((source: { path: string }) => source.path.startsWith('source/')),
     ).toBe(true);
   });
+
+  it('binds the snapshot to its own fetch when another worker changes mirror refs', async () => {
+    const accepted = git('rev-parse', 'main');
+    git('checkout', '-b', 'other');
+    await writeFile(join(repo, 'AGENTS.md'), '# Unaccepted branch\n\nWrong knowledge.\n');
+    git('add', '.');
+    git('commit', '-m', 'other branch');
+    git('checkout', 'main');
+    const worker = publisher as unknown as {
+      git: (cwd: string, args: string[], binary?: boolean) => Promise<Buffer>;
+    };
+    const original = worker.git.bind(worker);
+    vi.spyOn(worker, 'git').mockImplementation(async (cwd, args, binary) => {
+      const result = await original(cwd, args, binary);
+      if (args[0] === 'fetch')
+        await original(cwd, [
+          'fetch',
+          '--force',
+          '--',
+          repo,
+          'refs/heads/other:refs/publication/accepted',
+        ]);
+      return result;
+    });
+    publisher.enqueue('notes', 'isolated-fetch');
+    await publisher.drain();
+    expect(publisher.current('notes')!.revision).toBe(accepted);
+  });
 });
