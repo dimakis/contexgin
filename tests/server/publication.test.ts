@@ -447,6 +447,67 @@ describe('knowledge publication', () => {
     expect(publisher.status('notes').completed).toBe(publisher.status('notes').requested);
   });
 
+  it('finishes admission for its source while another source remains busy', async () => {
+    await publisher.close();
+    publisher = new KnowledgePublisher({
+      root: join(root, 'admission'),
+      sources: ['notes', 'later'].map((id) => ({
+        id,
+        url: repo,
+        ref: 'refs/heads/main',
+        paths: ['AGENTS.md'],
+      })),
+    });
+    const worker = publisher as unknown as {
+      build: (source: KnowledgeSource) => Promise<Publication>;
+    };
+    const original = worker.build.bind(worker);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(worker, 'build').mockImplementation(async (source) => {
+      if (source.id === 'later') await gate;
+      return original(source);
+    });
+    const app = Fastify();
+    publicationRoutes(app, publisher, 'secret', 'token');
+    publisher.enqueue('later');
+    try {
+      const result = await Promise.race([
+        app.inject({
+          method: 'POST',
+          url: '/api/publications/notes/reconcile',
+          headers: { authorization: 'Bearer token' },
+        }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+      ]);
+      expect(result?.statusCode).toBe(200);
+    } finally {
+      release();
+      await publisher.drain();
+      await app.close();
+    }
+  });
+
+  it('rejects redirects inside an existing Git mirror before fetching', async () => {
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const prior = publisher.current('notes');
+    const objects = join(root, 'state', 'notes', 'mirror.git', 'objects');
+    await rm(objects, { recursive: true });
+    await symlink(repo, objects, 'dir');
+    const worker = publisher as unknown as {
+      git: (cwd: string, args: string[], binary?: boolean) => Promise<Buffer>;
+    };
+    const commands = vi.spyOn(worker, 'git');
+    publisher.enqueue('notes');
+    await publisher.drain();
+    expect(commands).not.toHaveBeenCalled();
+    expect(publisher.current('notes')).toEqual(prior);
+    expect(publisher.status('notes').error).toBeTruthy();
+  });
+
   it('binds the snapshot to its own fetch when another worker changes mirror refs', async () => {
     const accepted = git('rev-parse', 'main');
     git('checkout', '-b', 'other');

@@ -41,10 +41,7 @@ export function publicationRoutes(
         const id = request.params.source;
         if (!publisher.sources.some((s) => s.id === id))
           return reply.code(404).send({ error: 'Unknown source' });
-        publisher.enqueue(id);
-        await publisher.drain();
-        const status = publisher.status(id);
-        if (status.completed !== status.requested || status.error)
+        if (!(await publisher.reconcile(id)))
           return reply.code(503).send({ error: 'Fresh publication unavailable' });
         return { current: publisher.current(id) };
       },

@@ -134,6 +134,7 @@ export class KnowledgePublisher {
   private timer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   private rescan = false;
+  private admissions = new Set<() => void>();
   readonly sources: readonly KnowledgeSource[];
 
   constructor(private config: PublicationConfig) {
@@ -265,6 +266,41 @@ export class KnowledgePublisher {
     })();
   }
 
+  /** Wait only for this admission's generation, independently of unrelated deliveries. */
+  async reconcile(id: string): Promise<boolean> {
+    if (this.closed) return false;
+    this.enqueue(id);
+    const generation = this.status(id).requested;
+    return new Promise<boolean>((resolve, reject) => {
+      const finish = (fresh: boolean) => {
+        clearInterval(timer);
+        this.admissions.delete(check);
+        resolve(fresh);
+      };
+      const fail = (error: unknown) => {
+        clearInterval(timer);
+        this.admissions.delete(check);
+        reject(error);
+      };
+      const check = () => {
+        if (!this.admissions.has(check)) return;
+        if (this.closed) return finish(false);
+        const state = this.status(id);
+        if (state.completed >= generation || state.retry > Date.now())
+          finish(state.completed >= generation && !state.error);
+      };
+      // Local completion is event-driven; this check also observes another lease holder.
+      const timer = setInterval(() => {
+        check();
+        if (this.admissions.has(check)) void this.drain().then(check, fail);
+      }, 1000);
+      timer.unref();
+      this.admissions.add(check);
+      check();
+      void this.drain().then(check, fail);
+    });
+  }
+
   /** Operator-only early retry: at most once per minute after the last failed attempt. */
   requestRetry(id: string): boolean {
     this.status(id);
@@ -361,6 +397,7 @@ export class KnowledgePublisher {
             .run(Date.now(), source.id, token);
         } finally {
           clearInterval(renewal);
+          for (const notify of this.admissions) notify();
         }
       }
     }
@@ -388,6 +425,20 @@ export class KnowledgePublisher {
     const mirror = join(sourceRoot, 'mirror.git');
     checkChild(mirror);
     await mkdir(mirror, { recursive: true, mode: 0o700 });
+    const validateMirror = async (directory: string): Promise<void> => {
+      for (const name of await readdir(directory)) {
+        const path = join(directory, name);
+        const stat = lstatSync(path);
+        if (
+          stat.isSymbolicLink() ||
+          stat.uid !== process.getuid?.() ||
+          (!stat.isDirectory() && (!stat.isFile() || stat.nlink !== 1))
+        )
+          throw new Error('Unsafe Git mirror contents');
+        if (stat.isDirectory()) await validateMirror(path);
+      }
+    };
+    await validateMirror(mirror);
     await this.git(mirror, ['init', '--bare']);
     const fetchRef = `refs/publication/${randomUUID()}`;
     try {
@@ -597,8 +648,9 @@ export class KnowledgePublisher {
   async close(): Promise<void> {
     if (this.closed) return;
     if (this.timer) clearInterval(this.timer);
-    await this.flight;
     this.closed = true;
+    for (const notify of this.admissions) notify();
+    await this.flight;
     this.db.close();
   }
 }
