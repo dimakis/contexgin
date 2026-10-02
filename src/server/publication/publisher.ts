@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync } from 'node:fs';
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
@@ -10,7 +10,7 @@ import { compile } from '../../compiler/index.js';
 export interface KnowledgeSource {
   id: string;
   url: string;
-  /** Fully qualified accepted branch, never a webhook-supplied revision. */
+  /** Fully qualified accepted Git ref, never a webhook-supplied revision. */
   ref: string;
   githubRepository?: string;
   /** Explicit portable Markdown files or directory prefixes ending in /. */
@@ -33,6 +33,21 @@ interface State {
 }
 const execute = promisify(execFile);
 const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
+function validRef(ref: string): boolean {
+  if (typeof ref !== 'string' || !ref.startsWith('refs/')) return false;
+  try {
+    execFileSync('git', ['check-ref-format', ref], {
+      stdio: 'ignore',
+      timeout: 5000,
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
+      ),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 const safePath = (value: string) =>
   value.length > 0 &&
   !value.startsWith('/') &&
@@ -46,6 +61,7 @@ export class KnowledgePublisher {
   private flight: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
+  private rescan = false;
   readonly sources: KnowledgeSource[];
 
   constructor(private config: PublicationConfig) {
@@ -56,12 +72,7 @@ export class KnowledgePublisher {
       if (!/^[a-zA-Z0-9_-]+$/.test(source.id) || ids.has(source.id))
         throw new Error('Invalid or duplicate source id');
       ids.add(source.id);
-      if (
-        !source.url ||
-        source.url.startsWith('-') ||
-        !/^refs\/heads\/[a-zA-Z0-9_./-]+$/.test(source.ref) ||
-        source.ref.includes('..')
-      )
+      if (!source.url || source.url.startsWith('-') || !validRef(source.ref))
         throw new Error('Invalid Git source');
       if (
         !Array.isArray(source.paths) ||
@@ -125,6 +136,7 @@ export class KnowledgePublisher {
         .run(id, delivery);
       if (!result.changes) return false;
       this.db.prepare('UPDATE sources SET requested=requested+1, retry=0 WHERE id=?').run(id);
+      this.rescan = true;
       return true;
     })();
   }
@@ -150,12 +162,19 @@ export class KnowledgePublisher {
   async drain(): Promise<void> {
     if (this.closed) return;
     if (this.flight) return this.flight;
-    this.flight = this.process();
+    this.flight = this.runPasses();
     try {
       await this.flight;
     } finally {
       this.flight = null;
     }
+  }
+
+  private async runPasses(): Promise<void> {
+    do {
+      this.rescan = false;
+      await this.process();
+    } while (this.rescan && !this.closed);
   }
 
   private async process(): Promise<void> {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import { KnowledgePublisher } from '../../src/server/publication/publisher.js';
+import type { KnowledgeSource, Publication } from '../../src/server/publication/publisher.js';
 import { publicationRoutes } from '../../src/server/publication/routes.js';
 
 describe('knowledge publication', () => {
@@ -223,5 +224,66 @@ describe('knowledge publication', () => {
     expect(publisher.current('notes')).toBeNull();
     await publisher.drain();
     expect(publisher.current('notes')).toBeNull();
+  });
+
+  it('finishes work enqueued for an earlier source during an active flight', async () => {
+    await publisher.close();
+    publisher = new KnowledgePublisher({
+      root: join(root, 'multi'),
+      sources: ['notes', 'later'].map((id) => ({
+        id,
+        url: repo,
+        ref: 'refs/heads/main',
+        paths: ['AGENTS.md'],
+      })),
+    });
+    const worker = publisher as unknown as {
+      build: (source: KnowledgeSource) => Promise<Publication>;
+    };
+    const original = worker.build.bind(worker);
+    let unblock = () => {};
+    let reached = () => {};
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    vi.spyOn(worker, 'build').mockImplementation(async (source) => {
+      if (source.id === 'later') {
+        reached();
+        await gate;
+      }
+      return original(source);
+    });
+    publisher.enqueue('notes', 'first');
+    publisher.enqueue('later', 'first');
+    const first = publisher.drain();
+    await entered;
+    publisher.enqueue('notes', 'arrived-during-later');
+    const barrier = publisher.drain();
+    unblock();
+    await Promise.all([first, barrier]);
+    expect(publisher.status('notes').completed).toBe(2);
+    expect(publisher.status('notes').requested).toBe(2);
+  });
+
+  it('publishes an annotated accepted tag and rejects invalid ref syntax', async () => {
+    git('tag', '--no-sign', '-a', 'accepted', '-m', 'accepted knowledge');
+    await publisher.close();
+    publisher = new KnowledgePublisher({
+      root: join(root, 'tag'),
+      sources: [{ id: 'notes', url: repo, ref: 'refs/tags/accepted', paths: ['AGENTS.md'] }],
+    });
+    publisher.enqueue('notes', 'tag');
+    await publisher.drain();
+    expect(publisher.current('notes')!.revision).toBe(git('rev-parse', 'main'));
+    expect(
+      () =>
+        new KnowledgePublisher({
+          root: join(root, 'invalid-ref'),
+          sources: [{ id: 'notes', url: repo, ref: 'refs/heads/bad.lock', paths: ['AGENTS.md'] }],
+        }),
+    ).toThrow();
   });
 });
