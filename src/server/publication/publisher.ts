@@ -198,6 +198,21 @@ export class KnowledgePublisher {
         closeSync(fd);
       }
     }
+    // SQLite opens sidecars itself; reject redirects before any durable state is opened.
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      try {
+        const file = lstatSync(join(config.root, 'publication.sqlite3' + suffix));
+        if (
+          !file.isFile() ||
+          file.isSymbolicLink() ||
+          file.nlink !== 1 ||
+          file.uid !== process.getuid?.()
+        )
+          throw new Error('Unsafe SQLite state file');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
     this.db = new Database(join(config.root, 'publication.sqlite3'));
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = FULL');
@@ -302,7 +317,8 @@ export class KnowledgePublisher {
 
   private async process(): Promise<void> {
     for (const source of this.sources) {
-      while (!this.closed) {
+      if (this.closed) return;
+      {
         const token = randomUUID();
         const claim = this.db
           .prepare(
@@ -318,7 +334,7 @@ export class KnowledgePublisher {
             Date.now(),
             hash(JSON.stringify(source)),
           ) as { requested: number; identity: string } | undefined;
-        if (!claim) break;
+        if (!claim) continue;
         const renewal = setInterval(
           () =>
             this.db
@@ -343,7 +359,6 @@ export class KnowledgePublisher {
             attempts=attempts+1, retry=? + min(1800000,60000*(1 << min(attempts,5))), lease=NULL, expires=0 WHERE id=? AND lease=?`,
             )
             .run(Date.now(), source.id, token);
-          break;
         } finally {
           clearInterval(renewal);
         }

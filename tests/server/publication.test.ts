@@ -397,6 +397,56 @@ describe('knowledge publication', () => {
     ).toBe(true);
   });
 
+  it('rejects symlinked SQLite files and sidecars before opening durable state', async () => {
+    for (const suffix of ['', '-wal', '-shm', '-journal']) {
+      const state = join(root, 'sqlite-' + (suffix || 'db'));
+      await mkdir(state, { mode: 0o700 });
+      const target = join(repo, 'external' + suffix);
+      await writeFile(target, 'untouched');
+      await symlink(target, join(state, 'publication.sqlite3' + suffix));
+      let invalid: KnowledgePublisher | undefined;
+      try {
+        expect(() => {
+          invalid = new KnowledgePublisher({
+            root: state,
+            sources: [{ id: 'notes', url: repo, ref: 'refs/heads/main', paths: ['AGENTS.md'] }],
+          });
+        }).toThrow('Unsafe SQLite state file');
+        expect(await readFile(target, 'utf8')).toBe('untouched');
+      } finally {
+        await invalid?.close();
+      }
+    }
+  });
+
+  it('visits queued sources before reclaiming a continuously busy source', async () => {
+    await publisher.close();
+    publisher = new KnowledgePublisher({
+      root: join(root, 'fair'),
+      sources: ['notes', 'later'].map((id) => ({
+        id,
+        url: repo,
+        ref: 'refs/heads/main',
+        paths: ['AGENTS.md'],
+      })),
+    });
+    const worker = publisher as unknown as {
+      build: (source: KnowledgeSource) => Promise<Publication>;
+    };
+    const original = worker.build.bind(worker);
+    const order: string[] = [];
+    vi.spyOn(worker, 'build').mockImplementation(async (source) => {
+      order.push(source.id);
+      if (source.id === 'notes' && order.length < 4) publisher.enqueue('notes');
+      return original(source);
+    });
+    publisher.enqueue('notes');
+    publisher.enqueue('later');
+    await publisher.drain();
+    expect(order.slice(0, 2)).toEqual(['notes', 'later']);
+    expect(publisher.status('notes').completed).toBe(publisher.status('notes').requested);
+  });
+
   it('binds the snapshot to its own fetch when another worker changes mirror refs', async () => {
     const accepted = git('rev-parse', 'main');
     git('checkout', '-b', 'other');
