@@ -5,6 +5,11 @@ import * as os from 'node:os';
 import { compileAgent } from '../../src/recipe/compiler.js';
 import type { AgentDefinition } from '../../src/recipe/types.js';
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+
 describe('compileAgent', () => {
   let tmpDir: string;
 
@@ -159,7 +164,9 @@ describe('compileAgent', () => {
   });
 
   it('expands tilde in context block paths', async () => {
-    const homeFile = path.join(os.homedir(), 'test-contexgin-block.md');
+    const originalHome = os.homedir();
+    vi.mocked(os.homedir).mockReturnValue(tmpDir);
+    const homeFile = path.join(tmpDir, 'test-contexgin-block.md');
     await fs.writeFile(homeFile, '# Home Block\n\nFrom home directory.');
 
     try {
@@ -177,6 +184,7 @@ describe('compileAgent', () => {
       const block = result.contextBlocks.get('home-block');
       expect(block?.content).toContain('Home Block');
     } finally {
+      vi.mocked(os.homedir).mockReturnValue(originalHome);
       await fs.unlink(homeFile);
     }
   });
