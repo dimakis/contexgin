@@ -11,6 +11,8 @@ import { GoalRegistry } from '../goals/registry.js';
 import { goalRoutes } from '../goals/routes.js';
 import { agentRoutes } from './routes/agents.js';
 import { knowledgeSpaceRoute } from './routes/knowledge-space.js';
+import { KnowledgePublisher } from './publication/publisher.js';
+import { publicationRoutes } from './publication/routes.js';
 
 export interface ContexGinServer {
   app: FastifyInstance;
@@ -21,6 +23,16 @@ export interface ContexGinServer {
 }
 
 export async function createServer(config: ServerConfig): Promise<ContexGinServer> {
+  const publicationSecret = config.publication
+    ? process.env[config.publication.webhookSecretEnv]
+    : undefined;
+  const readToken = config.publication?.readTokenEnv
+    ? process.env[config.publication.readTokenEnv]
+    : undefined;
+  if (config.publication && !publicationSecret)
+    throw new Error('Publication webhook secret environment variable is missing');
+  if (config.publication?.readTokenEnv && !readToken)
+    throw new Error('Publication read token environment variable is missing');
   const app = Fastify({ logger: false });
   const store = new GraphStore(config.dbPath);
 
@@ -54,6 +66,15 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
 
   // Knowledge space rebuild
   knowledgeSpaceRoute(app, store, config);
+
+  let publisher: KnowledgePublisher | undefined;
+  if (config.publication) {
+    publisher = new KnowledgePublisher(config.publication);
+    publicationRoutes(app, publisher, publicationSecret!, readToken);
+    app.addHook('onReady', async () => {
+      publisher!.start();
+    });
+  }
 
   // Serialize rebuilds — if one is in flight, the next caller waits for it
   let rebuildInFlight: Promise<void> | null = null;
@@ -102,9 +123,10 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
   }
 
   async function shutdown(): Promise<void> {
+    await app.close();
+    await publisher?.close();
     goalRegistry.close();
     store.close();
-    await app.close();
   }
 
   return { app, state, store, rebuild, shutdown };
