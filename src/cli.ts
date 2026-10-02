@@ -80,7 +80,7 @@ async function main() {
     await runGraph(roots);
   } else if (command === 'serve') {
     const roots = extractPositionals(args).slice(1);
-    if (roots.length === 0) {
+    if (roots.length === 0 && !parseFlag(args, '--publication-config')) {
       console.error(
         'Usage: contexgin serve <root> [root2] ... [--port N] [--socket PATH] [--no-watch] [--publication-config PATH]',
       );
@@ -321,11 +321,13 @@ async function runServe(roots: string[], args: string[]) {
   await server.rebuild();
   const buildTime = Date.now() - buildStart;
 
-  const graph = server.state.graph!;
-  const spokeCount = graph.hubs.reduce((n, h) => n + h.spokes.length, 0);
-  console.log(
-    green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
-  );
+  const graph = server.state.graph;
+  if (graph) {
+    const spokeCount = graph.hubs.reduce((n, h) => n + h.spokes.length, 0);
+    console.log(
+      green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
+    );
+  } else console.log(dim('Running standalone knowledge publisher (no workspace graph)'));
 
   // Start listener
   const listener = await startListeners(server, config);

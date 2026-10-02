@@ -59,7 +59,8 @@ export function publicationRoutes(
       (_request, body, done) => done(null, body),
     );
     scope.post('/api/publications/github', async (request, reply) => {
-      const body = request.body as Buffer;
+      const body = request.body;
+      if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: 'JSON body required' });
       const provided = request.headers['x-hub-signature-256'];
       const expected = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
       if (

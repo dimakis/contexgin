@@ -25,7 +25,8 @@ session files are never pulled, reset, rebased, or rewritten by this service.
 
 ## Configuration
 
-Pass `--publication-config /absolute/path/publication.json` to `contexgin serve <root>`:
+Pass `--publication-config /absolute/path/publication.json` to `contexgin serve [root]`:
+workspace roots are optional for a standalone publisher. No local source checkout is needed.
 
 ```json
 {

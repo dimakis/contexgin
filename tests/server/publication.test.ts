@@ -123,6 +123,16 @@ describe('knowledge publication', () => {
         await app.inject({
           method: 'POST',
           url: '/api/publications/github',
+          headers: { 'content-type': 'text/plain' },
+          payload,
+        })
+      ).statusCode,
+    ).toBe(415);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/publications/github',
           headers: { ...headers, 'x-hub-signature-256': 'bad' },
           payload,
         })
