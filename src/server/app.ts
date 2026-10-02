@@ -69,7 +69,10 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
 
   let publisher: KnowledgePublisher | undefined;
   if (config.publication) {
-    publisher = new KnowledgePublisher(config.publication);
+    publisher = new KnowledgePublisher({
+      ...config.publication,
+      workspaceRoots: [...config.roots, ...(config.publication.workspaceRoots ?? [])],
+    });
     publicationRoutes(app, publisher, publicationSecret!, readToken);
     app.addHook('onReady', async () => {
       publisher!.start();

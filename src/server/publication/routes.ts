@@ -10,6 +10,19 @@ export function publicationRoutes(
 ): void {
   if (!secret) throw new Error('Webhook secret required');
   if (readToken) {
+    app.post<{ Params: { source: string } }>(
+      '/api/publications/:source/retry',
+      async (request, reply) => {
+        if (request.headers.authorization !== `Bearer ${readToken}`)
+          return reply.code(401).send({ error: 'Unauthorized' });
+        if (!publisher.sources.some((s) => s.id === request.params.source))
+          return reply.code(404).send({ error: 'Unknown source' });
+        if (!publisher.requestRetry(request.params.source))
+          return reply.code(429).send({ error: 'Retry is not eligible yet' });
+        publisher.wake();
+        return reply.code(202).send({ accepted: true });
+      },
+    );
     app.get<{ Params: { source: string } }>('/api/publications/:source', async (request, reply) => {
       if (request.headers.authorization !== `Bearer ${readToken}`)
         return reply.code(401).send({ error: 'Unauthorized' });
@@ -69,7 +82,10 @@ export function publicationRoutes(
       const matched =
         request.headers['x-github-event'] === 'push'
           ? publisher.sources.filter(
-              (s) => s.githubRepository === event.repository?.full_name && s.ref === event.ref,
+              (s) =>
+                typeof s.githubRepository === 'string' &&
+                s.githubRepository === event.repository?.full_name &&
+                s.ref === event.ref,
             )
           : [];
       for (const source of matched) publisher.enqueue(source.id, delivery);

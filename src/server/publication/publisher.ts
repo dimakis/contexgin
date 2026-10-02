@@ -1,9 +1,18 @@
 import Database from 'better-sqlite3';
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstatSync, mkdirSync } from 'node:fs';
-import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  realpathSync,
+} from 'node:fs';
+import { mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { compile } from '../../compiler/index.js';
 
@@ -19,6 +28,8 @@ export interface KnowledgeSource {
 export interface PublicationConfig {
   root: string;
   sources: KnowledgeSource[];
+  /** User workspace roots that private publisher state must remain disjoint from. */
+  workspaceRoots?: string[];
 }
 export interface Publication {
   revision: string;
@@ -30,9 +41,65 @@ interface State {
   completed: number;
   error: string | null;
   publication: string | null;
+  retry: number;
+  attempts: number;
 }
 const execute = promisify(execFile);
 const hash = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
+function physicalPath(value: string): string {
+  let ancestor = resolve(value);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      lstatSync(ancestor);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      tail.unshift(basename(ancestor));
+      ancestor = dirname(ancestor);
+    }
+  }
+  return join(realpathSync(ancestor), ...tail);
+}
+function within(parent: string, child: string): boolean {
+  return parent === child || child.startsWith(parent.endsWith(sep) ? parent : parent + sep);
+}
+function privateRoot(config: PublicationConfig): string {
+  // Resolve existing parents before mkdir; /var aliases on macOS remain usable.
+  try {
+    if (lstatSync(config.root).isSymbolicLink())
+      throw new Error('Publication root cannot be a symlink');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  const root = physicalPath(config.root);
+  const protectedRoots = [...(config.workspaceRoots ?? [])];
+  for (const source of config.sources) {
+    if (isAbsolute(source.url)) protectedRoots.push(source.url);
+    else if (source.url.startsWith('file://')) protectedRoots.push(fileURLToPath(source.url));
+  }
+  for (const workspace of protectedRoots) {
+    const physical = physicalPath(workspace);
+    if (within(physical, root) || within(root, physical))
+      throw new Error('Publication root must be outside user workspaces');
+  }
+  // Also protect Git checkouts not explicitly registered with the daemon.
+  let ancestor = root;
+  for (;;) {
+    let marker = false;
+    try {
+      lstatSync(join(ancestor, '.git'));
+      marker = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (marker) throw new Error('Publication root must be outside Git checkouts');
+    const parent = dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
+  return root;
+}
 function validRef(ref: string): boolean {
   if (typeof ref !== 'string' || !ref.startsWith('refs/')) return false;
   try {
@@ -47,6 +114,11 @@ function validRef(ref: string): boolean {
   } catch {
     return false;
   }
+}
+function encodeContext(context: unknown, root: string): string {
+  return JSON.stringify(context, (_key, value: unknown) =>
+    typeof value === 'string' ? value.split(root).join('source') : value,
+  );
 }
 const safePath = (value: string) =>
   value.length > 0 &&
@@ -69,19 +141,40 @@ export class KnowledgePublisher {
       throw new Error('Absolute private root and sources required');
     const ids = new Set<string>();
     for (const source of config.sources) {
-      if (!/^[a-zA-Z0-9_-]+$/.test(source.id) || ids.has(source.id))
+      if (
+        typeof source.id !== 'string' ||
+        !/^[a-zA-Z0-9_-]+$/.test(source.id) ||
+        ids.has(source.id)
+      )
         throw new Error('Invalid or duplicate source id');
       ids.add(source.id);
-      if (!source.url || source.url.startsWith('-') || !validRef(source.ref))
+      if (
+        typeof source.url !== 'string' ||
+        !source.url ||
+        source.url.startsWith('-') ||
+        !validRef(source.ref) ||
+        (source.githubRepository !== undefined && typeof source.githubRepository !== 'string')
+      )
         throw new Error('Invalid Git source');
       if (
         !Array.isArray(source.paths) ||
         !source.paths.length ||
-        source.paths.some((p) => !safePath(p.endsWith('/') ? p.slice(0, -1) : p))
+        source.paths.some(
+          (p) => typeof p !== 'string' || !safePath(p.endsWith('/') ? p.slice(0, -1) : p),
+        )
       )
         throw new Error('Explicit safe portable paths required');
     }
+    config = { ...structuredClone(config), root: privateRoot(config) };
+    this.config = config;
     this.sources = structuredClone(config.sources);
+    const newParents = [config.root];
+    let parent = dirname(config.root);
+    while (!existsSync(parent)) {
+      newParents.push(parent);
+      parent = dirname(parent);
+    }
+    newParents.push(parent);
     mkdirSync(config.root, { recursive: true, mode: 0o700 });
     const stat = lstatSync(config.root);
     if (
@@ -91,6 +184,15 @@ export class KnowledgePublisher {
       (stat.mode & 0o077) !== 0
     )
       throw new Error('Publication root must be an owned private directory');
+    // Persist newly created directory entries before any webhook may be acknowledged.
+    for (const directory of newParents) {
+      const fd = openSync(directory, 'r');
+      try {
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+    }
     this.db = new Database(join(config.root, 'publication.sqlite3'));
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = FULL');
@@ -121,7 +223,9 @@ export class KnowledgePublisher {
   status(id: string): State {
     if (!this.sources.some((s) => s.id === id)) throw new Error('Unknown source');
     return this.db
-      .prepare('SELECT requested, completed, error, publication FROM sources WHERE id=?')
+      .prepare(
+        'SELECT requested, completed, error, publication, retry, attempts FROM sources WHERE id=?',
+      )
       .get(id) as State;
   }
   current(id: string): Publication | null {
@@ -135,10 +239,24 @@ export class KnowledgePublisher {
         .prepare('INSERT OR IGNORE INTO deliveries VALUES (?, ?)')
         .run(id, delivery);
       if (!result.changes) return false;
-      this.db.prepare('UPDATE sources SET requested=requested+1, retry=0 WHERE id=?').run(id);
+      this.db.prepare('UPDATE sources SET requested=requested+1 WHERE id=?').run(id);
       this.rescan = true;
       return true;
     })();
+  }
+
+  /** Operator-only early retry: at most once per minute after the last failed attempt. */
+  requestRetry(id: string): boolean {
+    this.status(id);
+    const changed = this.db
+      .prepare(
+        `UPDATE sources SET requested=requested+1, retry=0
+      WHERE id=? AND retry>0 AND expires<=? AND
+      ? >= retry - min(1800000,60000*(1 << min(max(attempts-1,0),5))) + 60000`,
+      )
+      .run(id, Date.now(), Date.now()).changes;
+    if (changed) this.rescan = true;
+    return changed > 0;
   }
 
   /** Webhooks wake immediately; this timer handles retries and 30-minute recovery. */
@@ -241,8 +359,14 @@ export class KnowledgePublisher {
   }
   private async build(source: KnowledgeSource): Promise<Publication> {
     const sourceRoot = join(this.config.root, source.id);
+    const checkChild = (directory: string) => {
+      if (privateRoot({ ...this.config, root: directory }) !== directory)
+        throw new Error('Unsafe private state directory');
+    };
+    checkChild(sourceRoot);
     await mkdir(sourceRoot, { recursive: true, mode: 0o700 });
     const mirror = join(sourceRoot, 'mirror.git');
+    checkChild(mirror);
     await mkdir(mirror, { recursive: true, mode: 0o700 });
     await this.git(mirror, ['init', '--bare']);
     await this.git(mirror, [
@@ -257,7 +381,7 @@ export class KnowledgePublisher {
       await this.git(mirror, ['rev-parse', 'refs/publication/accepted^{commit}'])
     ).toString();
     const retained = this.current(source.id);
-    if (retained?.revision === revision && (await this.verify(retained))) return retained;
+    if (retained?.revision === revision && (await this.verify(retained, source))) return retained;
     const records = (await this.git(mirror, ['ls-tree', '-rz', revision], true))
       .toString()
       .split('\0')
@@ -307,20 +431,26 @@ export class KnowledgePublisher {
         tokenBudget: 12_000,
       });
       // Compiler output uses staging-local paths. Publish paths relative to the snapshot.
-      const contextJson = JSON.stringify(context).split(join(staging, 'source')).join('source');
+      const contextJson = encodeContext(context, join(staging, 'source'));
       await writeFile(join(staging, 'context.json'), contextJson, { mode: 0o600 });
       const manifest = JSON.stringify({
         schema: 'contexgin-portable-v1',
         source: source.id,
+        acceptedRef: source.ref,
+        sourceIdentity: hash(JSON.stringify(source)),
         revision,
         paths: source.paths,
         files,
         contextSha256: hash(contextJson),
       });
       await writeFile(join(staging, 'manifest.json'), manifest, { mode: 0o600 });
-      for (const file of files)
-        if (hash(await readFile(join(staging, 'source', file.path))) !== file.sha256)
-          throw new Error('Snapshot verification failed');
+      if (
+        !(await this.verify(
+          { revision, directory: staging, manifestSha256: hash(manifest) },
+          source,
+        ))
+      )
+        throw new Error('Snapshot verification failed');
       // Flush file data and directory entries before committing the durable DB pointer.
       const dirs = new Set<string>([staging, join(staging, 'source')]);
       for (const file of [
@@ -356,13 +486,21 @@ export class KnowledgePublisher {
       } finally {
         await parent.close();
       }
+      const rootHandle = await open(this.config.root, 'r');
+      try {
+        await rootHandle.sync();
+      } finally {
+        await rootHandle.close();
+      }
       return { revision, directory: final, manifestSha256: hash(manifest) };
     } finally {
       await rm(staging, { recursive: true, force: true });
     }
   }
-  private async verify(publication: Publication): Promise<boolean> {
+  private async verify(publication: Publication, source: KnowledgeSource): Promise<boolean> {
     try {
+      if (!within(join(this.config.root, source.id), realpathSync(publication.directory)))
+        return false;
       if (lstatSync(publication.directory).isSymbolicLink()) return false;
       for (const name of ['manifest.json', 'context.json'])
         if (
@@ -376,10 +514,36 @@ export class KnowledgePublisher {
         schema: string;
         revision: string;
         contextSha256: string;
-        files: { path: string; sha256: string }[];
+        acceptedRef: string;
+        sourceIdentity: string;
+        files: { path: string; sha256: string; bytes: number }[];
       };
       if (manifest.schema !== 'contexgin-portable-v1' || manifest.revision !== publication.revision)
         return false;
+      if (
+        manifest.acceptedRef !== source.ref ||
+        manifest.sourceIdentity !== hash(JSON.stringify(source))
+      )
+        return false;
+      const expected = new Set([
+        'manifest.json',
+        'context.json',
+        ...manifest.files.map((f) => `source/${f.path}`),
+      ]);
+      const actual = new Set<string>();
+      const walk = async (directory: string, prefix: string): Promise<boolean> => {
+        for (const name of await readdir(directory)) {
+          const target = join(directory, name);
+          const relative = prefix + name;
+          const entry = lstatSync(target);
+          if (entry.isDirectory()) {
+            if (!(await walk(target, relative + '/'))) return false;
+          } else if (entry.isFile() && expected.has(relative)) actual.add(relative);
+          else return false;
+        }
+        return true;
+      };
+      if (!(await walk(publication.directory, '')) || actual.size !== expected.size) return false;
       if (
         hash(await readFile(join(publication.directory, 'context.json'))) !== manifest.contextSha256
       )
@@ -391,15 +555,15 @@ export class KnowledgePublisher {
           target = join(target, part);
           if (lstatSync(target).isSymbolicLink()) return false;
         }
+        const info = lstatSync(target);
+        if (!info.isFile() || info.size !== file.bytes) return false;
         if (hash(await readFile(target)) !== file.sha256) return false;
       }
       const context = await compile({
         workspaceRoot: join(publication.directory, 'source'),
         tokenBudget: 12_000,
       });
-      const encoded = JSON.stringify(context)
-        .split(join(publication.directory, 'source'))
-        .join('source');
+      const encoded = encodeContext(context, join(publication.directory, 'source'));
       return hash(encoded) === manifest.contextSha256;
     } catch {
       return false;

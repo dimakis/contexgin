@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -95,7 +95,12 @@ describe('knowledge publication', () => {
     expect(publisher.status('notes').error).toBeTruthy();
     git('branch', '-m', 'gone', 'main');
     publisher.enqueue('notes', 'retry');
-    await publisher.drain();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001);
+    try {
+      await publisher.drain();
+    } finally {
+      clock.mockRestore();
+    }
     expect(publisher.status('notes').error).toBeNull();
   });
 
@@ -285,5 +290,100 @@ describe('knowledge publication', () => {
           sources: [{ id: 'notes', url: repo, ref: 'refs/heads/bad.lock', paths: ['AGENTS.md'] }],
         }),
     ).toThrow();
+  });
+
+  it('rejects workspace and symlink-parent placement before creating state', async () => {
+    const workspace = join(root, 'user-workspace');
+    await mkdir(workspace);
+    const alias = join(root, 'alias');
+    await symlink(workspace, alias, 'dir');
+    for (const candidate of [join(workspace, 'state'), join(alias, 'state'), join(repo, 'state')]) {
+      let invalid: KnowledgePublisher | undefined;
+      try {
+        expect(() => {
+          invalid = new KnowledgePublisher({
+            root: candidate,
+            workspaceRoots: [workspace],
+            sources: [
+              {
+                id: 'notes',
+                url: 'https://example.com/notes.git',
+                ref: 'refs/heads/main',
+                paths: ['AGENTS.md'],
+              },
+            ],
+          });
+        }).toThrow();
+        await expect(access(candidate)).rejects.toThrow();
+      } finally {
+        await invalid?.close();
+      }
+    }
+  });
+
+  it('preserves failure backoff across admission checks and bounds explicit retry', async () => {
+    git('branch', '-m', 'main', 'gone');
+    const worker = publisher as unknown as {
+      build: (source: KnowledgeSource) => Promise<Publication>;
+    };
+    const build = vi.spyOn(worker, 'build');
+    publisher.enqueue('notes', 'failed');
+    await publisher.drain();
+    const retryAt = publisher.status('notes').retry;
+    for (let i = 0; i < 10; i++) {
+      publisher.enqueue('notes', `admission-${i}`);
+      await publisher.drain();
+    }
+    expect(publisher.status('notes').retry).toBe(retryAt);
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(publisher.requestRetry('notes')).toBe(false);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(retryAt + 1);
+    try {
+      expect(publisher.requestRetry('notes')).toBe(true);
+      await publisher.drain();
+      expect(build).toHaveBeenCalledTimes(2);
+      expect(publisher.requestRetry('notes')).toBe(false);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('rejects symlinked state children before writing into a checkout', async () => {
+    const sourceState = join(root, 'state', 'notes');
+    await symlink(repo, sourceState, 'dir');
+    publisher.enqueue('notes', 'unsafe-state');
+    await publisher.drain();
+    expect(publisher.current('notes')).toBeNull();
+    await expect(access(join(repo, 'mirror.git'))).rejects.toThrow();
+  });
+
+  it('repairs unexpected files in a retained snapshot', async () => {
+    publisher.enqueue('notes', 'first');
+    await publisher.drain();
+    const old = publisher.current('notes')!;
+    await writeFile(join(old.directory, 'source', 'extra.md'), 'unaccepted knowledge');
+    publisher.enqueue('notes', 'verify-all-files');
+    await publisher.drain();
+    expect(publisher.current('notes')!.directory).not.toBe(old.directory);
+    await expect(
+      access(join(publisher.current('notes')!.directory, 'source', 'extra.md')),
+    ).rejects.toThrow();
+  });
+
+  it('publishes stable relative provenance when the private root contains quotes', async () => {
+    await publisher.close();
+    publisher = new KnowledgePublisher({
+      root: join(root, 'quoted"state'),
+      sources: [{ id: 'notes', url: repo, ref: 'refs/heads/main', paths: ['AGENTS.md'] }],
+    });
+    publisher.enqueue('notes', 'quoted');
+    await publisher.drain();
+    const context = JSON.parse(
+      await readFile(join(publisher.current('notes')!.directory, 'context.json'), 'utf8'),
+    );
+    expect(context.sources.length).toBeGreaterThan(0);
+    expect(
+      context.sources.every((source: { path: string }) => source.path.startsWith('source/')),
+    ).toBe(true);
   });
 });

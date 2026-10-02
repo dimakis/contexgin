@@ -9,13 +9,13 @@ adoption. Centaur owns review. The publisher does not require Centaur to run.
 2. Reviewed changes reach the configured accepted Git ref, usually `refs/heads/main`.
 3. GitHub sends a signed push webhook. ContexGin validates the exact body, repository,
    ref, and delivery id, commits the work to SQLite, and returns HTTP 202.
-4. The worker fetches the configured ref into its private bare mirror. Payload SHAs
+4. The worker fetches the configured ref into its private bare mirror. State children cannot redirect writes through symlinks. Payload SHAs
    never select the revision. Duplicate deliveries are ignored; bursts coalesce.
-5. Explicit portable Markdown paths are copied from Git blobs into private staging.
+5. Explicit portable `.md` paths are copied from Git blobs into private staging.
    Repository scripts and hooks are never run. Symlinks/submodules at selected Markdown
    paths fail validation. Non-Markdown assets in directory selections are omitted.
-6. The existing compiler creates boot context. A manifest hashes every source file and
-   the compiled context. Data and directories are flushed before an atomic directory
+6. The existing compiler creates boot context. A manifest records the accepted ref and a digest of source configuration, and hashes
+   every source file and the compiled context. Data and directories are flushed before an atomic directory
    rename, then a fenced SQLite transaction promotes the current pointer.
 7. A consumer verifies the manifest and copies/mounts the snapshot read-only. It applies
    its own runtime compatibility checks and records the revision adopted by the session.
@@ -42,7 +42,10 @@ Pass `--publication-config /absolute/path/publication.json` to `contexgin serve 
 }
 ```
 
-The root must be owned by the service user, mode 0700, and outside user workspaces.
+The root must be owned by the service user, mode 0700, and disjoint from user workspaces.
+The daemon protects all configured workspace roots and local Git source paths, resolves
+parent symlinks before creating state, and rejects Git checkout ancestors. Embedded
+clients must supply `workspaceRoots` for their additional non-Git workspaces.
 Environment variables supply secrets; never commit them. Git uses the service user's
 credential helper, not URL-embedded credentials. Changing a source URL/ref/path policy
 invalidates the old current pointer and queues a fresh publication. Stop the previous
@@ -58,8 +61,11 @@ The optional read token enables these local consumer APIs:
   queue progress and error state.
 - `POST /api/publications/:source/reconcile`: enqueue and wait for reconciliation. HTTP
   503 means fresh knowledge is unavailable; a new session must retry or surface the error.
+  Admission checks enqueue work without bypassing failure backoff.
+- `POST /api/publications/:source/retry`: explicit operator retry, eligible only after
+  one minute since the last failed attempt; otherwise HTTP 429.
 
-Both require `Authorization: Bearer <read-token>`. Consumers on the same host can access
+All three require `Authorization: Bearer <read-token>`. Consumers on the same host can access
 published files through the returned directory. This version does not provide remote
 snapshot downloads. Never give the read token to repository agents or expose these
 routes publicly. The library also exports `KnowledgePublisher` for embedded clients.
@@ -70,11 +76,12 @@ The service queues recovery at startup and every 30 minutes. A cheap 30-second l
 queue check handles retries; it does not fetch unchanged repositories every 30 seconds.
 Failures retry with backoff from one minute to 30 minutes, preserving the last publication.
 A crashed worker's lease expires within five minutes. New deliveries wake the worker
-immediately. Fencing prevents an expired worker from promoting stale work.
+immediately when eligible under backoff. Repeated admissions and recovery do not
+clear the retry deadline. Fencing prevents an expired worker from promoting stale work.
 
 SQLite uses WAL and FULL synchronization. Snapshot files and directory entries are
-flushed before promotion. Unchanged revisions reuse snapshots only after checking all
-hashes and recompiling with the running compiler; corruption triggers a fresh build.
+flushed before promotion. Unchanged revisions reuse snapshots only after checking the complete file set, all
+hashes, source identity and recompiling with the running compiler; corruption triggers a fresh build.
 Old and orphan snapshots remain available for active consumers. Automatic GC requires
 consumer pin/adoption receipts and is intentionally deferred; monitor private state size.
 
