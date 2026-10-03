@@ -39,7 +39,7 @@ provider:
 
 context:
   boot: # Boot context (injected at session start)
-    constitution: boolean | string[] # Include CONSTITUTION.md (true/false or specific sections)
+    constitution: boolean | string[] # Include CONSTITUTION.md; arrays currently include the whole source
     claudeMd: boolean | string[] # Include CLAUDE.md
     profile: boolean | string[] # Include memory/Profile/*.md
     cursorRules: boolean | string[] # Include .cursor/rules/*.mdc
@@ -193,7 +193,7 @@ metadata:
 
 ### Minimal Agent: Doc Linter
 
-The simplest possible definition. Only requires identity and provider.
+A minimal definition with workspace boot context. Without `context.boot`, the compiled boot payload is empty and its budget is zero.
 
 ```yaml
 kind: AgentDefinition
@@ -201,6 +201,11 @@ kind: AgentDefinition
 identity:
   name: doc-linter
   description: Checks documentation for consistency and completeness
+
+context:
+  boot:
+    constitution: true
+    tokenBudget: 8000
 
 provider:
   provider: anthropic
@@ -217,15 +222,13 @@ Each source type can be:
 
 - `true` -- include all content from this source
 - `false` -- exclude entirely
-- `string[]` -- include only specific sections (matched by heading path)
+- `string[]` -- accepted by the schema, but currently includes the whole source. Heading selection is not implemented for these toggles; use the boot `excluded` heading paths to omit sections.
 
 ```yaml
 context:
   boot:
     constitution: true # Include all of CONSTITUTION.md
-    claudeMd: # Include only specific CLAUDE.md sections
-      - Git Discipline
-      - Entry Points
+    claudeMd: true # Include all CLAUDE.md content
     profile: false # Exclude memory/Profile/*
     cursorRules: true # Include .cursor/rules/*.mdc
     spokes: false # Exclude spoke-level files
@@ -234,7 +237,7 @@ context:
 
 ### Token Budget
 
-The `tokenBudget` sets a hard ceiling on the boot payload size. The compiler will rank and trim sections to fit within this budget. Default is 12,000 tokens if not specified.
+The `tokenBudget` sets a hard ceiling on the boot payload size. The compiler will rank and trim sections to fit within this budget. Default is 8,000 tokens if not specified.
 
 Lower budgets produce more focused payloads (less context, faster responses). Higher budgets include more context but risk diluting the signal. The sweet spot depends on the agent's purpose:
 
@@ -244,7 +247,7 @@ Lower budgets produce more focused payloads (less context, faster responses). Hi
 
 ### Spoke Inclusion
 
-When `spokes: true` (default), the compiler includes spoke-level CONSTITUTION.md files alongside the hub-level content. Spoke content receives a 0.35 relevance penalty -- it's context, not instructions. Set `spokes: false` for agents that only need hub-level governance.
+When `spokes: true` (default), the compiler includes spoke-level CONSTITUTION.md files alongside the hub-level content. Spoke constitutions are demoted by the adapter: constitutional nodes become reference tier and navigational nodes become historical tier. The active node ranker applies no additional 0.35 penalty; that penalty belongs to the legacy section ranker. Set `spokes: false` for agents that only need hub-level governance.
 
 ## Operational Context
 
@@ -273,7 +276,7 @@ When `context.memory.enabled` is true, the compiler loads auto-memory files and 
 context:
   memory:
     enabled: true
-    path: memory/ # Relative to workspace root
+    path: /absolute/path/to/my-workspace/memory/ # Use an absolute workspace memory path
     types:
       - feedback # How the user wants to work
       - user # User profile information
@@ -281,11 +284,11 @@ context:
       - reference # External resource pointers
 ```
 
-This is what makes a dynamic agent -- it accumulates knowledge over sessions. A narrow agent should set `memory.enabled: false` (or omit the section entirely).
+Relative memory paths resolve from the daemon working directory, which may differ from the workspace root. Use an absolute path or a home-relative path. The memory files can accumulate knowledge over sessions. A narrow agent should set `memory.enabled: false` (or omit the section entirely).
 
 ## Governance
 
-Governance rules are injected into the agent's context as behavioral constraints. They are enforced at the context level (strong nudge) but ultimately depend on model compliance.
+Governance rules are returned separately as `compiled.governance`; `compileAgent` does not inject them into the boot payload or enforce them. The harness must present behavioral rules to the model and implement any required tool restrictions.
 
 ```yaml
 governance:
@@ -302,7 +305,7 @@ governance:
     - Deleting branches
 ```
 
-**Enforcement reality:** Boundary restrictions (`forbidden`) are enforceable at both the compiler level (won't include inaccessible content from hard-boundary spokes) and the harness level (can reject tool calls). Output conventions and behavioral rules are injected as context -- a strong nudge, not a runtime guarantee. LLMs can drift past injected instructions. The schema acknowledges this gap rather than pretending it's solved.
+**Enforcement reality:** The compiler does not enforce `forbidden` rules or graph confidentiality boundaries. The harness must enforce access and tool restrictions, and inject returned governance rules where the model can see them. Model compliance alone is not a runtime guarantee.
 
 ## Origin-Aware Compilation
 

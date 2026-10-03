@@ -50,11 +50,17 @@ When `entityId` is provided, the resolver looks up the Telos item and uses its t
 **Trigger:** Calendar event
 **Behavior:** Adds meeting-relevant context based on the event metadata.
 
-```bash
-curl 'http://127.0.0.1:4195/api/agents/workspace-assistant/context?origin.source=calendar&origin.entityId=event-456'
+```typescript
+const compiled = await compileAgent(definition, workspaceRoot, {
+  source: 'calendar',
+  metadata: {
+    eventSummary: 'Release planning',
+    attendees: [{ email: 'colleague@example.com' }],
+  },
+});
 ```
 
-When `entityId` is provided, the resolver uses the calendar event's title and attendees to construct context hints. This is useful for meeting prep scenarios where the agent needs context about the topics and people involved.
+The harness must fetch event data and pass `origin.metadata`. The resolver does not look up `entityId`. The current HTTP agent-context route does not accept calendar metadata, so use the library API for meeting hints.
 
 ### File Resolver
 
@@ -63,10 +69,10 @@ When `entityId` is provided, the resolver uses the calendar event's title and at
 **Behavior:** Scopes context to the file's spoke within the workspace.
 
 ```bash
-curl 'http://127.0.0.1:4195/api/agents/workspace-assistant/context?origin.source=file&origin.entityId=src/server/app.ts'
+curl 'http://127.0.0.1:4195/api/agents/workspace-assistant/context?origin.source=file&origin.entityId=%2Fabsolute%2Fpath%2Fto%2Fmy-workspace%2Fserver%2Fapp.ts'
 ```
 
-When `entityId` contains a file path, the resolver identifies which spoke the file belongs to and injects a task hint scoped to that spoke. This surfaces spoke-specific conventions and architecture without requiring the user to specify the scope manually.
+Supply an absolute file path: relative paths resolve from the daemon working directory, rather than the workspace root. When `entityId` contains a file path, the resolver identifies which spoke the file belongs to and injects a task hint scoped to that spoke. This surfaces spoke-specific conventions and architecture without requiring the user to specify the scope manually.
 
 ## Resolved Manifest
 

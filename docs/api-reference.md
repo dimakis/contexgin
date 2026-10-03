@@ -149,11 +149,11 @@ Run structural and relational validation across workspace roots. Includes doc-co
 | ---------------------- | -------- | ------------------------------------------ |
 | `missing_directory`    | error    | Declared directory does not exist          |
 | `missing_file`         | error    | Declared file does not exist               |
-| `undeclared_directory` | warning  | Directory exists but is not declared       |
+| `undeclared_directory` | info     | Directory exists but is not declared       |
 | `missing_constitution` | warning  | Spoke has no CONSTITUTION.md               |
 | `stale_reference`      | warning  | Documentation claim does not match reality |
-| `broken_dependency`    | error    | Dependency target does not exist           |
-| `missing_external`     | error    | External hub reference not found           |
+| `broken_dependency`    | warning  | Dependency target does not exist           |
+| `missing_external`     | warning  | External hub reference not found           |
 | `boundary_violation`   | error    | Conflicting boundary declarations          |
 | `nesting_depth`        | warning  | Spoke nesting exceeds depth limit (2)      |
 
@@ -423,7 +423,7 @@ Update a goal's fields.
 ```json
 {
   "status": "achieved",
-  "achievedAt": 1719849600000
+  "achievedAt": 1719849600
 }
 ```
 
@@ -433,7 +433,7 @@ All fields are optional. Updatable fields: `title`, `description`, `successCrite
 
 ### DELETE /api/goals/:id
 
-Delete a goal and all its contributions and artifacts.
+Mark an eligible goal `abandoned`. Contributions and artifacts are retained. Returns 404 if the goal is absent, already achieved, or already abandoned.
 
 **Response:** `{ "ok": true }`
 

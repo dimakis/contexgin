@@ -133,7 +133,7 @@ Sections are scored by their tier weight, with optional task-hint boosting:
 | Reference      | 0.5    |
 | Historical     | 0.3    |
 
-**Spoke penalty**: Spoke-level content receives a 0.35 relevance penalty. Hub-level context is instructions; spoke-level is context.
+**Spoke ranking**: Spoke constitutions are demoted by the adapter: constitutional nodes become reference tier and navigational nodes become historical tier. The active node ranker applies no additional 0.35 penalty; that penalty belongs to the legacy section ranker.
 
 **Task boosting**: When a `taskHint` is provided (e.g., "fix the payment retry logic"), sections whose content matches the hint get a relevance boost of up to +0.2. This surfaces task-relevant context that might otherwise be trimmed.
 
@@ -242,13 +242,13 @@ Checks relationships between graph nodes:
 
 Spokes declare confidentiality levels:
 
-| Level  | Meaning                                                      |
-| ------ | ------------------------------------------------------------ |
-| `none` | Open access -- any agent can read                            |
-| `soft` | Accessible but logged -- compiler notes the access           |
-| `hard` | Blocked -- compiler will not include content from this spoke |
+| Level  | Meaning                                  |
+| ------ | ---------------------------------------- |
+| `none` | Declares open access                     |
+| `soft` | Declares a soft confidentiality boundary |
+| `hard` | Declares a hard confidentiality boundary |
 
-Boundaries are enforced at compile time: an agent definition that excludes a `hard` spoke will never receive its content, regardless of task hints or relevance scoring.
+These are graph declarations, not compile-time access controls. Source discovery and compilation do not consult graph confidentiality. The harness must enforce access restrictions before supplying sources; a hard declaration alone does not prevent spoke content from entering a payload.
 
 ## Agent Recipe System
 

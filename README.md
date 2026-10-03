@@ -105,8 +105,9 @@ npx contexgin serve ~/my-workspace \
   --db ~/.local/share/contexgin/graph.db \
   --goals-db ~/.local/share/contexgin/goals.db
 
-# With agent definitions
-npx contexgin serve ~/my-workspace --agent-defs ~/.agents
+# Agent routes discover YAML definitions in <workspace root>/.agents/
+mkdir -p ~/my-workspace/.agents
+npx contexgin serve ~/my-workspace
 
 # Disable file watching
 npx contexgin serve ~/my-workspace --no-watch
@@ -128,7 +129,7 @@ Serve options:
   --no-watch          Disable file watching
   --db PATH           SQLite database path (default: in-memory)
   --goals-db PATH     Goals SQLite database path (default: in-memory)
-  --agent-defs PATH   Agent definition search path (repeatable)
+  --agent-defs PATH   Accepted configuration option; agent routes currently use <root>/.agents
 ```
 
 ### Validate a Workspace
@@ -251,7 +252,7 @@ Parses markdown context sources into a heading tree, extracts sections, ranks by
 | Reference      | 0.5    | Services, memory observations                    |
 | Historical     | 0.3    | Session notes, old decisions                     |
 
-Spoke-level content receives a 0.35 relevance penalty (context, not instructions). Task hints boost matching sections by up to +0.2.
+Spoke constitutions are demoted by the adapter: constitutional nodes become reference tier and navigational nodes become historical tier. The active node ranker applies no additional 0.35 penalty; that penalty belongs to the legacy section ranker. Task hints boost matching sections by up to +0.2.
 
 ### Adapter
 
