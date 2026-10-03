@@ -28,6 +28,25 @@ describe('compiler extensions', () => {
   }
 
   describe('source globs (BootContextConfig.sources)', () => {
+    it('excludes glob sources reached through external symlinks', async () => {
+      const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-outside-'));
+      try {
+        await fs.writeFile(
+          path.join(outside, 'module.json'),
+          JSON.stringify({ name: 'Outside secret' }),
+        );
+        await fs.mkdir(path.join(tmpDir, 'modules'));
+        await fs.symlink(outside, path.join(tmpDir, 'modules', 'leak'));
+        const def = baseDef({
+          context: { boot: { sources: ['modules/*/module.json'], tokenBudget: 4000 } },
+        });
+        const result = await compileAgent(def, tmpDir);
+        expect(result.bootContext.content).not.toContain('Outside secret');
+      } finally {
+        await fs.rm(outside, { recursive: true, force: true });
+      }
+    });
+
     it('resolves simple wildcard patterns', async () => {
       // Create modules/a/module.json and modules/b/module.json
       await fs.mkdir(path.join(tmpDir, 'modules', 'a'), { recursive: true });

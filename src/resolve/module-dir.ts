@@ -23,6 +23,8 @@ export async function findModuleDir(
   // Reject path traversal attempts
   if (!/^[a-zA-Z0-9_-]+$/.test(moduleName)) return undefined;
 
+  const rootRealPath = await fs.realpath(workspaceRoot);
+
   for (const pattern of MODULE_DIR_PATTERNS) {
     // Root-level modules are supported, but generated directories are not modules.
     if (!pattern && NON_MODULE_DIRS.has(moduleName)) continue;
@@ -31,6 +33,8 @@ export async function findModuleDir(
       : path.join(workspaceRoot, moduleName);
 
     try {
+      const realPath = await fs.realpath(candidate);
+      if (!realPath.startsWith(rootRealPath + path.sep)) continue;
       const stat = await fs.stat(candidate);
       if (stat.isDirectory()) return candidate;
     } catch {

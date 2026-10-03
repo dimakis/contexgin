@@ -423,6 +423,7 @@ async function compileMemoryContext(
 // Resolve file globs relative to a workspace root.
 // Supports patterns with * wildcards. Plain paths are resolved directly.
 async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<ContextSource[]> {
+  const rootRealPath = await fs.realpath(workspaceRoot);
   const sources: ContextSource[] = [];
   const seen = new Set<string>();
 
@@ -437,6 +438,8 @@ async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<
       const matches = await expandGlob(pattern, workspaceRoot);
       for (const match of matches) {
         const fullPath = path.resolve(workspaceRoot, match);
+        const realPath = await fs.realpath(fullPath);
+        if (!realPath.startsWith(rootRealPath + path.sep)) continue;
         if (seen.has(fullPath)) continue;
         seen.add(fullPath);
         sources.push({
@@ -476,6 +479,14 @@ async function expandSegments(
   const segment = segments[index];
   const isLast = index === segments.length - 1;
   const currentDir = path.join(root, prefix);
+  try {
+    const rootRealPath = await fs.realpath(root);
+    const currentRealPath = await fs.realpath(currentDir);
+    if (currentRealPath !== rootRealPath && !currentRealPath.startsWith(rootRealPath + path.sep))
+      return [];
+  } catch {
+    return [];
+  }
 
   // ** recursive glob — match zero or more directory levels
   if (segment === '**') {

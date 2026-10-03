@@ -4,6 +4,8 @@
 # Uses OpenCode as harness inside OpenShell on OpenShift,
 # with models.corp (Gemini 2.5 Flash) as the LLM provider.
 #
+# Install this template in <Org Pulse workspace>/.agents/org-pulse-assistant.yaml.
+# Serve that workspace root; the API discovers definitions in its .agents directory.
 # Served by ContexGin via GET /api/agents/org-pulse-assistant/context
 
 identity:

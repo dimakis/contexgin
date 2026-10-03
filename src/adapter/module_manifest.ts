@@ -42,7 +42,8 @@ function formatManifest(manifest: ModuleManifest, moduleDirName: string): string
     for (const view of manifest.views) {
       const viewName = view.name ?? view.path ?? 'unnamed';
       const desc = view.description ? ` — ${view.description}` : '';
-      parts.push(`- \`${viewName}\`${desc}`);
+      const pathStr = view.name && view.path ? ` → \`${view.path}\`` : '';
+      parts.push(`- \`${viewName}\`${pathStr}${desc}`);
     }
   }
 

@@ -68,7 +68,7 @@ describe('moduleManifestAdapter', () => {
       await withTempFile(manifest, 'modules/releases/module.json', async (filePath, dir) => {
         const nodes = await moduleManifestAdapter.adapt(filePath, dir);
         expect(nodes[0].content).toContain('### Views');
-        expect(nodes[0].content).toContain('`overview` — Release summary');
+        expect(nodes[0].content).toContain('`overview` → `/overview` — Release summary');
         expect(nodes[0].content).toContain('`coverage`');
       });
     });
@@ -117,4 +117,15 @@ describe('moduleManifestAdapter', () => {
       });
     });
   });
+});
+
+it('preserves a named view path', async () => {
+  await withTempFile(
+    JSON.stringify({ name: 'Release', views: [{ name: 'Coverage', path: '#/releases/coverage' }] }),
+    'modules/releases/module.json',
+    async (file, root) => {
+      const nodes = await moduleManifestAdapter.adapt(file, root);
+      expect(nodes.map((node) => node.content).join('\n')).toContain('#/releases/coverage');
+    },
+  );
 });

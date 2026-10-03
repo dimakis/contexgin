@@ -29,3 +29,16 @@ describe('findModuleDir', () => {
     }
   });
 });
+
+it('rejects module directories symlinked outside the workspace', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-root-'));
+  const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-external-'));
+  try {
+    await fs.mkdir(path.join(root, 'modules'));
+    await fs.symlink(outside, path.join(root, 'modules/leak'));
+    expect(await findModuleDir('leak', root)).toBeUndefined();
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(outside, { recursive: true, force: true });
+  }
+});
