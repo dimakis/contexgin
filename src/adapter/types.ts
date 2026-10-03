@@ -26,6 +26,7 @@ export type SourceFormat =
   | 'cursor_rules'
   | 'constitution'
   | 'knowledge'
+  | 'workflow'
   | 'markdown';
 
 /** Where a context node originated */
