@@ -86,7 +86,7 @@ console.log(result.bootTokens); // Token count
 console.log(result.navigationHints); // Suggested reading order
 console.log(result.sources); // Which files contributed
 console.log(result.trimmed); // What got cut for budget
-console.log(result.nodes); // Typed context nodes
+console.log(result.included); // Sections included in the compiled payload
 ```
 
 ### As a Daemon
@@ -379,13 +379,13 @@ interface CompiledContext {
   sources: ContextSource[]; // Contributing sources
   trimmed: ExtractedSection[]; // Dropped sections
   nodes?: SerializedNode[]; // Typed context nodes (adapter pipeline)
-  includedSections?: ExtractedSection[]; // Sections included in payload
+  included: ExtractedSection[]; // Sections included in payload
 }
 
 interface ContextNode {
   id: string; // Unique ID within source
   type: ContextNodeType; // structural | operational | identity | governance | reference
-  tier: ContextTier; // constitutional | navigational | identity | reference | historical
+  tier: ContextTier; // constitutional | navigational | operational | identity | reference | historical
   content: string; // The actual context text
   origin: NodeOrigin; // Where this came from (source, format, heading path)
   tokenEstimate: number; // Approximate token count

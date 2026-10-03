@@ -46,7 +46,7 @@ context:
     spokes: boolean # Include spoke-level files (default: true)
     tokenBudget: number # Token budget for boot context
 
-  blocks: # Context blocks (per-message dynamic context) — placeholder, not yet implemented (#14)
+  blocks: # Context blocks (per-message dynamic context) -- placeholder, not yet implemented (#14)
     - id: string # Block identifier
       source: string # Source file or pattern
       taskHint: string # Optional task hint for relevance
