@@ -33,13 +33,19 @@ workspace roots are optional for a standalone publisher. No local source checkou
   "root": "/absolute/private/contexgin-publications",
   "webhookSecretEnv": "CONTEXGIN_GITHUB_WEBHOOK_SECRET",
   "readTokenEnv": "CONTEXGIN_PUBLICATION_READ_TOKEN",
-  "sources": [{
-    "id": "my-notes",
-    "url": "https://github.com/example/my-notes.git",
-    "ref": "refs/heads/main",
-    "githubRepository": "example/my-notes",
-    "paths": ["AGENTS.md", "KNOWLEDGE.md", "memory/"]
-  }]
+  "sources": [
+    {
+      "id": "my-notes",
+      "url": "https://github.com/example/my-notes.git",
+      "ref": "refs/heads/main",
+      "githubRepository": "example/my-notes",
+      "paths": ["AGENTS.md", "KNOWLEDGE.md", "memory/"],
+      "optionalPaths": ["CLAUDE.md", "CONSTITUTION.md", "context/"],
+      "excludePaths": ["memory/scripts/", "memory/manifest/"],
+      "excludePathSegments": ["node_modules"],
+      "excludeHiddenPaths": true
+    }
+  ]
 }
 ```
 
@@ -52,9 +58,58 @@ credential helper, not URL-embedded credentials. Changing a source URL/ref/path 
 invalidates the old current pointer and queues a fresh publication. Stop the previous
 service before changing configuration; worker leases fence overlapping restarts.
 
+`paths`, `optionalPaths` and `excludePaths` contain literal file names or directory prefixes
+ending in `/`; they are not globs. Exclusions take precedence and are applied before
+reading Git blobs or compiling context. Missing exclusion targets are allowed.
+`excludeHiddenPaths: true` excludes a file whenever any path segment begins with `.`.
+Directory selections discover newly accepted Markdown and omit deleted files without
+changing the policy.
+Required `paths` must be nonempty, and each required selection must contain eligible
+Markdown. `optionalPaths` use the same selection rules, but may be absent or empty:
+new optional instructions and context directories are discovered after acceptance,
+and deleting optional guidance does not block publication. List anticipated root/spoke
+guidance files and context directory prefixes here instead of freezing their current file list.
+`excludePathSegments` excludes exact nonempty single path-segment names at any depth,
+for example `memory/category/node_modules/private.md`; slashes, backslashes, `.` and
+`..` are invalid segment names. Exclusion rules apply to required and optional selections.
+Exclusions must use safe relative paths, and the hidden-path setting must be boolean.
+All optional settings are bound into source identity and the snapshot manifest.
+Omitting them retains the existing source identity and manifest format; explicit empty
+exclusions or `false` are still configuration changes and invalidate prior cache state.
+Snapshot reuse independently checks these settings and every file's selection policy,
+even when a corrupted manifest and its hashes are internally consistent.
+
 Configure GitHub's `push` webhook to reach `/api/publications/github` with the matching
 secret and JSON content type. Expose only that route through the existing authenticated
 TLS ingress. No webhook or launchd installation is performed by enabling the code alone.
+
+The reviewed [Nginx webhook ingress example](deployment/knowledge-webhook-nginx.conf)
+forwards only exact POST request targets to loopback receivers: `/webhook` to an
+optional Centaur receiver on port 8642 and `/api/publications/github` to ContexGin on
+port 8643. It rejects all other paths, query strings and normalized/encoded aliases,
+limits bodies to 1 MiB, strips Authorization, and logs neither bodies nor signature
+headers. Runtime error logs are discarded to `/dev/null` because even error-level
+diagnostics can include rejected request targets, query secrets or headers. Access
+logs contain only fixed route labels, status codes and durations. This trades detailed
+per-request diagnostics for secret-safe observability; monitor status/rate metrics and
+keep startup `nginx -t` evidence separately. Do not replace the discard policy by
+raising the log threshold. Remove the optional Centaur location and whitelist entry when unused.
+Receiver-side signature verification remains mandatory. Keep read, reconcile and
+retry APIs on the host; do not forward them through public ingress.
+
+Provision Nginx from a trusted package source. Use a private prefix outside workspaces,
+create its `logs`, `tmp/body` and `tmp/proxy` directories, and check the configured
+example with `nginx -p /absolute/private/ingress/ -c /absolute/config/nginx.conf -t`
+before starting it. The loopback listener expects a separately configured authenticated
+TLS ingress. Test valid signatures, rejected methods/paths, body limits and log contents
+against local fixture receivers before activation. This example contains no secrets,
+personal paths or service installation instructions.
+
+Run the offline ingress regression with `python3 tests/deployment/knowledge-webhook-nginx.py`
+(`--nginx /absolute/path/nginx` when needed). It uses disposable loopback receivers,
+checks oversized requests with query/header secrets and unavailable upstreams, and
+asserts access logs, error logs and runtime stderr contain no test secrets. It does
+not contact real receivers or activate ingress.
 
 The optional read token enables these local consumer APIs:
 
@@ -83,6 +138,10 @@ clear the retry deadline. Fencing prevents an expired worker from promoting stal
 SQLite uses WAL and FULL synchronization. Snapshot files and directory entries are
 flushed before promotion. Unchanged revisions reuse snapshots only after checking the complete file set, all
 hashes, source identity and recompiling with the running compiler; corruption triggers a fresh build.
+Reuse also compares exact selected file coverage and Git blob object identities against
+the immutable accepted revision in the private mirror. Rewriting a snapshot, manifest
+and compiled context consistently cannot hide missing optional guidance or substitute
+content from another revision.
 Old and orphan snapshots remain available for active consumers. Automatic GC requires
 consumer pin/adoption receipts and is intentionally deferred; monitor private state size.
 

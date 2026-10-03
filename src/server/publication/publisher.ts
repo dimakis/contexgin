@@ -24,6 +24,14 @@ export interface KnowledgeSource {
   githubRepository?: string;
   /** Explicit portable Markdown files or directory prefixes ending in /. */
   paths: string[];
+  /** Additional file or directory selections allowed to be absent. */
+  optionalPaths?: string[];
+  /** Optional literal files or directory prefixes omitted before blob acquisition. */
+  excludePaths?: string[];
+  /** Exclude an exact path segment at any nesting depth. */
+  excludePathSegments?: string[];
+  /** Omit files with any dot-prefixed path segment. */
+  excludeHiddenPaths?: boolean;
 }
 export interface PublicationConfig {
   root: string;
@@ -126,6 +134,13 @@ const safePath = (value: string) =>
   !value.includes('\\') &&
   !value.includes('\0') &&
   !value.split('/').some((p) => p === '..' || p === '.' || p === '');
+const matchesPath = (path: string, policy: string) =>
+  policy.endsWith('/') ? path.startsWith(policy) : path === policy;
+const selectedPath = (path: string, source: KnowledgeSource) =>
+  [...source.paths, ...(source.optionalPaths ?? [])].some((policy) => matchesPath(path, policy)) &&
+  !source.excludePaths?.some((policy) => matchesPath(path, policy)) &&
+  !path.split('/').some((part) => source.excludePathSegments?.includes(part)) &&
+  !(source.excludeHiddenPaths && path.split('/').some((part) => part.startsWith('.')));
 
 /** Application layer: acquires sources into private state, never changes user checkouts. */
 export class KnowledgePublisher {
@@ -165,12 +180,41 @@ export class KnowledgePublisher {
         )
       )
         throw new Error('Explicit safe portable paths required');
+      if (
+        source.optionalPaths !== undefined &&
+        (!Array.isArray(source.optionalPaths) ||
+          source.optionalPaths.some(
+            (p) => typeof p !== 'string' || !safePath(p.endsWith('/') ? p.slice(0, -1) : p),
+          ))
+      )
+        throw new Error('Explicit safe optional paths required');
+      if (
+        source.excludePaths !== undefined &&
+        (!Array.isArray(source.excludePaths) ||
+          source.excludePaths.some(
+            (p) => typeof p !== 'string' || !safePath(p.endsWith('/') ? p.slice(0, -1) : p),
+          ))
+      )
+        throw new Error('Explicit safe exclusion paths required');
+      if (
+        source.excludePathSegments !== undefined &&
+        (!Array.isArray(source.excludePathSegments) ||
+          source.excludePathSegments.some(
+            (p) => typeof p !== 'string' || p.includes('/') || !safePath(p),
+          ))
+      )
+        throw new Error('Explicit safe exclusion segments required');
+      if (source.excludeHiddenPaths !== undefined && typeof source.excludeHiddenPaths !== 'boolean')
+        throw new Error('Boolean hidden-path exclusion required');
     }
     config = { ...structuredClone(config), root: privateRoot(config) };
     this.config = config;
     this.sources = structuredClone(config.sources);
     for (const source of this.sources) {
       Object.freeze(source.paths);
+      if (source.optionalPaths) Object.freeze(source.optionalPaths);
+      if (source.excludePaths) Object.freeze(source.excludePaths);
+      if (source.excludePathSegments) Object.freeze(source.excludePathSegments);
       Object.freeze(source);
     }
     Object.freeze(this.sources);
@@ -468,11 +512,12 @@ export class KnowledgePublisher {
           const tab = record.indexOf('\t');
           const [mode, type, oid] = record.slice(0, tab).split(' ');
           const name = record.slice(tab + 1);
-          if (!source.paths.some((p) => (p.endsWith('/') ? name.startsWith(p) : name === p)))
-            continue;
+          if (!selectedPath(name, source)) continue;
           if (
             !name.endsWith('.md') &&
-            source.paths.some((p) => p.endsWith('/') && name.startsWith(p))
+            [...source.paths, ...(source.optionalPaths ?? [])].some(
+              (p) => p.endsWith('/') && name.startsWith(p),
+            )
           )
             continue;
           if (
@@ -512,6 +557,14 @@ export class KnowledgePublisher {
           sourceIdentity: hash(JSON.stringify(source)),
           revision,
           paths: source.paths,
+          ...(source.optionalPaths !== undefined ? { optionalPaths: source.optionalPaths } : {}),
+          ...(source.excludePaths !== undefined ? { excludePaths: source.excludePaths } : {}),
+          ...(source.excludePathSegments !== undefined
+            ? { excludePathSegments: source.excludePathSegments }
+            : {}),
+          ...(source.excludeHiddenPaths !== undefined
+            ? { excludeHiddenPaths: source.excludeHiddenPaths }
+            : {}),
           files,
           contextSha256: hash(contextJson),
         });
@@ -588,17 +641,77 @@ export class KnowledgePublisher {
       if (hash(raw) !== publication.manifestSha256) return false;
       const manifest = JSON.parse(raw.toString()) as {
         schema: string;
+        source: string;
         revision: string;
         contextSha256: string;
         acceptedRef: string;
         sourceIdentity: string;
+        paths: string[];
+        optionalPaths?: string[];
+        excludePaths?: string[];
+        excludePathSegments?: string[];
+        excludeHiddenPaths?: boolean;
         files: { path: string; sha256: string; bytes: number }[];
       };
       if (manifest.schema !== 'contexgin-portable-v1' || manifest.revision !== publication.revision)
         return false;
       if (
         manifest.acceptedRef !== source.ref ||
-        manifest.sourceIdentity !== hash(JSON.stringify(source))
+        manifest.source !== source.id ||
+        manifest.sourceIdentity !== hash(JSON.stringify(source)) ||
+        JSON.stringify(manifest.paths) !== JSON.stringify(source.paths) ||
+        JSON.stringify(manifest.optionalPaths) !== JSON.stringify(source.optionalPaths) ||
+        JSON.stringify(manifest.excludePaths) !== JSON.stringify(source.excludePaths) ||
+        JSON.stringify(manifest.excludePathSegments) !==
+          JSON.stringify(source.excludePathSegments) ||
+        manifest.excludeHiddenPaths !== source.excludeHiddenPaths ||
+        !manifest.files.length ||
+        source.paths.some(
+          (policy) => !manifest.files.some((file) => matchesPath(file.path, policy)),
+        ) ||
+        manifest.files.some(
+          (file) => !file.path.endsWith('.md') || !selectedPath(file.path, source),
+        )
+      )
+        return false;
+      // A self-consistent snapshot is not proof that it contains the accepted tree.
+      // Bind both exact policy coverage and blob contents to the immutable Git revision.
+      if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(publication.revision)) return false;
+      const records = (
+        await this.git(
+          join(this.config.root, source.id, 'mirror.git'),
+          ['ls-tree', '-rz', publication.revision],
+          true,
+        )
+      )
+        .toString()
+        .split('\0')
+        .filter(Boolean);
+      const accepted = new Map<string, string>();
+      for (const record of records) {
+        const tab = record.indexOf('\t');
+        const [mode, type, oid] = record.slice(0, tab).split(' ');
+        const name = record.slice(tab + 1);
+        if (!selectedPath(name, source)) continue;
+        if (
+          !name.endsWith('.md') &&
+          [...source.paths, ...(source.optionalPaths ?? [])].some(
+            (policy) => policy.endsWith('/') && name.startsWith(policy),
+          )
+        )
+          continue;
+        if (
+          !safePath(name) ||
+          !/^100(644|755)$/.test(mode) ||
+          type !== 'blob' ||
+          !name.endsWith('.md')
+        )
+          return false;
+        accepted.set(name, oid);
+      }
+      if (
+        accepted.size !== manifest.files.length ||
+        manifest.files.some((file) => !accepted.has(file.path))
       )
         return false;
       const expected = new Set([
@@ -607,6 +720,7 @@ export class KnowledgePublisher {
         ...manifest.files.map((f) => `source/${f.path}`),
       ]);
       const actual = new Set<string>();
+      if (expected.size !== manifest.files.length + 2) return false;
       const walk = async (directory: string, prefix: string): Promise<boolean> => {
         for (const name of await readdir(directory)) {
           const target = join(directory, name);
@@ -633,7 +747,16 @@ export class KnowledgePublisher {
         }
         const info = lstatSync(target);
         if (!info.isFile() || info.size !== file.bytes) return false;
-        if (hash(await readFile(target)) !== file.sha256) return false;
+        const content = await readFile(target);
+        if (hash(content) !== file.sha256) return false;
+        const oid = accepted.get(file.path)!;
+        const algorithm = oid.length === 40 ? 'sha1' : oid.length === 64 ? 'sha256' : undefined;
+        if (
+          !algorithm ||
+          createHash(algorithm).update(`blob ${content.length}\0`).update(content).digest('hex') !==
+            oid
+        )
+          return false;
       }
       const context = await compile({
         workspaceRoot: join(publication.directory, 'source'),
