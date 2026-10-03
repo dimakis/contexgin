@@ -8,8 +8,8 @@ const head = 'a'.repeat(40);
 const other = 'b'.repeat(40);
 const body = `<!-- centaur:sha:${head} -->\n## Centaur Review\nLGTM — no issues found.\n\n### Convergence\n**Recommendation:** \`merge\`\n- New blocking findings: 0\n- Unresolved blocking findings: 0\n`;
 const report = { user: { login: 'dimakis' }, body, commit_id: head, state: 'COMMENTED' };
-async function run({ reports = [report], prs = [{ number: 1, head: { sha: head } }], next, previous = [], reviewer = '', event = {} } = {}) {
-  const statuses = []; const reads = new Map(); const inspected = [];
+async function run({ reports = [report], prs = [{ number: 1, head: { sha: head } }], next, previous = [], reviewer = '', event = {}, comments = [], nextPRs } = {}) {
+  const statuses = []; const reads = new Map(); const inspected = []; let listReads = 0;
   const github = { rest: {
     pulls: { list: 'pulls', listReviews: 'reviews', get: async ({ pull_number }) => {
       inspected.push(pull_number); const count = reads.get(pull_number) || 0;
@@ -18,8 +18,8 @@ async function run({ reports = [report], prs = [{ number: 1, head: { sha: head }
     } },
     issues: { listComments: 'comments' },
     repos: { listCommitStatuses: 'statuses', createCommitStatus: async s => statuses.push(s) },
-  }, paginate: async (endpoint, args) => endpoint === 'pulls' ? prs : endpoint === 'reviews' ?
-    (Array.isArray(reports) ? reports : reports[args.pull_number] || []) : endpoint === 'statuses' ? previous : [] };
+  }, paginate: async (endpoint, args) => endpoint === 'pulls' ? (listReads++ && nextPRs ? nextPRs : prs) : endpoint === 'reviews' ?
+    (Array.isArray(reports) ? reports : reports[args.pull_number] || []) : endpoint === 'statuses' ? previous : comments };
   await new Script(`(async () => {${script}})()`).runInNewContext({ github, context: { repo: { owner: 'dimakis', repo: 'example' }, payload: event }, process: { env: { CENTAUR_STATUS_APP_LOGIN: 'centaur-status[bot]', CENTAUR_REVIEWER_LOGIN: reviewer } } });
   return { statuses, inspected };
 }
@@ -66,4 +66,18 @@ test('review changes signal a protected default-branch reconciliation without PR
   assert.match(gate, /workflow_run:/); assert.match(gate, /workflows: \[Centaur review signal\]/);
   assert.match(gate, /environment: centaur-status-writer/);
   assert.doesNotMatch(gate, /actions\/checkout/); assert.doesNotMatch(signal, /secrets\.|actions\/checkout/);
+});
+
+test('rejects conflicting comment and review reports tied for the newest second', async () => {
+  const created_at = '2026-10-03T12:00:00Z';
+  const result = await run({ reports: [{ ...report, submitted_at: created_at,
+    body: body.replace('`merge`', '`fix`') }], comments: [{ ...report, state: undefined,
+    commit_id: undefined, created_at }] });
+  assert.equal(result.statuses[0].state, 'failure');
+});
+
+test('rechecks shared heads before publishing success', async () => {
+  const result = await run({ nextPRs: [{ number: 1, head: { sha: head } },
+    { number: 2, head: { sha: head } }] });
+  assert.equal(result.statuses[0].state, 'failure');
 });

@@ -2,7 +2,7 @@ name: Centaur merge gate
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
   schedule:
     - cron: '*/5 * * * *'
   issue_comment:
@@ -74,12 +74,17 @@ jobs:
               .localeCompare(b.submitted_at || b.created_at || ''));
             const latest = reports.at(-1);
             const body = latest?.body || '';
+            const reportTime = r => r.submitted_at || r.created_at || '';
+            // GitHub timestamps have second resolution across comments and reviews.
+            // Conflicting reports tied for newest must never choose an LGTM by array order.
+            const tied = latest ? reports.filter(r => reportTime(r) === reportTime(latest)) : [];
+            const ambiguous = tied.some(r => r.body !== body || r.state === 'DISMISSED');
             const current = /^[a-f0-9]{40}$/.test(head) &&
               body.includes(`<!-- centaur:sha:${head} -->`) &&
               (latest.commit_id === undefined || latest.commit_id === head);
             // Commit statuses cannot express independent verdicts for a shared head.
-            const sharedHead = headCounts.get(head) > 1;
-            const approved = !sharedHead && current && latest.state !== 'DISMISSED' &&
+            let sharedHead = headCounts.get(head) > 1;
+            const approved = !sharedHead && !ambiguous && current && latest.state !== 'DISMISSED' &&
               new RegExp(`^<!-- centaur:sha:${head} -->\\s*## Centaur Review\\s*` +
                 'LGTM — no issues found\\.\\s*### Convergence\\s*' +
                 '\\*\\*Recommendation:\\*\\* `merge`[^\\n]*\\n').test(body) &&
@@ -93,7 +98,12 @@ jobs:
             // A head advance must never receive a verdict computed for the old head.
             const {data: refreshed} = await github.rest.pulls.get({...repo, pull_number: number});
             if (refreshed.state !== 'open' || refreshed.head.sha !== head) continue;
-            const state = sharedHead ? 'failure' : approved ? 'success' : current ? 'failure' : 'pending';
+            if (approved) {
+              const currentPRs = await github.paginate(github.rest.pulls.list,
+                {...repo, state: 'open', per_page: 100});
+              sharedHead = currentPRs.filter(candidate => candidate.head.sha === head).length > 1;
+            }
+            const state = sharedHead || ambiguous ? 'failure' : approved ? 'success' : current ? 'failure' : 'pending';
             const appLogin = process.env.CENTAUR_STATUS_APP_LOGIN;
             if (!appLogin) throw new Error('Missing dedicated status App identity');
             const statuses = await github.paginate(github.rest.repos.listCommitStatuses,
