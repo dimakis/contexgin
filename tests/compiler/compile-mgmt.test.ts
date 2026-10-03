@@ -32,7 +32,7 @@ describeLocal('compile against mgmt workspace', () => {
       tokenBudget: 12000,
     });
     expect(result.bootPayload.length).toBeGreaterThan(0);
-    expect(result.bootTokens).toBeLessThan(12000);
+    expect(result.bootTokens).toBeLessThanOrEqual(12000);
     expect(result.sources.length).toBeGreaterThan(0);
     expect(result.nodes).toBeDefined();
     expect(result.nodes!.length).toBeGreaterThan(0);

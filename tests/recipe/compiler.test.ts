@@ -5,6 +5,11 @@ import * as os from 'node:os';
 import { compileAgent } from '../../src/recipe/compiler.js';
 import type { AgentDefinition } from '../../src/recipe/types.js';
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+
 describe('compileAgent', () => {
   let tmpDir: string;
 
@@ -99,6 +104,30 @@ describe('compileAgent', () => {
     expect(result.bootContext.sources).not.toContain('CLAUDE.md');
   });
 
+  it('keeps claudeMd false compatible after migration to AGENTS.md', async () => {
+    await fs.rm(path.join(tmpDir, 'CLAUDE.md'));
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), 'MIGRATED_INSTRUCTIONS');
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 8000, claudeMd: false };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.sources).not.toContain('AGENTS.md');
+    expect(result.bootContext.content).not.toContain('MIGRATED_INSTRUCTIONS');
+  });
+
+  it('can configure canonical instructions independently of legacy CLAUDE.md', async () => {
+    await fs.rm(path.join(tmpDir, 'CLAUDE.md'));
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), 'CANONICAL_INSTRUCTIONS');
+    const def = createMinimalAgent();
+    def.context.boot = { tokenBudget: 8000, agentInstructions: false };
+
+    const result = await compileAgent(def, tmpDir);
+
+    expect(result.bootContext.sources).not.toContain('AGENTS.md');
+    expect(result.bootContext.content).not.toContain('CANONICAL_INSTRUCTIONS');
+  });
+
   it('compiles context blocks from files', async () => {
     const blockFile = path.join(tmpDir, 'block.md');
     await fs.writeFile(blockFile, '# Context Block\n\nSome context here.');
@@ -135,7 +164,9 @@ describe('compileAgent', () => {
   });
 
   it('expands tilde in context block paths', async () => {
-    const homeFile = path.join(os.homedir(), 'test-contexgin-block.md');
+    const originalHome = os.homedir();
+    vi.mocked(os.homedir).mockReturnValue(tmpDir);
+    const homeFile = path.join(tmpDir, 'test-contexgin-block.md');
     await fs.writeFile(homeFile, '# Home Block\n\nFrom home directory.');
 
     try {
@@ -153,6 +184,7 @@ describe('compileAgent', () => {
       const block = result.contextBlocks.get('home-block');
       expect(block?.content).toContain('Home Block');
     } finally {
+      vi.mocked(os.homedir).mockReturnValue(originalHome);
       await fs.unlink(homeFile);
     }
   });
