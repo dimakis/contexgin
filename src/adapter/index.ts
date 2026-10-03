@@ -116,6 +116,7 @@ export async function discoverAndAdapt(
 
   // 4. context/ files (rhythms, cadence) at workspace root
   for (const contextFile of ['rhythms.yaml', 'cadence.yaml']) {
+    if (shouldIgnore(path.join('context', contextFile), ignorePatterns)) continue;
     const rootContextPath = path.join(root, 'context', contextFile);
     if (await fileExists(rootContextPath)) {
       const nodes = await adaptFile(rootContextPath, root);
