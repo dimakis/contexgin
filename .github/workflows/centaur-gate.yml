@@ -7,6 +7,9 @@ on:
     - cron: '*/5 * * * *'
   issue_comment:
     types: [created, edited, deleted]
+  workflow_run:
+    workflows: [Centaur review signal]
+    types: [completed]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -17,7 +20,7 @@ permissions:
   contents: read
   pull-requests: read
 
-# One queue for every event, including periodic reconciliation of fork reviews.
+# Every retained run reconciles all PRs, so replaced pending events lose no PR updates.
 concurrency:
   group: centaur-status-writer
   cancel-in-progress: false
@@ -47,12 +50,13 @@ jobs:
           github-token: ${{ steps.status-token.outputs.token }}
           script: |
             const repo = {owner: context.repo.owner, repo: context.repo.repo};
-            let numbers = [context.payload.pull_request?.number ?? context.payload.issue?.number ??
-              Number(context.payload.inputs?.pr_number)];
-            if (!numbers[0]) {
-              const candidates = await github.paginate(github.rest.pulls.list,
-                {...repo, state: 'open', per_page: 100});
-              numbers = candidates.map(pr => pr.number);
+            // Always reconcile every open PR: GitHub retains only one pending run.
+            const candidates = await github.paginate(github.rest.pulls.list,
+              {...repo, state: 'open', per_page: 100});
+            const numbers = candidates.map(pr => pr.number);
+            const headCounts = new Map();
+            for (const pr of candidates) {
+              headCounts.set(pr.head.sha, (headCounts.get(pr.head.sha) || 0) + 1);
             }
             for (const number of new Set(numbers)) {
             if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Invalid PR');
@@ -73,7 +77,9 @@ jobs:
             const current = /^[a-f0-9]{40}$/.test(head) &&
               body.includes(`<!-- centaur:sha:${head} -->`) &&
               (latest.commit_id === undefined || latest.commit_id === head);
-            const approved = current && latest.state !== 'DISMISSED' &&
+            // Commit statuses cannot express independent verdicts for a shared head.
+            const sharedHead = headCounts.get(head) > 1;
+            const approved = !sharedHead && current && latest.state !== 'DISMISSED' &&
               new RegExp(`^<!-- centaur:sha:${head} -->\\s*## Centaur Review\\s*` +
                 'LGTM — no issues found\\.\\s*### Convergence\\s*' +
                 '\\*\\*Recommendation:\\*\\* `merge`[^\\n]*\\n').test(body) &&
@@ -87,7 +93,7 @@ jobs:
             // A head advance must never receive a verdict computed for the old head.
             const {data: refreshed} = await github.rest.pulls.get({...repo, pull_number: number});
             if (refreshed.state !== 'open' || refreshed.head.sha !== head) continue;
-            const state = approved ? 'success' : current ? 'failure' : 'pending';
+            const state = sharedHead ? 'failure' : approved ? 'success' : current ? 'failure' : 'pending';
             const appLogin = process.env.CENTAUR_STATUS_APP_LOGIN;
             if (!appLogin) throw new Error('Missing dedicated status App identity');
             const statuses = await github.paginate(github.rest.repos.listCommitStatuses,
@@ -99,7 +105,7 @@ jobs:
             if (previous?.state === state) continue;
             await github.rest.repos.createCommitStatus({...repo, sha: head,
               context: 'Centaur final LGTM', state,
-              description: approved ? 'Final Centaur LGTM for this commit' :
+              description: sharedHead ? 'Separate PR heads are required for Centaur approval' : approved ? 'Final Centaur LGTM for this commit' :
                 current ? 'Centaur findings or invalid approval block merge' :
                 'Waiting for final Centaur review of this commit'});
             }

@@ -463,3 +463,5 @@ queue and snapshots; clients own sandbox delivery and session adoption.
 ## Merge requirements
 
 The `Centaur merge gate` workflow publishes `Centaur final LGTM` for the current pull request head. Main branch protection requires that status from the dedicated Centaur status App alongside CI. A passing report must contain a final LGTM, a merge recommendation, and zero new or unresolved blocking findings. New commits invalidate earlier approvals. The status writer uses a secrets environment restricted to `main` and executes no pull request code.
+
+The repository owner is the trusted Centaur publishing account; this gate does not require a second GitHub identity. Open PRs sharing a head SHA are blocked because commit statuses cannot carry separate PR approvals. Review submissions, edits, and dismissals trigger a read-only signal workflow, then a default-branch reconciliation with the protected App credential. Every reconciliation covers all open PRs.
