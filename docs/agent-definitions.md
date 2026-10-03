@@ -222,7 +222,7 @@ Each source type can be:
 
 - `true` -- include all content from this source
 - `false` -- exclude entirely
-- `string[]` -- accepted by the schema, but currently includes the whole source. Heading selection is not implemented for these toggles; use the boot `excluded` heading paths to omit sections.
+- `string[]` -- accepted by the schema, but currently includes the whole source. Heading selection is not implemented for these toggles; for heading exclusions, use the lower-level `compile` API with its `excluded` option. The boot configuration does not expose that option.
 
 ```yaml
 context:
