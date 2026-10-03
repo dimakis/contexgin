@@ -78,7 +78,12 @@ forwards only exact POST request targets to loopback receivers: `/webhook` to an
 optional Centaur receiver on port 8642 and `/api/publications/github` to ContexGin on
 port 8643. It rejects all other paths, query strings and normalized/encoded aliases,
 limits bodies to 1 MiB, strips Authorization, and logs neither bodies nor signature
-headers. Remove the optional Centaur location and whitelist entry when unused.
+headers. Runtime error logs are discarded to `/dev/null` because even error-level
+diagnostics can include rejected request targets, query secrets or headers. Access
+logs contain only fixed route labels, status codes and durations. This trades detailed
+per-request diagnostics for secret-safe observability; monitor status/rate metrics and
+keep startup `nginx -t` evidence separately. Do not replace the discard policy by
+raising the log threshold. Remove the optional Centaur location and whitelist entry when unused.
 Receiver-side signature verification remains mandatory. Keep read, reconcile and
 retry APIs on the host; do not forward them through public ingress.
 
@@ -89,6 +94,12 @@ before starting it. The loopback listener expects a separately configured authen
 TLS ingress. Test valid signatures, rejected methods/paths, body limits and log contents
 against local fixture receivers before activation. This example contains no secrets,
 personal paths or service installation instructions.
+
+Run the offline ingress regression with `python3 tests/deployment/knowledge-webhook-nginx.py`
+(`--nginx /absolute/path/nginx` when needed). It uses disposable loopback receivers,
+checks oversized requests with query/header secrets and unavailable upstreams, and
+asserts access logs, error logs and runtime stderr contain no test secrets. It does
+not contact real receivers or activate ingress.
 
 The optional read token enables these local consumer APIs:
 
