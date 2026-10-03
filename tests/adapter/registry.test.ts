@@ -46,6 +46,16 @@ describe('findAdapter', () => {
     expect(adapter?.format).toBe('claude_md');
   });
 
+  it('selects rhythms adapter for context/rhythms.yaml', () => {
+    const adapter = findAdapter('/workspace/context/rhythms.yaml');
+    expect(adapter?.format).toBe('rhythms');
+  });
+
+  it('selects rhythms adapter for context/cadence.yaml', () => {
+    const adapter = findAdapter('/workspace/context/cadence.yaml');
+    expect(adapter?.format).toBe('rhythms');
+  });
+
   it('returns undefined for non-handled files', () => {
     expect(findAdapter('foo.ts')).toBeUndefined();
     expect(findAdapter('foo.py')).toBeUndefined();
