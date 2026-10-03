@@ -10,6 +10,7 @@ import * as path from 'node:path';
  * Module directory candidate locations, checked in order.
  */
 const MODULE_DIR_PATTERNS = ['modules', 'src/modules', ''];
+const NON_MODULE_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage']);
 
 /**
  * Find a module directory by name across common locations.
@@ -20,9 +21,11 @@ export async function findModuleDir(
   workspaceRoot: string,
 ): Promise<string | undefined> {
   // Reject path traversal attempts
-  if (moduleName.includes('..') || path.isAbsolute(moduleName)) return undefined;
+  if (!/^[a-zA-Z0-9_-]+$/.test(moduleName)) return undefined;
 
   for (const pattern of MODULE_DIR_PATTERNS) {
+    // Root-level modules are supported, but generated directories are not modules.
+    if (!pattern && NON_MODULE_DIRS.has(moduleName)) continue;
     const candidate = pattern
       ? path.join(workspaceRoot, pattern, moduleName)
       : path.join(workspaceRoot, moduleName);
