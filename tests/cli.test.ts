@@ -122,6 +122,29 @@ A test workspace for CLI validation.
   });
 
   describe('serve arg parsing', () => {
+    it('accepts publication configuration without a workspace checkout', async () => {
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-pub-cli-'));
+      try {
+        const config = path.join(directory, 'publication.json');
+        await fs.writeFile(
+          config,
+          JSON.stringify({
+            root: path.join(directory, 'state'),
+            webhookSecretEnv: 'CONTEXGIN_FIXTURE_UNSET_SECRET_7B8344',
+            sources: [
+              { id: 'notes', url: directory, ref: 'refs/heads/main', paths: ['README.md'] },
+            ],
+          }),
+        );
+        const result = await run('serve', '--publication-config', config);
+        expect(result.stderr).toContain(
+          'Publication webhook secret environment variable is missing',
+        );
+        expect(result.stderr).not.toContain('Usage:');
+      } finally {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    });
     let tmpDir: string;
 
     beforeAll(async () => {

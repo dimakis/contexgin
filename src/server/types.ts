@@ -1,5 +1,6 @@
 import type { HubGraph, Violation } from '../graph/types.js';
 import type { SerializedNode } from '../compiler/types.js';
+import type { PublicationConfig } from './publication/publisher.js';
 
 // ── Defaults ───────────────────────────────────────────────────
 
@@ -9,6 +10,8 @@ export const DEFAULT_COMPILE_BUDGET = 12_000;
 // ── Server Configuration ────────────────────────────────────────
 
 export interface ServerConfig {
+  /** Opt-in publisher; secret comes from the named environment variable. */
+  publication?: PublicationConfig & { webhookSecretEnv: string; readTokenEnv?: string };
   /** TCP port (0 = auto-assign) */
   port: number;
   /** TCP host to bind */

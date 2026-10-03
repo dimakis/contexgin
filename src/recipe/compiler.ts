@@ -5,8 +5,10 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { compile, discoverSources, estimateTokens } from '../compiler/index.js';
-import { isNestedPath } from '../adapter/types.js';
+import { compile, estimateTokens } from '../compiler/index.js';
+import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
+import { isNestedPath, isProfilePath, nodesToSources } from '../adapter/types.js';
+import type { ContextNode } from '../adapter/types.js';
 import { resolveOrigin } from '../resolve/index.js';
 import { findModuleDir } from '../resolve/module-dir.js';
 import type { SessionOrigin } from '../resolve/index.js';
@@ -98,39 +100,30 @@ async function compileBootContext(
 
   const budget = config.tokenBudget ?? 8000;
 
-  // Build a filtered sources list by excluding disabled source types.
-  // This is more reliable than ID-based exclusion since adapter node IDs
-  // don't map 1:1 to config toggles (e.g. constitution produces 'purpose',
-  // 'directory-semantics', etc. — not 'constitution').
-  const allSources = await discoverSources(workspaceRoot);
-
-  // Resolve additional source globs from config.
-  // Track explicitly-requested paths so they bypass the spokes filter —
-  // if the user explicitly lists a glob, they want those files regardless
-  // of whether spokes are disabled.
+  // Keep canonical adapter discovery and adapt explicit globs through the same registry.
+  const allNodes = await discoverAndAdapt(workspaceRoot);
   const explicitPaths = new Set<string>();
-  if (config.sources && config.sources.length > 0) {
-    const globSources = await resolveGlobs(config.sources, workspaceRoot);
-    const existingPaths = new Set(allSources.map((s) => s.path));
-    for (const gs of globSources) {
-      explicitPaths.add(gs.path);
-      if (!existingPaths.has(gs.path)) {
-        allSources.push(gs);
+  if (config.sources?.length) {
+    const existingPaths = new Set(allNodes.map((node) => node.origin.source));
+    for (const source of await resolveGlobs(config.sources, workspaceRoot)) {
+      explicitPaths.add(source.path);
+      if (!existingPaths.has(source.path)) {
+        allNodes.push(...(await adaptFile(source.path, workspaceRoot)));
+        existingPaths.add(source.path);
       }
     }
   }
-
-  const sources = allSources.filter((s) => {
-    // Explicitly-requested sources always pass through
-    if (explicitPaths.has(s.path)) return true;
-
-    const basename = path.basename(s.relativePath);
+  const filteredNodes = allNodes.filter((node) => {
+    if (explicitPaths.has(node.origin.source)) return true;
+    const rel = node.origin.relativePath;
+    const basename = path.basename(rel);
+    const profile = isProfilePath(rel);
 
     // Spoke-level files — check first since spoke constitutions/CLAUDEs
     // would otherwise match the type-specific filters below
-    if (config.spokes === false && isNestedPath(s.relativePath)) {
+    if (config.spokes === false && isNestedPath(rel)) {
       // Don't filter profiles or cursor rules — they're not spokes
-      if (s.kind !== 'profile' && !s.relativePath.match(/^\.cursor[/\\]/)) {
+      if (!profile && !rel.match(/^\.cursor[/\\]/)) {
         return false;
       }
     }
@@ -140,38 +133,64 @@ async function compileBootContext(
       return config.constitution !== false;
     }
 
+    // Canonical instructions use their own switch when provided. Falling back to
+    // claudeMd preserves existing recipe behavior as workspaces migrate files.
+    if (basename === 'AGENTS.md') {
+      return (config.agentInstructions ?? config.claudeMd) !== false;
+    }
+
     // CLAUDE.md — exclude if explicitly disabled
     if (basename === 'CLAUDE.md') {
       return config.claudeMd !== false;
     }
 
     // Profile files — exclude if explicitly disabled
-    if (s.kind === 'profile') {
+    if (profile) {
       return config.profile !== false;
     }
 
     // Cursor rules — exclude if explicitly disabled
-    if (/\.cursor[/\\]rules[/\\]/.test(s.relativePath)) {
+    if (/\.cursor[/\\]rules[/\\]/.test(rel)) {
       return config.cursorRules !== false;
     }
 
     return true;
   });
 
-  // Resolve additional context based on session origin
-  const resolved = await resolveOrigin(origin, workspaceRoot, sources);
+  // Resolve additional context based on session origin.
+  // The resolve system still works with ContextSource[] — convert via shared utility.
+  const filteredSources = nodesToSources(filteredNodes);
+  const resolved = await resolveOrigin(origin, workspaceRoot, filteredSources);
 
-  // Merge resolved sources with defaults (resolved sources take precedence)
-  const finalSources = resolved.sources ?? sources;
-  const finalExcluded = resolved.excluded;
-  const finalTaskHint = resolved.taskHint;
+  // Determine final node set: if resolver changed sources, adapt new ones.
+  // NOTE: The resolver integration path below (where resolved.sources differs
+  // from the filtered set) is not directly unit-tested — it requires mocking
+  // resolveOrigin to return a modified source list. Covered by integration
+  // tests against the mgmt workspace.
+  let finalNodes: ContextNode[];
+  if (resolved.sources) {
+    const resolvedPaths = new Set(resolved.sources.map((s) => s.path));
+    const existingPaths = new Set(filteredNodes.map((n) => n.origin.source));
+
+    // Keep filtered nodes whose source is still in the resolved set
+    const keptNodes = filteredNodes.filter((n) => resolvedPaths.has(n.origin.source));
+
+    // Adapt any new sources the resolver added
+    const newSources = resolved.sources.filter((s) => !existingPaths.has(s.path));
+    const newNodeArrays = await Promise.all(
+      newSources.map((s) => adaptFile(s.path, workspaceRoot)),
+    );
+    finalNodes = [...keptNodes, ...newNodeArrays.flat()];
+  } else {
+    finalNodes = filteredNodes;
+  }
 
   const result = await compile({
     workspaceRoot,
     tokenBudget: budget,
-    sources: finalSources,
-    excluded: finalExcluded,
-    taskHint: finalTaskHint,
+    nodes: finalNodes,
+    excluded: resolved.excluded,
+    taskHint: resolved.taskHint,
   });
 
   return {

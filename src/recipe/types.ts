@@ -22,6 +22,8 @@ export interface BootContextConfig {
   constitution?: boolean | string[];
   /** Include CLAUDE.md sections */
   claudeMd?: boolean | string[];
+  /** Include canonical AGENTS.md instructions. Defaults to claudeMd for migration compatibility. */
+  agentInstructions?: boolean | string[];
   /** Include memory/Profile/*.md */
   profile?: boolean | string[];
   /** Include .cursor/rules/*.mdc */

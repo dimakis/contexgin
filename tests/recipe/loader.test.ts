@@ -151,6 +151,7 @@ context:
   boot:
     constitution: true
     claudeMd: ["Git Discipline", "Entry Points"]
+    agentInstructions: true
     profile: true
     cursorRules: false
     tokenBudget: 8000
@@ -203,6 +204,7 @@ metadata:
       expect(def.identity.name).toBe('full-agent');
       expect(def.provider.temperature).toBe(0.7);
       expect(def.context.boot?.claudeMd).toEqual(['Git Discipline', 'Entry Points']);
+      expect(def.context.boot?.agentInstructions).toBe(true);
       expect(def.context.blocks).toHaveLength(1);
       expect(def.context.blocks![0].id).toBe('jira-context');
       expect(def.context.operational?.delivery).toBe('alwaysApply');
