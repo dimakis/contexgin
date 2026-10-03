@@ -9,7 +9,7 @@ context compilation is independent of which LLM runs the agent loop.
 
 ## Architecture
 
-Contexgin is organised into eight modules, each with a single responsibility:
+Contexgin is organised into twelve modules, each with a single responsibility:
 
 | Module         | Responsibility                                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -21,6 +21,11 @@ Contexgin is organised into eight modules, each with a single responsibility:
 | `provider/`    | Adapter interfaces for LLM providers (Claude, Codex, etc.) — session lifecycle, event streaming                               |
 | `tools/`       | Tool registry for direct function calls and MCP bridge for external tool servers                                              |
 | `permissions/` | Unified permission engine — policy evaluation across providers and tools                                                      |
+
+| `adapter/` | Discover source files and convert supported formats into typed context nodes |
+| `recipe/` | Load agent definitions and compile their boot, operational, block and memory context |
+| `resolve/` | Resolve session origins into relevant context sources and navigation metadata |
+| `goals/` | Persist goals and expose goal lifecycle operations through the daemon |
 
 ### Data Flow
 
