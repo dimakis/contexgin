@@ -459,3 +459,19 @@ Private — not yet published to npm.
 Opt-in webhook-driven publication of accepted Git knowledge is documented in
 [Knowledge publication](docs/knowledge-publication.md). The daemon owns the durable
 queue and snapshots; clients own sandbox delivery and session adoption.
+
+### Org Pulse agent and container
+
+Install `.agents/org-pulse-assistant.yaml` from this repository into the Org Pulse
+workspace's `.agents/` directory, then serve that workspace root. The template's
+source paths resolve there. Agent HTTP discovery currently uses `<root>/.agents`.
+
+```bash
+mkdir -p /path/to/org-pulse/.agents
+cp .agents/org-pulse-assistant.yaml /path/to/org-pulse/.agents/
+docker build -t contexgin .
+docker run --rm -p 4195:4195 -v /path/to/org-pulse:/workspace:ro contexgin
+```
+
+The container binds to `0.0.0.0`; local CLI runs retain the `127.0.0.1` default.
+Use `--host` explicitly when another bind address is needed.

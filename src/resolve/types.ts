@@ -6,7 +6,7 @@
 import type { ContextSource } from '../compiler/types.js';
 
 /** Session origin source — what triggered the session */
-export type OriginSource = 'chat' | 'telos' | 'calendar' | 'file';
+export type OriginSource = 'chat' | 'telos' | 'calendar' | 'file' | 'page';
 
 /** Session origin metadata */
 export interface SessionOrigin {

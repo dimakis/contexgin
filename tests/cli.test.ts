@@ -178,7 +178,15 @@ A test workspace for CLI validation.
 
     it('accepts interleaved flags before root', async () => {
       // serve --port 0 <root> should also work (flag before positional)
-      const { stderr } = await runWithTimeout(3000, 'serve', '--port', '0', tmpDir);
+      const { stderr } = await runWithTimeout(
+        3000,
+        'serve',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        '0',
+        tmpDir,
+      );
       expect(stderr).not.toContain('Usage:');
     }, 10_000);
   });

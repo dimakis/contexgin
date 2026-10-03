@@ -10,6 +10,7 @@ import { graphRoutes } from './routes/graph.js';
 import { GoalRegistry } from '../goals/registry.js';
 import { goalRoutes } from '../goals/routes.js';
 import { agentRoutes } from './routes/agents.js';
+import { registerAuth } from './auth.js';
 import { knowledgeSpaceRoute } from './routes/knowledge-space.js';
 import { KnowledgePublisher } from './publication/publisher.js';
 import { publicationRoutes } from './publication/routes.js';
@@ -50,6 +51,9 @@ export async function createServer(config: ServerConfig): Promise<ContexGinServe
     state.graph = snapshot.graph;
     state.lastBuild = new Date(snapshot.timestamp);
   }
+
+  // Auth middleware (no-op when CONTEXGIN_AUTH_TOKEN is unset)
+  registerAuth(app);
 
   // Register routes
   healthRoute(app, state);
