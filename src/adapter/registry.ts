@@ -5,16 +5,20 @@
 
 import type { ContextAdapter, ContextNode } from './types.js';
 import { constitutionAdapter } from './constitution.js';
+import { knowledgeAdapter } from './knowledge.js';
+import { agentsAdapter } from './agents.js';
 import { claudeAdapter } from './claude.js';
 import { cursorAdapter } from './cursor.js';
 import { markdownAdapter } from './markdown.js';
 
 /**
  * Ordered list of adapters. More specific adapters first.
- * Constitution and Claude must be checked before markdown fallback.
+ * Constitution, Knowledge, and Claude must be checked before markdown fallback.
  */
 const ADAPTERS: ContextAdapter[] = [
+  agentsAdapter,
   constitutionAdapter,
+  knowledgeAdapter,
   claudeAdapter,
   cursorAdapter,
   markdownAdapter, // fallback — must be last
@@ -30,12 +34,14 @@ export function findAdapter(filePath: string): ContextAdapter | undefined {
 
 /**
  * Adapt a single file using the appropriate adapter.
- * Returns empty array if no adapter matches or if the adapter throws.
- * Error isolation: one bad file never fails the whole pipeline.
+ * Returns empty array if no adapter matches or an optional adapter throws.
+ * Required canonical instructions propagate errors rather than silently disappearing.
  */
 export async function adaptFile(filePath: string, workspaceRoot: string): Promise<ContextNode[]> {
   const adapter = findAdapter(filePath);
   if (!adapter) return [];
+  // Required instructions must not disappear behind error isolation.
+  if (adapter.format === 'agents_md') return adapter.adapt(filePath, workspaceRoot);
   try {
     return await adapter.adapt(filePath, workspaceRoot);
   } catch (err) {

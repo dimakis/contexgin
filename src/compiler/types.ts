@@ -32,6 +32,7 @@ export interface RankedSection extends ExtractedSection {
 
 /** Serializable context node for API responses */
 export interface SerializedNode {
+  required?: boolean;
   id: string;
   type: string;
   tier: string;
@@ -71,8 +72,12 @@ export interface CompiledContext {
 export interface CompileOptions {
   /** Workspace root directory */
   workspaceRoot: string;
+  /** Directory whose ancestor instructions apply. Omit for legacy one-level workspace discovery. */
+  scopePath?: string;
   /** Maximum tokens for boot payload */
   tokenBudget: number;
+  /** Pre-adapted context nodes (skip discovery + adaptation) */
+  nodes?: import('../adapter/types.js').ContextNode[];
   /** Source files to compile from (auto-discovered if not provided) */
   sources?: ContextSource[];
   /** Sections to always include regardless of relevance */

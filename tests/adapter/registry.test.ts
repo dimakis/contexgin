@@ -31,6 +31,11 @@ describe('findAdapter', () => {
     expect(adapter?.format).toBe('markdown');
   });
 
+  it('selects knowledge adapter for KNOWLEDGE.md', () => {
+    const adapter = findAdapter('/workspace/KNOWLEDGE.md');
+    expect(adapter?.format).toBe('knowledge');
+  });
+
   it('prefers constitution over markdown for CONSTITUTION.md', () => {
     const adapter = findAdapter('CONSTITUTION.md');
     expect(adapter?.format).toBe('constitution');
@@ -132,7 +137,11 @@ describe('discoverAndAdapt', () => {
       expect(nodes.length).toBeGreaterThan(5);
 
       const formats = new Set(nodes.map((n) => n.origin.format));
-      expect(formats).toContain('claude_md');
+      const hasCanonical = await fs.access(path.join(mgmtRoot, 'AGENTS.md')).then(
+        () => true,
+        () => false,
+      );
+      expect(formats).toContain(hasCanonical ? 'agents_md' : 'claude_md');
       expect(formats).toContain('constitution');
 
       // All nodes should be valid
