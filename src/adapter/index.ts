@@ -130,7 +130,10 @@ export async function discoverAndAdapt(
 
   // 5. context/workflow.md at workspace root
   const contextWorkflowPath = path.join(root, 'context', 'workflow.md');
-  if (await fileExists(contextWorkflowPath)) {
+  if (
+    !shouldIgnore(path.join('context', 'workflow.md'), ignorePatterns) &&
+    (await fileExists(contextWorkflowPath))
+  ) {
     const nodes = await adaptFile(contextWorkflowPath, root);
     allNodes.push(...nodes);
   }
