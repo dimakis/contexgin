@@ -24,8 +24,12 @@ export interface KnowledgeSource {
   githubRepository?: string;
   /** Explicit portable Markdown files or directory prefixes ending in /. */
   paths: string[];
+  /** Additional file or directory selections allowed to be absent. */
+  optionalPaths?: string[];
   /** Optional literal files or directory prefixes omitted before blob acquisition. */
   excludePaths?: string[];
+  /** Exclude an exact path segment at any nesting depth. */
+  excludePathSegments?: string[];
   /** Omit files with any dot-prefixed path segment. */
   excludeHiddenPaths?: boolean;
 }
@@ -133,8 +137,9 @@ const safePath = (value: string) =>
 const matchesPath = (path: string, policy: string) =>
   policy.endsWith('/') ? path.startsWith(policy) : path === policy;
 const selectedPath = (path: string, source: KnowledgeSource) =>
-  source.paths.some((policy) => matchesPath(path, policy)) &&
+  [...source.paths, ...(source.optionalPaths ?? [])].some((policy) => matchesPath(path, policy)) &&
   !source.excludePaths?.some((policy) => matchesPath(path, policy)) &&
+  !path.split('/').some((part) => source.excludePathSegments?.includes(part)) &&
   !(source.excludeHiddenPaths && path.split('/').some((part) => part.startsWith('.')));
 
 /** Application layer: acquires sources into private state, never changes user checkouts. */
@@ -176,6 +181,14 @@ export class KnowledgePublisher {
       )
         throw new Error('Explicit safe portable paths required');
       if (
+        source.optionalPaths !== undefined &&
+        (!Array.isArray(source.optionalPaths) ||
+          source.optionalPaths.some(
+            (p) => typeof p !== 'string' || !safePath(p.endsWith('/') ? p.slice(0, -1) : p),
+          ))
+      )
+        throw new Error('Explicit safe optional paths required');
+      if (
         source.excludePaths !== undefined &&
         (!Array.isArray(source.excludePaths) ||
           source.excludePaths.some(
@@ -183,6 +196,14 @@ export class KnowledgePublisher {
           ))
       )
         throw new Error('Explicit safe exclusion paths required');
+      if (
+        source.excludePathSegments !== undefined &&
+        (!Array.isArray(source.excludePathSegments) ||
+          source.excludePathSegments.some(
+            (p) => typeof p !== 'string' || p.includes('/') || !safePath(p),
+          ))
+      )
+        throw new Error('Explicit safe exclusion segments required');
       if (source.excludeHiddenPaths !== undefined && typeof source.excludeHiddenPaths !== 'boolean')
         throw new Error('Boolean hidden-path exclusion required');
     }
@@ -191,7 +212,9 @@ export class KnowledgePublisher {
     this.sources = structuredClone(config.sources);
     for (const source of this.sources) {
       Object.freeze(source.paths);
+      if (source.optionalPaths) Object.freeze(source.optionalPaths);
       if (source.excludePaths) Object.freeze(source.excludePaths);
+      if (source.excludePathSegments) Object.freeze(source.excludePathSegments);
       Object.freeze(source);
     }
     Object.freeze(this.sources);
@@ -492,7 +515,9 @@ export class KnowledgePublisher {
           if (!selectedPath(name, source)) continue;
           if (
             !name.endsWith('.md') &&
-            source.paths.some((p) => p.endsWith('/') && name.startsWith(p))
+            [...source.paths, ...(source.optionalPaths ?? [])].some(
+              (p) => p.endsWith('/') && name.startsWith(p),
+            )
           )
             continue;
           if (
@@ -532,7 +557,11 @@ export class KnowledgePublisher {
           sourceIdentity: hash(JSON.stringify(source)),
           revision,
           paths: source.paths,
+          ...(source.optionalPaths !== undefined ? { optionalPaths: source.optionalPaths } : {}),
           ...(source.excludePaths !== undefined ? { excludePaths: source.excludePaths } : {}),
+          ...(source.excludePathSegments !== undefined
+            ? { excludePathSegments: source.excludePathSegments }
+            : {}),
           ...(source.excludeHiddenPaths !== undefined
             ? { excludeHiddenPaths: source.excludeHiddenPaths }
             : {}),
@@ -618,7 +647,9 @@ export class KnowledgePublisher {
         acceptedRef: string;
         sourceIdentity: string;
         paths: string[];
+        optionalPaths?: string[];
         excludePaths?: string[];
+        excludePathSegments?: string[];
         excludeHiddenPaths?: boolean;
         files: { path: string; sha256: string; bytes: number }[];
       };
@@ -629,7 +660,10 @@ export class KnowledgePublisher {
         manifest.source !== source.id ||
         manifest.sourceIdentity !== hash(JSON.stringify(source)) ||
         JSON.stringify(manifest.paths) !== JSON.stringify(source.paths) ||
+        JSON.stringify(manifest.optionalPaths) !== JSON.stringify(source.optionalPaths) ||
         JSON.stringify(manifest.excludePaths) !== JSON.stringify(source.excludePaths) ||
+        JSON.stringify(manifest.excludePathSegments) !==
+          JSON.stringify(source.excludePathSegments) ||
         manifest.excludeHiddenPaths !== source.excludeHiddenPaths ||
         !manifest.files.length ||
         manifest.files.some(

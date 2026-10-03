@@ -312,6 +312,144 @@ describe('knowledge publication', () => {
     ).toEqual(['AGENTS.md', 'memory/future.md']);
   });
 
+  it('discovers optional instructions and context directories when added and permits their deletion', async () => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md'],
+      optionalPaths: [
+        'CLAUDE.md',
+        'CONSTITUTION.md',
+        'context/',
+        'spoke/AGENTS.md',
+        'spoke/context/',
+      ],
+      excludePaths: ['context/scripts/'],
+      excludeHiddenPaths: true,
+    };
+    publisher = new KnowledgePublisher({ root: join(root, 'optional'), sources: [source] });
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const initial = publisher.current('notes')!;
+    expect(
+      JSON.parse(await readFile(join(initial.directory, 'manifest.json'), 'utf8')).optionalPaths,
+    ).toEqual(source.optionalPaths);
+    for (const path of [
+      'CLAUDE.md',
+      'context/accepted.md',
+      'spoke/context/new.md',
+      'context/scripts/leak.md',
+      'context/.hidden.md',
+    ]) {
+      await mkdir(join(repo, path, '..'), { recursive: true });
+      await writeFile(join(repo, path), '# ' + path);
+    }
+    git('add', '.');
+    git('commit', '-m', 'new optional guidance');
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const added = publisher.current('notes')!;
+    expect(
+      JSON.parse(await readFile(join(added.directory, 'manifest.json'), 'utf8')).files.map(
+        (file: { path: string }) => file.path,
+      ),
+    ).toEqual(['AGENTS.md', 'CLAUDE.md', 'context/accepted.md', 'spoke/context/new.md']);
+    await rm(join(repo, 'CLAUDE.md'));
+    await rm(join(repo, 'context'), { recursive: true });
+    await rm(join(repo, 'spoke'), { recursive: true });
+    git('add', '.');
+    git('commit', '-m', 'remove optional guidance');
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const removed = publisher.current('notes')!;
+    expect(removed.revision).not.toBe(added.revision);
+    expect(
+      JSON.parse(await readFile(join(removed.directory, 'manifest.json'), 'utf8')).files.map(
+        (file: { path: string }) => file.path,
+      ),
+    ).toEqual(['AGENTS.md']);
+  });
+
+  it('rejects unsafe optional path configuration', async () => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md'],
+      optionalPaths: ['../escape'],
+    };
+    expect(
+      () => new KnowledgePublisher({ root: join(root, 'bad-optional'), sources: [source] }),
+    ).toThrow('Explicit safe optional paths required');
+  });
+  it('excludes named segments at any depth before acquiring nested Markdown', async () => {
+    for (const path of ['memory/accepted.md', 'memory/category/node_modules/private.md']) {
+      await mkdir(join(repo, path, '..'), { recursive: true });
+      await writeFile(join(repo, path), '# ' + path);
+    }
+    git('add', '.');
+    git('commit', '-m', 'nested dependency fixture');
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md', 'memory/'],
+      excludePathSegments: ['node_modules'],
+    };
+    publisher = new KnowledgePublisher({ root: join(root, 'segments'), sources: [source] });
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const selected = publisher.current('notes')!;
+    const manifest = JSON.parse(await readFile(join(selected.directory, 'manifest.json'), 'utf8'));
+    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual([
+      'AGENTS.md',
+      'memory/accepted.md',
+    ]);
+    expect(manifest.excludePathSegments).toEqual(['node_modules']);
+    await expect(
+      access(join(selected.directory, 'source/memory/category/node_modules/private.md')),
+    ).rejects.toThrow();
+  });
+  it.each(['', '.', '..', 'memory/node_modules', 'memory\\node_modules'])(
+    'rejects unsafe excluded segment %j',
+    async (segment) => {
+      await publisher.close();
+      const source = {
+        id: 'notes',
+        url: repo,
+        ref: 'refs/heads/main',
+        paths: ['AGENTS.md'],
+        excludePathSegments: [segment],
+      };
+      expect(
+        () => new KnowledgePublisher({ root: join(root, 'bad-segment'), sources: [source] }),
+      ).toThrow('Explicit safe exclusion segments required');
+    },
+  );
+
+  it('still requires mandatory coverage when optional Markdown exists', async () => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['absent.md'],
+      optionalPaths: ['AGENTS.md'],
+    };
+    publisher = new KnowledgePublisher({
+      root: join(root, 'required-with-optional'),
+      sources: [source],
+    });
+    publisher.enqueue('notes');
+    await publisher.drain();
+    expect(publisher.current('notes')).toBeNull();
+    expect(publisher.status('notes').error).toBeTruthy();
+  });
+
   it.each(
     [
       ['../escape'],
