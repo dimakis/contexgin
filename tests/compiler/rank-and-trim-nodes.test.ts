@@ -106,10 +106,11 @@ describe('trimNodesToBudget', () => {
   });
 
   it('trims nodes that exceed budget', () => {
+    const content = 'context '.repeat(250);
     const nodes: RankedNode[] = [
-      makeRanked(makeNode({ id: 'a', tokenEstimate: 500 }), 1.0),
-      makeRanked(makeNode({ id: 'b', tokenEstimate: 500 }), 0.8),
-      makeRanked(makeNode({ id: 'c', tokenEstimate: 500 }), 0.5),
+      makeRanked(makeNode({ id: 'a', content }), 1.0),
+      makeRanked(makeNode({ id: 'b', content }), 0.8),
+      makeRanked(makeNode({ id: 'c', content }), 0.5),
     ];
 
     // Budget of 600 should fit first node + heading overhead, but not all three

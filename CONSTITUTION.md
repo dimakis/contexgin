@@ -54,8 +54,8 @@ Context Sources (markdown) → Compiler → CompiledContext → Provider Adapter
 - The core modules (compiler, integrity, navigation, graph) are a **library** — they export functions and types.
 - The server module is an **application** — a long-lived Fastify daemon serving the library's capabilities over HTTP.
 - No runtime dependencies on specific LLM providers — provider adapters are optional.
-- No file mutation — the engine reads context files but never writes to them.
-- No network calls in the core modules (compiler, integrity, navigation, graph). Only the server module listens on a network port.
+- No source file mutation — the engine never writes to user checkouts. The server publisher owns a private Git mirror, durable queue, and verified snapshots.
+- No network calls in the core modules (compiler, integrity, navigation, graph). Only the server module listens on a network port. Its publication application also fetches explicitly configured Git sources.
 
 ## Entry Points
 
@@ -70,3 +70,11 @@ Context Sources (markdown) → Compiler → CompiledContext → Provider Adapter
 | `buildGraph()`          | Build Hub/Spoke structural graph from workspace roots                            |
 | `validateGraph()`       | Validate structural relationships, produce violations                            |
 | `createServer()`        | Create Fastify daemon instance with all routes and state                         |
+
+### Knowledge publication
+
+`server/publication/` owns generic publication: configured Git source/ref, signed
+GitHub event intake, durable SQLite queue, private snapshots, and compiled context.
+Consumers own runtime compatibility, sandbox installation, session adoption,
+and adoption receipts. Centaur reviews changes; publication has no Centaur dependency.
+See [knowledge publication](docs/knowledge-publication.md) for the protocol and rollout boundary.

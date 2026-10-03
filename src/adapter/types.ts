@@ -25,6 +25,7 @@ export type SourceFormat =
   | 'cursor_rules'
   | 'constitution'
   | 'entity'
+  | 'agents_md'
   | 'knowledge'
   | 'markdown';
 
@@ -45,6 +46,8 @@ export interface NodeOrigin {
  * Replaces ExtractedSection as the compiler's internal unit.
  */
 export interface ContextNode {
+  /** Must fit in the payload or compilation fails. */
+  required?: boolean;
   /** Unique ID within the source (e.g. "git-discipline", "spoke:command_center") */
   id: string;
   /** What kind of context this is */
