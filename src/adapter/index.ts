@@ -116,6 +116,7 @@ export async function discoverAndAdapt(
 
   // 4. context/ files (entities, rhythms, etc.) at workspace root and spoke level
   for (const contextFile of ['entities.yaml']) {
+    if (shouldIgnore(path.join('context', contextFile), ignorePatterns)) continue;
     const rootContextPath = path.join(root, 'context', contextFile);
     if (await fileExists(rootContextPath)) {
       const nodes = await adaptFile(rootContextPath, root);
