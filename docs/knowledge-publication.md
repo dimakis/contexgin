@@ -33,13 +33,17 @@ workspace roots are optional for a standalone publisher. No local source checkou
   "root": "/absolute/private/contexgin-publications",
   "webhookSecretEnv": "CONTEXGIN_GITHUB_WEBHOOK_SECRET",
   "readTokenEnv": "CONTEXGIN_PUBLICATION_READ_TOKEN",
-  "sources": [{
-    "id": "my-notes",
-    "url": "https://github.com/example/my-notes.git",
-    "ref": "refs/heads/main",
-    "githubRepository": "example/my-notes",
-    "paths": ["AGENTS.md", "KNOWLEDGE.md", "memory/"]
-  }]
+  "sources": [
+    {
+      "id": "my-notes",
+      "url": "https://github.com/example/my-notes.git",
+      "ref": "refs/heads/main",
+      "githubRepository": "example/my-notes",
+      "paths": ["AGENTS.md", "KNOWLEDGE.md", "memory/"],
+      "excludePaths": ["memory/scripts/", "memory/manifest/"],
+      "excludeHiddenPaths": true
+    }
+  ]
 }
 ```
 
@@ -52,9 +56,39 @@ credential helper, not URL-embedded credentials. Changing a source URL/ref/path 
 invalidates the old current pointer and queues a fresh publication. Stop the previous
 service before changing configuration; worker leases fence overlapping restarts.
 
+`paths` and optional `excludePaths` contain literal file names or directory prefixes
+ending in `/`; they are not globs. Exclusions take precedence and are applied before
+reading Git blobs or compiling context. Missing exclusion targets are allowed.
+`excludeHiddenPaths: true` excludes a file whenever any path segment begins with `.`.
+Directory selections discover newly accepted Markdown and omit deleted files without
+changing the policy. Each positive selection must still contain accepted Markdown.
+Exclusions must use safe relative paths, and the hidden-path setting must be boolean.
+Both optional settings are bound into source identity and the snapshot manifest.
+Omitting them retains the existing source identity and manifest format; explicit empty
+exclusions or `false` are still configuration changes and invalidate prior cache state.
+Snapshot reuse independently checks these settings and every file's selection policy,
+even when a corrupted manifest and its hashes are internally consistent.
+
 Configure GitHub's `push` webhook to reach `/api/publications/github` with the matching
 secret and JSON content type. Expose only that route through the existing authenticated
 TLS ingress. No webhook or launchd installation is performed by enabling the code alone.
+
+The reviewed [Nginx webhook ingress example](deployment/knowledge-webhook-nginx.conf)
+forwards only exact POST request targets to loopback receivers: `/webhook` to an
+optional Centaur receiver on port 8642 and `/api/publications/github` to ContexGin on
+port 8643. It rejects all other paths, query strings and normalized/encoded aliases,
+limits bodies to 1 MiB, strips Authorization, and logs neither bodies nor signature
+headers. Remove the optional Centaur location and whitelist entry when unused.
+Receiver-side signature verification remains mandatory. Keep read, reconcile and
+retry APIs on the host; do not forward them through public ingress.
+
+Provision Nginx from a trusted package source. Use a private prefix outside workspaces,
+create its `logs`, `tmp/body` and `tmp/proxy` directories, and check the configured
+example with `nginx -p /absolute/private/ingress/ -c /absolute/config/nginx.conf -t`
+before starting it. The loopback listener expects a separately configured authenticated
+TLS ingress. Test valid signatures, rejected methods/paths, body limits and log contents
+against local fixture receivers before activation. This example contains no secrets,
+personal paths or service installation instructions.
 
 The optional read token enables these local consumer APIs:
 
