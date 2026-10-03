@@ -3,7 +3,7 @@ import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import Fastify from 'fastify';
 import { KnowledgePublisher } from '../../src/server/publication/publisher.js';
 import type { KnowledgeSource, Publication } from '../../src/server/publication/publisher.js';
@@ -239,6 +239,179 @@ describe('knowledge publication', () => {
     expect(publisher.current('notes')).toBeNull();
     await publisher.drain();
     expect(publisher.current('notes')).toBeNull();
+  });
+
+  it('publishes future Markdown and deletions while excluding literal, prefix and hidden paths', async () => {
+    for (const path of [
+      'memory/accepted.md',
+      'memory/private.md',
+      'memory/scripts/leak.md',
+      'memory/manifest/leak.md',
+      'memory/.hidden.md',
+      'memory/.private/nested.md',
+    ]) {
+      await mkdir(join(repo, path, '..'), { recursive: true });
+      await writeFile(join(repo, path), '# ' + path);
+    }
+    git('add', '.');
+    git('commit', '-m', 'source policy fixture');
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md', 'memory/'],
+      excludePaths: ['memory/private.md', 'memory/scripts/', 'memory/manifest/', 'absent/'],
+      excludeHiddenPaths: true,
+    };
+    publisher = new KnowledgePublisher({ root: join(root, 'policy'), sources: [source] });
+    const worker = publisher as unknown as {
+      git: (cwd: string, args: string[], binary?: boolean) => Promise<Buffer>;
+    };
+    const calls = vi.spyOn(worker, 'git');
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const first = publisher.current('notes')!;
+    const manifest = JSON.parse(await readFile(join(first.directory, 'manifest.json'), 'utf8'));
+    expect(manifest.files.map((file: { path: string }) => file.path)).toEqual([
+      'AGENTS.md',
+      'memory/accepted.md',
+    ]);
+    expect(manifest.excludePaths).toEqual(source.excludePaths);
+    expect(manifest.excludeHiddenPaths).toBe(true);
+    expect(manifest.sourceIdentity).toBe(
+      createHash('sha256').update(JSON.stringify(source)).digest('hex'),
+    );
+    for (const path of [
+      'memory/private.md',
+      'memory/scripts/leak.md',
+      'memory/manifest/leak.md',
+      'memory/.hidden.md',
+      'memory/.private/nested.md',
+    ]) {
+      await expect(access(join(first.directory, 'source', path))).rejects.toThrow();
+      expect(
+        calls.mock.calls.some(
+          ([, args]) => args[0] === 'cat-file' && args[2] === git('rev-parse', 'main:' + path),
+        ),
+      ).toBe(false);
+      expect(await readFile(join(first.directory, 'context.json'), 'utf8')).not.toContain(path);
+    }
+    await writeFile(join(repo, 'memory/future.md'), '# Newly accepted');
+    await rm(join(repo, 'memory/accepted.md'));
+    git('add', '.');
+    git('commit', '-m', 'accepted addition and deletion');
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const second = publisher.current('notes')!;
+    expect(second.revision).not.toBe(first.revision);
+    expect(
+      JSON.parse(await readFile(join(second.directory, 'manifest.json'), 'utf8')).files.map(
+        (file: { path: string }) => file.path,
+      ),
+    ).toEqual(['AGENTS.md', 'memory/future.md']);
+  });
+
+  it.each(
+    [
+      ['../escape'],
+      ['/absolute'],
+      ['memory//'],
+      ['memory/./'],
+      ['memory\\escape'],
+      [''],
+      'memory/',
+      [null],
+    ].map((value) => [value]),
+  )('rejects unsafe excludePaths %j', async (excludePaths) => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md'],
+      excludePaths,
+    };
+    expect(
+      () =>
+        new KnowledgePublisher({
+          root: join(root, 'invalid-exclusions'),
+          sources: [source as unknown as KnowledgeSource],
+        }),
+    ).toThrow('Explicit safe exclusion paths required');
+  });
+
+  it('rejects non-boolean hidden-path policy', async () => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md'],
+      excludeHiddenPaths: 'true',
+    };
+    expect(
+      () =>
+        new KnowledgePublisher({
+          root: join(root, 'invalid-hidden'),
+          sources: [source as unknown as KnowledgeSource],
+        }),
+    ).toThrow('Boolean hidden-path exclusion required');
+  });
+
+  it.each(['excludePaths', 'excludeHiddenPaths'])(
+    'invalidates cached source identity when %s changes',
+    async (field) => {
+      publisher.enqueue('notes');
+      await publisher.drain();
+      const old = publisher.current('notes')!;
+      await publisher.close();
+      const source = {
+        id: 'notes',
+        url: repo,
+        ref: 'refs/heads/main',
+        githubRepository: 'example/notes',
+        paths: ['AGENTS.md'],
+        [field]: field === 'excludePaths' ? ['absent/'] : true,
+      };
+      publisher = new KnowledgePublisher({ root: join(root, 'state'), sources: [source] });
+      expect(publisher.current('notes')).toBeNull();
+      await publisher.drain();
+      expect(publisher.current('notes')!.directory).not.toBe(old.directory);
+    },
+  );
+
+  it('rejects a hashed retained snapshot that violates its exclusion policy', async () => {
+    await publisher.close();
+    const source = {
+      id: 'notes',
+      url: repo,
+      ref: 'refs/heads/main',
+      paths: ['AGENTS.md'],
+      excludePaths: ['AGENTS.md'],
+    };
+    // A self-consistent legacy snapshot is not admissible under a newly bound exclusion.
+    publisher = new KnowledgePublisher({
+      root: join(root, 'corrupted-policy'),
+      sources: [{ ...source, excludePaths: [] }],
+    });
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const selected = publisher.current('notes')!;
+    const manifest = JSON.parse(await readFile(join(selected.directory, 'manifest.json'), 'utf8'));
+    manifest.excludePaths = source.excludePaths;
+    manifest.sourceIdentity = createHash('sha256').update(JSON.stringify(source)).digest('hex');
+    const raw = JSON.stringify(manifest);
+    await writeFile(join(selected.directory, 'manifest.json'), raw);
+    const verify = publisher as unknown as {
+      verify: (publication: Publication, policy: KnowledgeSource) => Promise<boolean>;
+    };
+    expect(
+      await verify.verify(
+        { ...selected, manifestSha256: createHash('sha256').update(raw).digest('hex') },
+        source,
+      ),
+    ).toBe(false);
   });
 
   it('finishes work enqueued for an earlier source during an active flight', async () => {
