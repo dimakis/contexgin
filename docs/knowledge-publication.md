@@ -138,6 +138,10 @@ clear the retry deadline. Fencing prevents an expired worker from promoting stal
 SQLite uses WAL and FULL synchronization. Snapshot files and directory entries are
 flushed before promotion. Unchanged revisions reuse snapshots only after checking the complete file set, all
 hashes, source identity and recompiling with the running compiler; corruption triggers a fresh build.
+Reuse also compares exact selected file coverage and Git blob object identities against
+the immutable accepted revision in the private mirror. Rewriting a snapshot, manifest
+and compiled context consistently cannot hide missing optional guidance or substitute
+content from another revision.
 Old and orphan snapshots remain available for active consumers. Automatic GC requires
 consumer pin/adoption receipts and is intentionally deferred; monitor private state size.
 
