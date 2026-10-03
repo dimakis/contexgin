@@ -1,0 +1,11 @@
+name: Centaur review signal
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+permissions:
+  contents: read
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Review changed; the default-branch status writer will reconcile all PRs."
