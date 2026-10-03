@@ -666,6 +666,9 @@ export class KnowledgePublisher {
           JSON.stringify(source.excludePathSegments) ||
         manifest.excludeHiddenPaths !== source.excludeHiddenPaths ||
         !manifest.files.length ||
+        source.paths.some(
+          (policy) => !manifest.files.some((file) => matchesPath(file.path, policy)),
+        ) ||
         manifest.files.some(
           (file) => !file.path.endsWith('.md') || !selectedPath(file.path, source),
         )

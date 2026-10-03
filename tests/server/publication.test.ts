@@ -470,6 +470,27 @@ describe('knowledge publication', () => {
     expect(publisher.current('notes')).toBeNull();
     expect(publisher.status('notes').error).toBeTruthy();
   });
+  it('rejects a hashed cache with optional Markdown but missing required coverage', async () => {
+    publisher.enqueue('notes');
+    await publisher.drain();
+    const selected = publisher.current('notes')!;
+    const source = { ...publisher.sources[0], paths: ['absent.md'], optionalPaths: ['AGENTS.md'] };
+    const manifest = JSON.parse(await readFile(join(selected.directory, 'manifest.json'), 'utf8'));
+    manifest.paths = source.paths;
+    manifest.optionalPaths = source.optionalPaths;
+    manifest.sourceIdentity = createHash('sha256').update(JSON.stringify(source)).digest('hex');
+    const raw = JSON.stringify(manifest);
+    await writeFile(join(selected.directory, 'manifest.json'), raw);
+    const verify = publisher as unknown as {
+      verify: (publication: Publication, policy: KnowledgeSource) => Promise<boolean>;
+    };
+    expect(
+      await verify.verify(
+        { ...selected, manifestSha256: createHash('sha256').update(raw).digest('hex') },
+        source,
+      ),
+    ).toBe(false);
+  });
 
   it.each(
     [
