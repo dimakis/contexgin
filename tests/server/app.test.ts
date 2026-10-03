@@ -867,6 +867,28 @@ context:
       expect(response.json().context).not.toContain('GRAPHLESS_CURSOR_SECRET');
     });
 
+    it('prioritizes configured root safeguards when its path is also a spoke', async () => {
+      const hub = await createTestWorkspace(tmpDir);
+      const root = path.join(hub, 'svc');
+      await fs.rm(path.join(root, 'CONSTITUTION.md'));
+      await fs.writeFile(path.join(root, 'AGENTS.md'), '# Root\n\nROOT_ONLY');
+      await fs.mkdir(path.join(root, 'private-child'));
+      await fs.writeFile(
+        path.join(root, 'private-child', 'AGENTS.md'),
+        '# Private\n\nCHILD_SECRET',
+      );
+      server = await createServer({ ...DEFAULT_CONFIG, roots: [hub, root], dbPath: ':memory:' });
+      await server.rebuild();
+      const response = await server.app.inject({
+        method: 'POST',
+        url: '/compile',
+        payload: { spoke: root, budget: 4000 },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().context).toContain('ROOT_ONLY');
+      expect(response.json().context).not.toContain('CHILD_SECRET');
+    });
+
     it('rejects a configured root that does not exist', async () => {
       const missingRoot = path.join(tmpDir, 'missing-root');
       server = await createServer({

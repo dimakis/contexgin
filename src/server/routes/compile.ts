@@ -81,9 +81,6 @@ async function resolveWorkspace(
     };
   }
 
-  const spoke = findSpoke(state.graph, query);
-  if (spoke) return (await isDirectory(spoke.path)) ? spoke : null;
-
   // A configured root can be valid compiler input even when it has no
   // CONSTITUTION.md and therefore is intentionally absent from the graph.
   // Exact-path matching keeps /compile constrained to operator-approved roots.
@@ -106,6 +103,9 @@ async function resolveWorkspace(
       includeCursorRules: false,
     };
   }
+
+  const spoke = findSpoke(state.graph, query);
+  if (spoke) return (await isDirectory(spoke.path)) ? spoke : null;
 
   return null;
 }
