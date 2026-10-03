@@ -440,3 +440,9 @@ TDD: tests first, implementation second. Conventional commits. Feature branches 
 ## License
 
 Private — not yet published to npm.
+
+## Knowledge publication
+
+Opt-in webhook-driven publication of accepted Git knowledge is documented in
+[Knowledge publication](docs/knowledge-publication.md). The daemon owns the durable
+queue and snapshots; clients own sandbox delivery and session adoption.
