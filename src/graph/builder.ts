@@ -105,7 +105,15 @@ export async function buildGraph(roots: string[]): Promise<HubGraph> {
         parentId: hubId,
         constitution: spokeConstitution,
         children: [],
-        confidentiality: decl.confidentiality,
+        confidentiality: spokeConstitution?.boundaries.some(
+          (boundary) => boundary.level === 'hard' && boundary.excludedFrom.length === 0,
+        )
+          ? 'hard'
+          : spokeConstitution?.boundaries.some(
+                (boundary) => boundary.level === 'soft' && boundary.excludedFrom.length === 0,
+              )
+            ? 'soft'
+            : decl.confidentiality,
         audience: decl.audience,
         governance: decl.governance,
       };

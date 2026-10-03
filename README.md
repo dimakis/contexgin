@@ -97,6 +97,30 @@ Two modes from the same schema:
 npm install github:dimakis/contexgin
 ```
 
+### Production deployment
+
+Run `./scripts/create-release.sh <ref>` to deploy the daemon. The command
+fetches current `origin/main`, requires the selected commit to contain main and
+exist on a remote branch, builds a self-contained detached release clone, updates launchd
+atomically, verifies `/health`, and restores the previous plist if the new
+release does not become healthy. The production start script also refuses a
+mutable, modified, or revision-mismatched checkout.
+
+The default workspace roots are derived from the deploying account's `$HOME`.
+Override them with a colon-separated `CONTEXGIN_ROOTS` value; optional
+`CONTEXGIN_DB_PATH`, `CONTEXGIN_PORT`, and `CONTEXGIN_PROBE_ROOT` values configure
+the persistent graph, listener, and post-cutover compile probe. The deploy command
+records the effective service settings in the installed launchd plist, so rollback
+restores both the previous revision and its configuration.
+
+For the first guarded deployment over an older launchd plist that has no
+`WorkingDirectory`, the script derives the checkout from the absolute program path
+when possible. Otherwise, set `CONTEXGIN_LEGACY_WORKING_DIRECTORY` to the existing
+checkout for that one migration. If the old plist does not record its listener,
+also set `CONTEXGIN_LEGACY_PORT` to the old service port (including `4195` when it
+used the default). Rollback verifies the restored launchd job, its working
+directory, and ownership of the listening port before accepting it.
+
 ## Library Usage
 
 ### Compile context for a workspace
@@ -319,45 +343,8 @@ Sample health response:
 
 ### Production Deployment (launchd)
 
-1. Create the start script at `scripts/start.sh`:
-
-```bash
-#!/bin/bash
-export PATH="/opt/homebrew/bin:$PATH"
-cd /path/to/contexgin
-exec node dist/cli.js serve \
-  ~/my-workspace \
-  --db ~/.local/share/contexgin/graph.db \
-  --port 4195
-```
-
-2. Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>com.contexgin.server</string>
-    <key>ProgramArguments</key><array>
-        <string>/bin/bash</string>
-        <string>/path/to/contexgin/scripts/start.sh</string>
-    </array>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>/path/to/contexgin/logs/stdout.log</string>
-    <key>StandardErrorPath</key><string>/path/to/contexgin/logs/stderr.log</string>
-</dict>
-</plist>
-```
-
-3. Load and start:
-
-```bash
-mkdir -p ~/.local/share/contexgin logs
-launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
-curl http://127.0.0.1:4195/health  # verify
-```
+Use `./scripts/create-release.sh <ref>` as described in [Production deployment](#production-deployment).
+It is the only supported production entry point; do not install a plist from a mutable checkout.
 
 For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).
 

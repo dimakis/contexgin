@@ -23,6 +23,11 @@ const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 
 export async function discoverAndAdapt(
   workspaceRoot: string,
   scopePath?: string,
+  options: {
+    includeSpokes?: boolean;
+    includeProfiles?: boolean;
+    includeCursorRules?: boolean;
+  } = {},
 ): Promise<ContextNode[]> {
   const root = path.resolve(workspaceRoot);
   const scope = scopePath === undefined ? undefined : path.resolve(root, scopePath);
@@ -48,7 +53,7 @@ export async function discoverAndAdapt(
     const canonical = await entryExists(agents);
     const selected = canonical ? agents : path.join(directory, 'CLAUDE.md');
     if (shouldIgnore(path.relative(root, selected), ignorePatterns)) return;
-    if (await entryExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
+    if (await fileExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
   }
 
   // 1. Root-level files
@@ -67,20 +72,25 @@ export async function discoverAndAdapt(
 
   // 2. .cursor/rules/*.mdc
   const cursorRulesDir = path.join(root, '.cursor', 'rules');
-  if (await dirExists(cursorRulesDir)) {
+  if (
+    options.includeCursorRules !== false &&
+    (await directoryExistsWithoutSymlinks(root, cursorRulesDir))
+  ) {
     const files = (await fs.readdir(cursorRulesDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.mdc')) continue;
       const relPath = path.join('.cursor', 'rules', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(cursorRulesDir, file);
+      if (!(await fileExists(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
   }
 
-  // 3. Spoke-level files (one directory deep)
-  {
+  // 3. Spoke-level files (one directory deep). Hub compilation can disable
+  // this entire phase so confidential spoke material is never read.
+  if (options.includeSpokes !== false) {
     const entries = (await fs.readdir(root, { withFileTypes: true })).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
@@ -104,7 +114,7 @@ export async function discoverAndAdapt(
       }
     }
   }
-  if (scope) {
+  if (scope && options.includeSpokes !== false) {
     let directory = root;
     for (const part of path.relative(root, scope).split(path.sep).filter(Boolean)) {
       directory = path.join(directory, part);
@@ -116,13 +126,17 @@ export async function discoverAndAdapt(
 
   // 4. memory/Profile/*.md
   const profileDir = path.join(root, 'memory', 'Profile');
-  if (await dirExists(profileDir)) {
+  if (
+    options.includeProfiles !== false &&
+    (await directoryExistsWithoutSymlinks(root, profileDir))
+  ) {
     const files = (await fs.readdir(profileDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.md')) continue;
       const relPath = path.join('memory', 'Profile', file);
       if (shouldIgnore(relPath, ignorePatterns)) continue;
       const fullPath = path.join(profileDir, file);
+      if (!(await fileExists(fullPath))) continue;
       const nodes = await adaptFile(fullPath, root);
       allNodes.push(...nodes);
     }
@@ -143,15 +157,25 @@ async function entryExists(p: string): Promise<boolean> {
 
 async function fileExists(p: string): Promise<boolean> {
   try {
-    return (await fs.stat(p)).isFile();
+    const info = await fs.lstat(p);
+    return info.isFile() && !info.isSymbolicLink();
   } catch {
     return false;
   }
 }
 
-async function dirExists(p: string): Promise<boolean> {
+async function directoryExistsWithoutSymlinks(root: string, directory: string): Promise<boolean> {
+  const relative = path.relative(root, directory);
+  if (relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return false;
+
+  let current = root;
   try {
-    return (await fs.stat(p)).isDirectory();
+    for (const part of relative.split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      const info = await fs.lstat(current);
+      if (!info.isDirectory() || info.isSymbolicLink()) return false;
+    }
+    return true;
   } catch {
     return false;
   }
