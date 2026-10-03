@@ -21,6 +21,7 @@ export type ContextTier =
 
 /** The source format a node was parsed from */
 export type SourceFormat =
+  | 'agents_md'
   | 'claude_md'
   | 'cursor_rules'
   | 'constitution'
@@ -45,6 +46,8 @@ export interface NodeOrigin {
  * Replaces ExtractedSection as the compiler's internal unit.
  */
 export interface ContextNode {
+  /** Must fit in the payload or compilation fails. */
+  required?: boolean;
   /** Unique ID within the source (e.g. "git-discipline", "spoke:command_center") */
   id: string;
   /** What kind of context this is */

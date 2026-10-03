@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import * as path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { buildGraph } from './graph/builder.js';
 import { validateGraph } from './graph/validate.js';
 import type { Violation, ViolationSeverity } from './graph/types.js';
@@ -27,7 +28,14 @@ const SEVERITY_ICON: Record<ViolationSeverity, string> = {
 // ── Arg helpers ─────────────────────────────────────────────────
 
 /** Flags that consume the next argument as a value. */
-const VALUE_FLAGS = new Set(['--port', '--socket', '--db', '--goals-db', '--agent-defs']);
+const VALUE_FLAGS = new Set([
+  '--port',
+  '--socket',
+  '--db',
+  '--goals-db',
+  '--agent-defs',
+  '--publication-config',
+]);
 
 /**
  * Extract positional arguments from an args list, skipping flags and
@@ -72,9 +80,9 @@ async function main() {
     await runGraph(roots);
   } else if (command === 'serve') {
     const roots = extractPositionals(args).slice(1);
-    if (roots.length === 0) {
+    if (roots.length === 0 && !parseFlag(args, '--publication-config')) {
       console.error(
-        'Usage: contexgin serve <root> [root2] ... [--port N] [--socket PATH] [--no-watch]',
+        'Usage: contexgin serve <root> [root2] ... [--port N] [--socket PATH] [--no-watch] [--publication-config PATH]',
       );
       process.exit(1);
     }
@@ -287,8 +295,12 @@ async function runServe(roots: string[], args: string[]) {
 
   const portFlag = parseFlag(args, '--port');
   const agentDefPaths = parseAllFlags(args, '--agent-defs');
+  const publicationFile = parseFlag(args, '--publication-config');
   const config: ServerConfig = {
     ...DEFAULT_CONFIG,
+    publication: publicationFile
+      ? JSON.parse(await readFile(path.resolve(publicationFile), 'utf8'))
+      : undefined,
     roots: resolvedRoots,
     port: portFlag !== null ? Number(portFlag) : DEFAULT_CONFIG.port,
     socketPath: parseFlag(args, '--socket'),
@@ -309,11 +321,13 @@ async function runServe(roots: string[], args: string[]) {
   await server.rebuild();
   const buildTime = Date.now() - buildStart;
 
-  const graph = server.state.graph!;
-  const spokeCount = graph.hubs.reduce((n, h) => n + h.spokes.length, 0);
-  console.log(
-    green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
-  );
+  const graph = server.state.graph;
+  if (graph) {
+    const spokeCount = graph.hubs.reduce((n, h) => n + h.spokes.length, 0);
+    console.log(
+      green(`✓ Built graph: ${graph.hubs.length} hubs, ${spokeCount} spokes (${buildTime}ms)`),
+    );
+  } else console.log(dim('Running standalone knowledge publisher (no workspace graph)'));
 
   // Start listener
   const listener = await startListeners(server, config);

@@ -178,6 +178,12 @@ export type {
 
 // Goals
 export { GoalRegistry } from './goals/registry.js';
+export { KnowledgePublisher } from './server/publication/publisher.js';
+export type {
+  KnowledgeSource,
+  PublicationConfig,
+  Publication,
+} from './server/publication/publisher.js';
 export { GoalStore } from './goals/store.js';
 export { goalRoutes } from './goals/routes.js';
 export type {
