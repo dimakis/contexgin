@@ -40,7 +40,9 @@ workspace roots are optional for a standalone publisher. No local source checkou
       "ref": "refs/heads/main",
       "githubRepository": "example/my-notes",
       "paths": ["AGENTS.md", "KNOWLEDGE.md", "memory/"],
+      "optionalPaths": ["CLAUDE.md", "CONSTITUTION.md", "context/"],
       "excludePaths": ["memory/scripts/", "memory/manifest/"],
+      "excludePathSegments": ["node_modules"],
       "excludeHiddenPaths": true
     }
   ]
@@ -56,14 +58,22 @@ credential helper, not URL-embedded credentials. Changing a source URL/ref/path 
 invalidates the old current pointer and queues a fresh publication. Stop the previous
 service before changing configuration; worker leases fence overlapping restarts.
 
-`paths` and optional `excludePaths` contain literal file names or directory prefixes
+`paths`, `optionalPaths` and `excludePaths` contain literal file names or directory prefixes
 ending in `/`; they are not globs. Exclusions take precedence and are applied before
 reading Git blobs or compiling context. Missing exclusion targets are allowed.
 `excludeHiddenPaths: true` excludes a file whenever any path segment begins with `.`.
 Directory selections discover newly accepted Markdown and omit deleted files without
-changing the policy. Each positive selection must still contain accepted Markdown.
+changing the policy.
+Required `paths` must be nonempty, and each required selection must contain eligible
+Markdown. `optionalPaths` use the same selection rules, but may be absent or empty:
+new optional instructions and context directories are discovered after acceptance,
+and deleting optional guidance does not block publication. List anticipated root/spoke
+guidance files and context directory prefixes here instead of freezing their current file list.
+`excludePathSegments` excludes exact nonempty single path-segment names at any depth,
+for example `memory/category/node_modules/private.md`; slashes, backslashes, `.` and
+`..` are invalid segment names. Exclusion rules apply to required and optional selections.
 Exclusions must use safe relative paths, and the hidden-path setting must be boolean.
-Both optional settings are bound into source identity and the snapshot manifest.
+All optional settings are bound into source identity and the snapshot manifest.
 Omitting them retains the existing source identity and manifest format; explicit empty
 exclusions or `false` are still configuration changes and invalidate prior cache state.
 Snapshot reuse independently checks these settings and every file's selection policy,

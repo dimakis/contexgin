@@ -76,6 +76,27 @@ describe('knowledge publication', () => {
       ),
     ).toEqual(['AGENTS.md']);
     expect(await readFile(join(publication.directory, 'context.json'), 'utf8')).toContain('zircon');
+    const legacy = JSON.parse(await readFile(join(publication.directory, 'manifest.json'), 'utf8'));
+    for (const field of [
+      'optionalPaths',
+      'excludePaths',
+      'excludePathSegments',
+      'excludeHiddenPaths',
+    ])
+      expect(legacy).not.toHaveProperty(field);
+    expect(legacy.sourceIdentity).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify({
+            id: 'notes',
+            url: repo,
+            ref: 'refs/heads/main',
+            githubRepository: 'example/notes',
+            paths: ['AGENTS.md'],
+          }),
+        )
+        .digest('hex'),
+    );
   });
 
   it('fetches the accepted ref, preserves dirty checkout and keeps the last publication on failure', async () => {
@@ -497,7 +518,7 @@ describe('knowledge publication', () => {
     ).toThrow('Boolean hidden-path exclusion required');
   });
 
-  it.each(['excludePaths', 'excludeHiddenPaths'])(
+  it.each(['optionalPaths', 'excludePaths', 'excludePathSegments', 'excludeHiddenPaths'])(
     'invalidates cached source identity when %s changes',
     async (field) => {
       publisher.enqueue('notes');
@@ -510,7 +531,12 @@ describe('knowledge publication', () => {
         ref: 'refs/heads/main',
         githubRepository: 'example/notes',
         paths: ['AGENTS.md'],
-        [field]: field === 'excludePaths' ? ['absent/'] : true,
+        [field]:
+          field === 'excludeHiddenPaths'
+            ? true
+            : field === 'excludePathSegments'
+              ? ['node_modules']
+              : ['absent/'],
       };
       publisher = new KnowledgePublisher({ root: join(root, 'state'), sources: [source] });
       expect(publisher.current('notes')).toBeNull();
