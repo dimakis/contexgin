@@ -459,3 +459,7 @@ Private — not yet published to npm.
 Opt-in webhook-driven publication of accepted Git knowledge is documented in
 [Knowledge publication](docs/knowledge-publication.md). The daemon owns the durable
 queue and snapshots; clients own sandbox delivery and session adoption.
+
+## Merge requirements
+
+The `Centaur merge gate` workflow publishes `Centaur final LGTM` for the current pull request head. Main branch protection requires that status from the dedicated Centaur status App alongside CI. A passing report must contain a final LGTM, a merge recommendation, and zero new or unresolved blocking findings. New commits invalidate earlier approvals. The status writer uses a secrets environment restricted to `main` and executes no pull request code.
