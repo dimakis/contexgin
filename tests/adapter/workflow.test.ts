@@ -309,3 +309,17 @@ description: A workflow with no states
     });
   });
 });
+
+it.each([
+  'states:\n  ready:\n    entry_criteria: Ready',
+  'states:\n  ready:\n    entry_criteria: [Ready, 42]',
+  'states: [ready]',
+  'transitions: [{from: ready}]',
+  'transitions: invalid',
+  'name: [invalid]',
+  '- name: invalid',
+])('rejects malformed workflow field shapes: %s', async (yaml) => {
+  await withTempFile(yaml, 'workflows/invalid.yaml', async (file, root) => {
+    expect(await workflowAdapter.adapt(file, root)).toEqual([]);
+  });
+});

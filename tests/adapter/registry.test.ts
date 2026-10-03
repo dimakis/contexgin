@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { findAdapter, adaptFile } from '../../src/adapter/registry.js';
 import { discoverAndAdapt } from '../../src/adapter/index.js';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, readdir: vi.fn(actual.readdir) };
+});
 
 describe('findAdapter', () => {
   it('selects constitution adapter for CONSTITUTION.md', () => {
@@ -158,4 +163,26 @@ describe('discoverAndAdapt', () => {
       }
     });
   });
+});
+
+it('discovers workflows deterministically despite filesystem ordering', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'contexgin-workflow-order-'));
+  const dir = path.join(root, 'workflows');
+  await fs.mkdir(dir);
+  await fs.writeFile(path.join(dir, 'z.yaml'), 'name: Z');
+  await fs.writeFile(path.join(dir, 'a.yaml'), 'name: A');
+  const original = fs.readdir;
+  const spy = vi.spyOn(fs, 'readdir').mockImplementation(async (...args) => {
+    if (String(args[0]) === dir) return ['z.yaml', 'a.yaml'] as never;
+    return original(...args);
+  });
+  try {
+    const nodes = await discoverAndAdapt(root);
+    expect(
+      nodes.filter((node) => node.origin.format === 'workflow').map((node) => node.id),
+    ).toEqual(['workflow-a-overview', 'workflow-z-overview']);
+  } finally {
+    spy.mockRestore();
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

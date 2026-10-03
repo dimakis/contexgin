@@ -39,6 +39,47 @@ interface WorkflowDefinition {
   transitions?: WorkflowTransition[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function optionalStrings(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => value[key] === undefined || typeof value[key] === 'string');
+}
+
+function isWorkflowDefinition(value: unknown): value is WorkflowDefinition {
+  if (!isRecord(value) || !optionalStrings(value, ['name', 'description'])) return false;
+  if (value.states !== undefined) {
+    if (!isRecord(value.states)) return false;
+    for (const state of Object.values(value.states)) {
+      // Existing definitions may reserve a state with an empty YAML value.
+      if (state === null) continue;
+      if (!isRecord(state) || !optionalStrings(state, ['description', 'owner', 'stale_after']))
+        return false;
+      if (state.terminal !== undefined && typeof state.terminal !== 'boolean') return false;
+      if (
+        state.entry_criteria !== undefined &&
+        (!Array.isArray(state.entry_criteria) ||
+          !state.entry_criteria.every((item) => typeof item === 'string'))
+      )
+        return false;
+    }
+  }
+  if (value.transitions !== undefined) {
+    if (!Array.isArray(value.transitions)) return false;
+    for (const transition of value.transitions) {
+      if (
+        !isRecord(transition) ||
+        typeof transition.from !== 'string' ||
+        typeof transition.to !== 'string' ||
+        !optionalStrings(transition, ['trigger'])
+      )
+        return false;
+    }
+  }
+  return true;
+}
+
 // ── Path matching ──────────────────────────────────────────────
 
 /** Normalise to forward slashes for cross-platform matching */
@@ -88,8 +129,8 @@ function renderTransitionsContent(transitions: WorkflowTransition[]): string {
 }
 
 function adaptYaml(filePath: string, workspaceRoot: string, raw: string): ContextNode[] {
-  const def = parseYaml(raw) as WorkflowDefinition;
-  if (!def || typeof def !== 'object') return [];
+  const def: unknown = parseYaml(raw);
+  if (!isWorkflowDefinition(def)) return [];
 
   const relativePath = path.relative(workspaceRoot, filePath);
   const workflowName = def.name || path.basename(filePath, path.extname(filePath));

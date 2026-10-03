@@ -18,7 +18,9 @@ const ROOT_FILES = ['CONSTITUTION.md', 'AGENTS.md', 'SERVICES.md', 'README.md', 
  * 1. Root-level known files (AGENTS.md preferred over CLAUDE.md)
  * 2. .cursor/rules/*.mdc files
  * 3. Spoke constitutions and project instructions (see docs/agent-instructions.md)
- * 4. memory/Profile/*.md files
+ * 4. workflows/*.yaml and workflows/*.yml files
+ * 5. context/workflow.md
+ * 6. memory/Profile/*.md files
  */
 export async function discoverAndAdapt(
   workspaceRoot: string,
@@ -117,7 +119,7 @@ export async function discoverAndAdapt(
   // 4. workflows/*.yaml at workspace root
   const workflowsDir = path.join(root, 'workflows');
   if (await dirExists(workflowsDir)) {
-    const files = await fs.readdir(workflowsDir);
+    const files = (await fs.readdir(workflowsDir)).sort();
     for (const file of files) {
       if (!file.endsWith('.yaml') && !file.endsWith('.yml')) continue;
       const relPath = path.join('workflows', file);
