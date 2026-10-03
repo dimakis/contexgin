@@ -674,6 +674,46 @@ export class KnowledgePublisher {
         )
       )
         return false;
+      // A self-consistent snapshot is not proof that it contains the accepted tree.
+      // Bind both exact policy coverage and blob contents to the immutable Git revision.
+      if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(publication.revision)) return false;
+      const records = (
+        await this.git(
+          join(this.config.root, source.id, 'mirror.git'),
+          ['ls-tree', '-rz', publication.revision],
+          true,
+        )
+      )
+        .toString()
+        .split('\0')
+        .filter(Boolean);
+      const accepted = new Map<string, string>();
+      for (const record of records) {
+        const tab = record.indexOf('\t');
+        const [mode, type, oid] = record.slice(0, tab).split(' ');
+        const name = record.slice(tab + 1);
+        if (!selectedPath(name, source)) continue;
+        if (
+          !name.endsWith('.md') &&
+          [...source.paths, ...(source.optionalPaths ?? [])].some(
+            (policy) => policy.endsWith('/') && name.startsWith(policy),
+          )
+        )
+          continue;
+        if (
+          !safePath(name) ||
+          !/^100(644|755)$/.test(mode) ||
+          type !== 'blob' ||
+          !name.endsWith('.md')
+        )
+          return false;
+        accepted.set(name, oid);
+      }
+      if (
+        accepted.size !== manifest.files.length ||
+        manifest.files.some((file) => !accepted.has(file.path))
+      )
+        return false;
       const expected = new Set([
         'manifest.json',
         'context.json',
@@ -707,7 +747,16 @@ export class KnowledgePublisher {
         }
         const info = lstatSync(target);
         if (!info.isFile() || info.size !== file.bytes) return false;
-        if (hash(await readFile(target)) !== file.sha256) return false;
+        const content = await readFile(target);
+        if (hash(content) !== file.sha256) return false;
+        const oid = accepted.get(file.path)!;
+        const algorithm = oid.length === 40 ? 'sha1' : oid.length === 64 ? 'sha256' : undefined;
+        if (
+          !algorithm ||
+          createHash(algorithm).update(`blob ${content.length}\0`).update(content).digest('hex') !==
+            oid
+        )
+          return false;
       }
       const context = await compile({
         workspaceRoot: join(publication.directory, 'source'),

@@ -8,6 +8,7 @@ import Fastify from 'fastify';
 import { KnowledgePublisher } from '../../src/server/publication/publisher.js';
 import type { KnowledgeSource, Publication } from '../../src/server/publication/publisher.js';
 import { publicationRoutes } from '../../src/server/publication/routes.js';
+import { compile } from '../../src/compiler/index.js';
 
 describe('knowledge publication', () => {
   let root: string;
@@ -491,6 +492,62 @@ describe('knowledge publication', () => {
       ),
     ).toBe(false);
   });
+  it.each(['omitted', 'rewritten'])(
+    'repairs self-consistent %s optional guidance against the accepted Git tree',
+    async (kind) => {
+      await writeFile(join(repo, 'CLAUDE.md'), '# Accepted optional instructions');
+      git('add', '.');
+      git('commit', '-m', 'optional accepted instructions');
+      await publisher.close();
+      const source = {
+        id: 'notes',
+        url: repo,
+        ref: 'refs/heads/main',
+        paths: ['AGENTS.md'],
+        optionalPaths: ['CLAUDE.md'],
+      };
+      publisher = new KnowledgePublisher({ root: join(root, 'exact-tree'), sources: [source] });
+      publisher.enqueue('notes');
+      await publisher.drain();
+      const selected = publisher.current('notes')!;
+      const sourceRoot = join(selected.directory, 'source');
+      const manifest = JSON.parse(
+        await readFile(join(selected.directory, 'manifest.json'), 'utf8'),
+      );
+      if (kind === 'omitted') {
+        await rm(join(sourceRoot, 'CLAUDE.md'));
+        manifest.files = manifest.files.filter(
+          (file: { path: string }) => file.path !== 'CLAUDE.md',
+        );
+      } else {
+        const content = '# Unaccepted rewritten guidance';
+        await writeFile(join(sourceRoot, 'CLAUDE.md'), content);
+        const file = manifest.files.find((file: { path: string }) => file.path === 'CLAUDE.md');
+        file.sha256 = createHash('sha256').update(content).digest('hex');
+        file.bytes = Buffer.byteLength(content);
+      }
+      const context = JSON.stringify(
+        await compile({ workspaceRoot: sourceRoot, tokenBudget: 12000 }),
+        (_key, value: unknown) =>
+          typeof value === 'string' ? value.split(sourceRoot).join('source') : value,
+      );
+      await writeFile(join(selected.directory, 'context.json'), context);
+      manifest.contextSha256 = createHash('sha256').update(context).digest('hex');
+      const raw = JSON.stringify(manifest);
+      await writeFile(join(selected.directory, 'manifest.json'), raw);
+      vi.spyOn(publisher, 'current').mockReturnValueOnce({
+        ...selected,
+        manifestSha256: createHash('sha256').update(raw).digest('hex'),
+      });
+      publisher.enqueue('notes');
+      await publisher.drain();
+      const repaired = publisher.current('notes')!;
+      expect(repaired.directory).not.toBe(selected.directory);
+      expect(await readFile(join(repaired.directory, 'source/CLAUDE.md'), 'utf8')).toBe(
+        '# Accepted optional instructions',
+      );
+    },
+  );
 
   it.each(
     [
