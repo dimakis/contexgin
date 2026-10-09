@@ -348,6 +348,12 @@ if [ -n "$PLIST_PREVIOUS" ]; then
     echo "Refusing release: original deployment ownership is uncertain" >&2; exit 1
   }
 fi
+# Original-owner readiness may wait for a rebuild. Bind freshness again at
+# the last point before controlling the original service.
+FRESH_MAIN="$(git -C "$SOURCE_ROOT" ls-remote origin refs/heads/main | awk '{print $1}')"
+[ "$FRESH_MAIN" = "$SOURCE_COMMIT" ] || {
+  echo "Refusing release: accepted main advanced before cutover" >&2; exit 1
+}
 CUTOVER_ACTIVE=1
 if ! bootout_and_wait; then
   echo "ContexGin shutdown timed out; restoring previous deployment" >&2
