@@ -317,7 +317,7 @@ function extractBoundarySection(
     const trimmed = line.trim();
     if (trimmed.startsWith('<!--')) inComment = true;
     if (inComment) {
-      if (trimmed.endsWith('-->')) inComment = false;
+      if (trimmed.includes('-->')) inComment = false;
       continue;
     }
     if (/^#{1,6}\s+/.test(line)) {

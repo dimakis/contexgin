@@ -7,6 +7,21 @@ const FIXTURES = path.resolve(import.meta.dirname, '..', 'fixtures', 'constituti
 // ── Synthetic Tests ──────────────────────────────────────────────
 
 describe('parseConstitutionContent', () => {
+  it.each(['<!-- note --> Additional context', '<!-- note\ncontinued --> Additional context'])(
+    'preserves boundary rules after a comment closes before the line ends',
+    (comment) => {
+      const result = parseConstitutionContent(
+        `## Boundaries\n\n${comment}\n- Payroll never leaves this spoke\n`,
+        '/test.md',
+        'test',
+      );
+      expect(
+        result.boundaries.some(
+          (boundary) => boundary.level === 'hard' && boundary.description.includes('Payroll'),
+        ),
+      ).toBe(true);
+    },
+  );
   describe('Purpose extraction', () => {
     it('extracts first paragraph after ## Purpose', () => {
       const content = `# Test
