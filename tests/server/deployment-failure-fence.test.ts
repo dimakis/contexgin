@@ -77,3 +77,41 @@ cleanup`,
     expect(readFileSync(failure, 'utf8')).toBe(originalMarker);
   }
 });
+
+it('fails rollback before bootstrapping if the previous plist cannot be restored', () => {
+  const root = mkdtempSync(join(tmpdir(), 'contexgin-rollback-move-'));
+  const marker = join(root, 'bootstrapped');
+  const script = readFileSync(
+    resolve(import.meta.dirname, '../../scripts/create-release.sh'),
+    'utf8',
+  );
+  const rollback = script.slice(script.indexOf('\nrollback() {') + 1, script.indexOf('\ncleanup()'));
+  const previous = join(root, 'previous.plist');
+  writeFileSync(previous, 'saved');
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `set -euo pipefail
+PLIST_PREVIOUS="$FIXTURE_PREVIOUS"
+PLIST_DEST=/fixture/replacement
+PREVIOUS_PORT=4195
+PREVIOUS_COMMIT=fixture
+PREVIOUS_WORKING_DIRECTORY=/fixture
+bootout_and_wait() { return 0; }
+bootstrap_with_retry() { touch "$FIXTURE_MARKER";return 0; }
+wait_for_deployment_health() { return 0; }
+mv() { return 1; }
+${rollback}
+if ! rollback; then [ "$PLIST_PREVIOUS" = "$FIXTURE_PREVIOUS" ];else exit 9;fi`,
+    ],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, FIXTURE_PREVIOUS: previous, FIXTURE_MARKER: marker },
+    },
+  );
+  expect(result.status).toBe(0);
+  expect(existsSync(marker)).toBe(false);
+  expect(result.stderr).toContain('previous ContexGin plist could not be restored');
+  expect(readFileSync(previous, 'utf8')).toBe('saved');
+});

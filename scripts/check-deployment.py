@@ -1,7 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -I
 """Read-only integrity, runtime ownership and main freshness check for both services."""
+import sys
+if __name__ == "__main__" and not sys.flags.isolated:
+    if "posix" not in sys.builtin_module_names:
+        raise SystemExit("Run this helper with python3 -I")
+    __import__("posix").execv(sys.executable, [sys.executable, "-I", __file__, *sys.argv[1:]])
 import argparse
-import importlib.util
+import types
 import json
 import os
 from pathlib import Path
@@ -12,9 +17,10 @@ import sys
 
 sys.dont_write_bytecode = True
 
-spec = importlib.util.spec_from_file_location("runtime", Path(__file__).with_name("runtime-fingerprint.py"))
-runtime = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(runtime)
+runtime_path = Path(__file__).with_name("runtime-fingerprint.py")
+runtime = types.ModuleType("runtime")
+runtime.__file__ = str(runtime_path)
+exec(compile(runtime_path.read_bytes(), str(runtime_path), "exec"), runtime.__dict__)
 fingerprint = runtime.fingerprint
 
 

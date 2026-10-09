@@ -105,7 +105,7 @@ are refused. From a clean checkout of that accepted commit:
 ```sh
 ./scripts/create-release.sh FULL_COMMIT --plan
 ./scripts/create-release.sh FULL_COMMIT --apply
-python3 scripts/check-deployment.py
+python3 -I scripts/check-deployment.py
 ```
 
 Preparation builds an independent detached release with locked dependencies. The plan

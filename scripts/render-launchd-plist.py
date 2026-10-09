@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -I
+import sys
+if __name__ == "__main__" and not sys.flags.isolated:
+    if "posix" not in sys.builtin_module_names:
+        raise SystemExit("Run this helper with python3 -I")
+    __import__("posix").execv(sys.executable, [sys.executable, "-I", __file__, *sys.argv[1:]])
 import plistlib
 import sys
 from pathlib import Path

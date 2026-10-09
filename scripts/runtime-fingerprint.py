@@ -1,5 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -I
 """Hash the complete contained runtime closure, without following directory links."""
+import sys
+if __name__ == "__main__" and not sys.flags.isolated:
+    if "posix" not in sys.builtin_module_names:
+        raise SystemExit("Run this helper with python3 -I")
+    __import__("posix").execv(sys.executable, [sys.executable, "-I", __file__, *sys.argv[1:]])
 import hashlib
 import json
 from pathlib import Path

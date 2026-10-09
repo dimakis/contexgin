@@ -185,7 +185,10 @@ rollback() {
     return 1
   fi
   if [ -n "$PLIST_PREVIOUS" ] && [ -f "$PLIST_PREVIOUS" ]; then
-    mv "$PLIST_PREVIOUS" "$PLIST_DEST"
+    if ! mv "$PLIST_PREVIOUS" "$PLIST_DEST"; then
+      echo "ROLLBACK FAILED: previous ContexGin plist could not be restored" >&2
+      return 1
+    fi
     PLIST_PREVIOUS=""
     if ! bootstrap_with_retry; then
       echo "ROLLBACK FAILED: previous ContexGin plist could not be bootstrapped" >&2
@@ -291,7 +294,7 @@ RELEASE_TEMP=""
 mkdir -p "$RELEASE_DIR/logs"
 
 PLIST_NEXT="$(mktemp "$HOME/Library/LaunchAgents/.$LABEL.XXXXXX")"
-python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
+python3 -I "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$RELEASE_DIR/infra/com.contexgin.server.plist" \
   "$PLIST_NEXT" \
   "$RELEASE_DIR" \
