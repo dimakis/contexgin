@@ -8,6 +8,31 @@ const repo = resolve(import.meta.dirname, '../..');
 const fixture = () => mkdtempSync(join(tmpdir(), 'contexgin-publisher-deployment-'));
 
 describe('publisher deployment', () => {
+  it('refuses publisher plans without explicitly selected graph and goals databases', () => {
+    const root = fixture();
+    const config = join(root, 'publication.json');
+    writeFileSync(config, '{}');
+    for (const missing of ['CONTEXGIN_DB_PATH', 'CONTEXGIN_GOALS_DB_PATH']) {
+      const env = {
+        ...process.env,
+        HOME: root,
+        CONTEXGIN_SERVICE: 'publisher',
+        CONTEXGIN_PUBLICATION_CONFIG: config,
+        CONTEXGIN_DB_PATH: join(root, 'graph.db'),
+        CONTEXGIN_GOALS_DB_PATH: join(root, 'goals.db'),
+      };
+      delete env[missing as keyof typeof env];
+      const result = spawnSync(
+        'bash',
+        [join(repo, 'scripts/create-release.sh'), 'HEAD', '--plan'],
+        { encoding: 'utf8', env },
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        'publisher requires explicit absolute graph and goals database paths',
+      );
+    }
+  });
   it('preserves private credentials and standalone settings when rendering its guarded launcher', () => {
     const root = fixture();
     const previous = join(root, 'previous.plist');

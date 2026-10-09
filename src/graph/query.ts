@@ -116,7 +116,8 @@ export function isAccessible(graph: HubGraph, fromSpokeId: string, toSpokeId: st
     for (const boundary of targetSpoke.constitution.boundaries) {
       if (boundary.level === 'hard') {
         // Find the source spoke name
-        const fromSpoke = findSpokeById(graph, fromSpokeId);
+        const fromSpoke =
+          findSpokeById(graph, fromSpokeId) ?? graph.hubs.find((hub) => hub.id === fromSpokeId);
         if (
           fromSpoke &&
           boundary.excludedFrom.some((ex) => fromSpoke.name.includes(ex.replace(/\/$/, '')))

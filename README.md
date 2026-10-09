@@ -123,6 +123,8 @@ and `CONTEXGIN_SERVICE=publisher` (normally port 8643). For the server,
 state, listener and compile readiness probe.
 
 For the publisher, explicitly select its existing private settings:
+Both graph and goals database paths are required; omitted paths are refused
+before building or controlling a service. The publisher's default port is 8643.
 
 ```sh
 CONTEXGIN_SERVICE=publisher CONTEXGIN_PORT=8643 \

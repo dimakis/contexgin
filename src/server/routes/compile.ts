@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { discoverAndAdapt } from '../../adapter/index.js';
 import { compile } from '../../compiler/index.js';
-import { findSpoke } from '../../graph/query.js';
+import { findSpoke, isAccessible } from '../../graph/query.js';
 import { DEFAULT_COMPILE_BUDGET } from '../types.js';
 import type { ServerConfig, ServerState, CompileRequest, CompileResponse } from '../types.js';
 
@@ -58,7 +58,7 @@ async function resolveWorkspace(
     let includeCursorRules = false;
     if (cursorSpoke) {
       includeCursorRules = Boolean(
-        cursorSpoke.constitution && cursorSpoke.confidentiality !== 'hard',
+        cursorSpoke.constitution && isAccessible(state.graph, hub.id, cursorSpoke.id),
       );
     } else {
       try {
@@ -75,7 +75,7 @@ async function resolveWorkspace(
       path: hub.path,
       rootOnly: true,
       includeProfiles: Boolean(
-        profileSpoke?.constitution && profileSpoke.confidentiality !== 'hard',
+        profileSpoke?.constitution && isAccessible(state.graph, hub.id, profileSpoke.id),
       ),
       includeCursorRules,
     };

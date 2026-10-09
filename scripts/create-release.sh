@@ -24,10 +24,14 @@ if [ "$SERVICE" = publisher ]; then
     [ "${CONTEXGIN_PUBLICATION_CONFIG#/}" != "$CONTEXGIN_PUBLICATION_CONFIG" ] || {
     echo "publisher requires an existing absolute publication configuration" >&2; exit 1
   }
+  case "${CONTEXGIN_DB_PATH:-}" in /*) ;; *) echo "publisher requires explicit absolute graph and goals database paths" >&2; exit 1 ;; esac
+  case "${CONTEXGIN_GOALS_DB_PATH:-}" in /*) ;; *) echo "publisher requires explicit absolute graph and goals database paths" >&2; exit 1 ;; esac
 fi
 SERVE_ROOTS="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
 SERVE_DB_PATH="${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}"
-SERVE_PORT="${CONTEXGIN_PORT:-4195}"
+DEFAULT_PORT=4195
+[ "$SERVICE" != publisher ] || DEFAULT_PORT=8643
+SERVE_PORT="${CONTEXGIN_PORT:-$DEFAULT_PORT}"
 case "$SERVE_PORT" in
   *[!0-9]*|'') echo "Refusing release: service port must be an integer" >&2; exit 1 ;;
 esac

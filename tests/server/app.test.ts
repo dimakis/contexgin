@@ -726,6 +726,59 @@ context:
       expect(exact.json().context).not.toContain('FIRST_HUB');
     });
 
+    it.each([
+      ['memory', 'Profile', 'private.md'],
+      ['.cursor', 'rules', 'private.mdc'],
+    ])(
+      'honors targeted hub exclusions for %s without suppressing allowed content',
+      async (directory, child, file) => {
+        for (const excluded of ['workspace/', 'elsewhere/']) {
+          const root = await createTestWorkspace(path.join(tmpDir, excluded.replace('/', '')));
+          const constitutionPath = path.join(root, 'CONSTITUTION.md');
+          const constitution = await fs.readFile(constitutionPath, 'utf8');
+          await fs.writeFile(
+            constitutionPath,
+            constitution.replace(
+              '| `svc/` | Engineers | Own constitution | Service layer |',
+              '| `svc/` | Engineers | Own constitution | Service layer |\n' +
+                `| \`${directory}/\` | Internal | Own constitution | Nested context |`,
+            ),
+          );
+          await fs.writeFile(path.join(root, 'AGENTS.md'), 'HUB_CONTEXT\n');
+          await fs.mkdir(path.join(root, directory, child), { recursive: true });
+          await fs.writeFile(
+            path.join(root, directory, 'CONSTITUTION.md'),
+            `# Nested context\n\n## Boundaries\n\n- Never flows into \`${excluded}\`\n`,
+          );
+          await fs.writeFile(
+            path.join(root, directory, child, file),
+            '# Scoped guidance\n\nNESTED_SENTINEL\n',
+          );
+          server = await createServer({
+            ...DEFAULT_CONFIG,
+            roots: [root],
+            dbPath: ':memory:',
+            goalsDbPath: ':memory:',
+          });
+          await server.rebuild();
+          const spoke = server.state.graph!.hubs[0].spokes.find((s) => s.name === directory)!;
+          expect(spoke.confidentiality).toBe('none');
+          const response = await server.app.inject({
+            method: 'POST',
+            url: '/compile',
+            payload: { spoke: root, budget: 4000 },
+          });
+          expect(response.statusCode).toBe(200);
+          expect(response.json().context).toContain('HUB_CONTEXT');
+          if (excluded === 'workspace/')
+            expect(response.json().context).not.toContain('NESTED_SENTINEL');
+          else expect(response.json().context).toContain('NESTED_SENTINEL');
+          await server.shutdown();
+          server = undefined as unknown as ContexGinServer;
+        }
+      },
+    );
+
     it('excludes profiles when a declared memory spoke has no constitution', async () => {
       const root = await createTestWorkspace(tmpDir);
       const constitutionPath = path.join(root, 'CONSTITUTION.md');
