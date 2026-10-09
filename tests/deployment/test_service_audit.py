@@ -52,7 +52,7 @@ class AuditTests(unittest.TestCase):
             self.assertIsNone(main)
             return {"service": service, "safe": True, "mainChecked": False, "stale": None}
         with patch.object(sys, "argv", ["check-deployment.py"]), \
-                patch.object(audit, "run", side_effect=audit.ProbeError()), \
+                patch.object(audit, "accepted_main", side_effect=audit.ProbeError()), \
                 patch.object(audit, "audit_service", side_effect=local) as services, \
                 contextlib.redirect_stdout(output):
             code = audit.main()
