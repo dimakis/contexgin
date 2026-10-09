@@ -40,6 +40,17 @@ def job_fields(output):
     return fields
 
 
+def accepted_main(service, home=None):
+    home = home or Path.home()
+    with (home / "Library/LaunchAgents" / ("com.contexgin." + service + ".plist")).open("rb") as stream:
+        root = plistlib.load(stream)["WorkingDirectory"]
+    origin = run(["git", "-C", root, "remote", "get-url", "origin"])
+    revision = run(["git", "ls-remote", origin, "refs/heads/main"]).split()[0]
+    if not re.fullmatch(r"[a-f0-9]{40}", revision):
+        raise ProbeError()
+    return revision
+
+
 def audit_service(service, main, home=None):
     home = home or Path.home()
     label = "com.contexgin." + service
@@ -50,6 +61,11 @@ def audit_service(service, main, home=None):
         with plist_path.open("rb") as stream:
             plist = plistlib.load(stream)
         environment = plist["EnvironmentVariables"]
+        if environment.get("CONTEXGIN_SERVICE") != service or any(
+            value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH") or key.startswith("DYLD_"))
+            for key, value in environment.items()
+        ):
+            raise ProbeError()
         source = environment["CONTEXGIN_DEPLOYMENT_COMMIT"]
         expected_digest = environment["CONTEXGIN_RUNTIME_SHA256"]
         if not re.fullmatch(r"[a-f0-9]{40}", source) or not re.fullmatch(r"[a-f0-9]{64}", expected_digest):
@@ -99,23 +115,22 @@ def main():
     parser.add_argument("--service", choices=("server", "publisher", "all"), default="all")
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
-    revision = None
-    freshness_error = None
-    if not args.offline:
-        try:
-            revision = run(["git", "ls-remote", "https://github.com/dimakis/contexgin.git", "refs/heads/main"]).split()[0]
-            if not re.fullmatch(r"[a-f0-9]{40}", revision):
-                raise ProbeError()
-        except (ProbeError, OSError, IndexError, subprocess.TimeoutExpired):
-            revision = None
-            freshness_error = "Main freshness unavailable"
     services = ("server", "publisher") if args.service == "all" else (args.service,)
-    results = [audit_service(service, revision) for service in services]
-    if freshness_error:
-        for item in results:
+    results = []
+    for service in services:
+        revision = None
+        freshness_error = None
+        if not args.offline:
+            try:
+                revision = accepted_main(service)
+            except (ProbeError, OSError, KeyError, TypeError, ValueError, IndexError, subprocess.TimeoutExpired):
+                freshness_error = "Main freshness unavailable"
+        item = audit_service(service, revision)
+        if freshness_error:
             item["freshnessError"] = freshness_error
+        results.append(item)
     print(json.dumps(results))
-    return 0 if not freshness_error and all(item["safe"] and item["stale"] is not True for item in results) else 1
+    return 0 if all(item["safe"] and item["stale"] is not True and not item.get("freshnessError") for item in results) else 1
 
 
 if __name__ == "__main__":

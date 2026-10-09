@@ -138,7 +138,9 @@ CONTEXGIN_GOALS_DB_PATH=/absolute/private/goals.db \
 Repeat with `--apply` for cutover. The publisher runs standalone with `--no-watch`;
 it does not use workspace roots or the server's compile probe. Its current credential
 environment is preserved privately in the new mode-0600 plist. Plans, checks and
-errors never print credentials. Each service has its own lock and log files.
+errors never print credentials. External runtime loading settings (`NODE_OPTIONS`,
+`NODE_PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, and `DYLD_*`) require investigation
+and are rejected rather than silently removed. Each service has its own lock and log files.
 The source trees, databases, publication configuration and existing ingress remain
 separate; this controller does not configure providers or recreate publication state.
 
@@ -150,7 +152,8 @@ launchd directory and listener. Subsequent deployments verify the health commit 
 `check-deployment.py` checks both services by default, or accepts `--service server`
 or `--service publisher`. Integrity/ownership (`safe`) and freshness (`stale`) are
 reported independently. A stale but intact release is safe and still exits nonzero
-so an operator can detect that main advanced. `--offline` skips freshness only.
+so an operator can detect that main advanced. Freshness uses each deployed release's
+configured `origin`, matching its deployment controller. `--offline` skips freshness only.
 This command is read-only and makes no model calls. No unattended update or
 scheduled deployment audit is installed by this controller.
 

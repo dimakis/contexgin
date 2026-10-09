@@ -1,5 +1,10 @@
 #!/bin/bash
 set -euo pipefail
+for setting in NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH $(compgen -A variable DYLD_); do
+  [ -z "${!setting:-}" ] || {
+    echo "external runtime loading settings require investigation" >&2; exit 1
+  }
+done
 
 SOURCE_ROOT="${CONTEXGIN_SOURCE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 SOURCE_REF="${1:-HEAD}"

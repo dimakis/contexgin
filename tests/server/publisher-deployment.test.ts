@@ -8,6 +8,55 @@ const repo = resolve(import.meta.dirname, '../..');
 const fixture = () => mkdtempSync(join(tmpdir(), 'contexgin-publisher-deployment-'));
 
 describe('publisher deployment', () => {
+  it.each(['NODE_OPTIONS', 'NODE_PATH', 'DYLD_INSERT_LIBRARIES'])(
+    'refuses inherited external loader settings: %s',
+    (setting) => {
+      const root = fixture();
+      const previous = join(root, 'previous.plist');
+      execFileSync('python3', [
+        '-c',
+        "import plistlib,sys;plistlib.dump({'Label':'com.contexgin.publisher','EnvironmentVariables':{sys.argv[2]:'/outside/runtime'}},open(sys.argv[1],'wb'))",
+        previous,
+        setting,
+      ]);
+      const rendered = spawnSync(
+        'python3',
+        [
+          join(repo, 'scripts/render-launchd-plist.py'),
+          join(repo, 'infra/com.contexgin.server.plist'),
+          join(root, 'next.plist'),
+          root,
+          'a'.repeat(40),
+          '',
+          '/state/graph.db',
+          '8643',
+          'b'.repeat(64),
+          'publisher',
+          previous,
+          '/state/publication.json',
+          '/state/goals.db',
+        ],
+        { encoding: 'utf8' },
+      );
+      expect(rendered.status).not.toBe(0);
+      expect(rendered.stderr).toContain('external runtime loading');
+      // macOS strips DYLD variables before protected /bin/bash executes.
+      // The renderer and audit still reject them in a stored launchd plist.
+      if (setting.startsWith('DYLD_') && process.platform === 'darwin') return;
+      const started = spawnSync('bash', [join(repo, 'scripts/start.sh')], {
+        encoding: 'utf8',
+        env: { ...process.env, [setting]: '/outside/runtime', CONTEXGIN_ROOTS: '.' },
+      });
+      expect(started.status).not.toBe(0);
+      expect(started.stderr).toContain('external runtime loading');
+      const planned = spawnSync('bash', [join(repo, 'scripts/create-release.sh')], {
+        encoding: 'utf8',
+        env: { ...process.env, [setting]: '/outside/runtime', CONTEXGIN_ROOTS: '.' },
+      });
+      expect(planned.status).not.toBe(0);
+      expect(planned.stderr).toContain('external runtime loading');
+    },
+  );
   it('refuses publisher plans without explicitly selected graph and goals databases', () => {
     const root = fixture();
     const config = join(root, 'publication.json');

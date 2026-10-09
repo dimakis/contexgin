@@ -44,6 +44,9 @@ if previous and previous.exists():
     if original.get("Label") != "com.contexgin." + service:
         raise ValueError("previous service label mismatch")
     preserved = original.get("EnvironmentVariables", {})
+if any(value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH") or key.startswith("DYLD_"))
+       for key, value in preserved.items()):
+    raise ValueError("external runtime loading settings require investigation before deployment")
 rendered["EnvironmentVariables"] = {**preserved, **rendered["EnvironmentVariables"]}
 rendered["EnvironmentVariables"]["CONTEXGIN_SERVICE"] = service
 if service == "publisher":
