@@ -139,7 +139,8 @@ Repeat with `--apply` for cutover. The publisher runs standalone with `--no-watc
 it does not use workspace roots or the server's compile probe. Its current credential
 environment is preserved privately in the new mode-0600 plist. Plans, checks and
 errors never print credentials. External runtime loading settings (`NODE_OPTIONS`,
-`NODE_PATH`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, and `DYLD_*`) require investigation
+`NODE_PATH`, dynamic library loading, shell startup/import controls, and Python
+startup/import controls) require investigation
 and are rejected rather than silently removed. Each service has its own lock and log files.
 The source trees, databases, publication configuration and existing ingress remain
 separate; this controller does not configure providers or recreate publication state.

@@ -50,3 +50,45 @@ ${controller.slice(start, end)}`,
   expect(existsSync(cutover)).toBe(false);
   expect(result.stderr).toContain('accepted main advanced');
 });
+
+it('refuses to stop a registered job without a verified rollback plist', () => {
+  const root = mkdtempSync(join(tmpdir(), 'contexgin-missing-rollback-'));
+  const bin = join(root, 'bin');
+  mkdirSync(bin);
+  for (const [name, script] of Object.entries({
+    git: 'printf "old-main\\trefs/heads/main\\n"',
+    launchctl: 'exit 0',
+  })) {
+    writeFileSync(join(bin, name), '#!/bin/sh\n' + script + '\n');
+    chmodSync(join(bin, name), 0o755);
+  }
+  const controller = readFileSync(
+    resolve(import.meta.dirname, '../../scripts/create-release.sh'),
+    'utf8',
+  );
+  const start = controller.lastIndexOf('\nif [ -n "$PLIST_PREVIOUS" ]; then');
+  const end = controller.indexOf('\nmv "$PLIST_NEXT" "$PLIST_DEST"', start);
+  const marker = join(root, 'stopped');
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `set -euo pipefail
+PLIST_PREVIOUS=""
+SOURCE_ROOT=/fixture
+SOURCE_COMMIT=old-main
+DOMAIN=gui/fixture
+LABEL=existing-job
+wait_for_deployment_health() { return 0; }
+bootout_and_wait() { touch "$FIXTURE_MARKER"; return 0; }
+${controller.slice(start, end)}`,
+    ],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, FIXTURE_MARKER: marker },
+    },
+  );
+  expect(result.status).not.toBe(0);
+  expect(existsSync(marker)).toBe(false);
+  expect(result.stderr).toContain('registered job has no verified rollback configuration');
+});

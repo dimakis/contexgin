@@ -65,7 +65,7 @@ def audit_service(service, main, home=None):
             plist = plistlib.load(stream)
         environment = plist["EnvironmentVariables"]
         if environment.get("CONTEXGIN_SERVICE") != service or any(
-            value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH") or key.startswith("DYLD_"))
+            value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE", "PYTHONINSPECT") or key.startswith(("DYLD_", "BASH_FUNC_")))
             for key, value in environment.items()
         ):
             raise ProbeError()

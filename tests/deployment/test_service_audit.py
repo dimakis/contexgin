@@ -113,6 +113,7 @@ class AuditTests(unittest.TestCase):
                     actual_origin = origin
                     for key, value in (("CONTEXGIN_SERVICE", "server" if service == "publisher" else "publisher"),
                                        ("NODE_OPTIONS", "--require /outside/release.js"),
+                                       ("BASH_ENV", "/outside/startup.sh"), ("PYTHONPATH", "/outside"),
                                        ("NODE_PATH", "/outside"), ("DYLD_INSERT_LIBRARIES", "/outside/library.dylib")):
                         original = plist["EnvironmentVariables"].get(key)
                         plist["EnvironmentVariables"][key] = value

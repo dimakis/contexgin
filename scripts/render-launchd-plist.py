@@ -44,7 +44,7 @@ if previous and previous.exists():
     if original.get("Label") != "com.contexgin." + service:
         raise ValueError("previous service label mismatch")
     preserved = original.get("EnvironmentVariables", {})
-if any(value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH") or key.startswith("DYLD_"))
+if any(value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "SHELLOPTS", "BASHOPTS", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE", "PYTHONINSPECT") or key.startswith(("DYLD_", "BASH_FUNC_")))
        for key, value in preserved.items()):
     raise ValueError("external runtime loading settings require investigation before deployment")
 rendered["EnvironmentVariables"] = {**preserved, **rendered["EnvironmentVariables"]}

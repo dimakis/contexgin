@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/bash -p
 set -euo pipefail
-for setting in NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH $(compgen -A variable DYLD_); do
+for setting in NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH BASH_ENV ENV PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE PYTHONINSPECT $(compgen -A variable DYLD_); do
   [ -z "${!setting:-}" ] || {
     echo "external runtime loading settings require investigation" >&2; exit 1
   }

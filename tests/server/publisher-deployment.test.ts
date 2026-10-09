@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -15,6 +16,21 @@ const repo = resolve(import.meta.dirname, '../..');
 const fixture = () => mkdtempSync(join(tmpdir(), 'contexgin-publisher-deployment-'));
 
 describe('publisher deployment', () => {
+  it('does not source an external shell startup file before rejecting its setting', () => {
+    const root = fixture();
+    const marker = join(root, 'external-code-ran');
+    const startup = join(root, 'startup.sh');
+    writeFileSync(startup, 'touch "$FIXTURE_MARKER"\n');
+    for (const script of ['start.sh', 'create-release.sh']) {
+      const result = spawnSync(join(repo, 'scripts', script), [], {
+        encoding: 'utf8',
+        env: { ...process.env, BASH_ENV: startup, FIXTURE_MARKER: marker, CONTEXGIN_ROOTS: '.' },
+      });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('external runtime loading');
+      expect(existsSync(marker)).toBe(false);
+    }
+  });
   it('passes an explicitly selected durable goals store to the workspace server', () => {
     const root = fixture();
     const bin = join(root, 'bin');
@@ -52,7 +68,7 @@ describe('publisher deployment', () => {
       join(root, 'goals.db'),
     ]);
   });
-  it.each(['NODE_OPTIONS', 'NODE_PATH', 'DYLD_INSERT_LIBRARIES'])(
+  it.each(['NODE_OPTIONS', 'NODE_PATH', 'DYLD_INSERT_LIBRARIES', 'BASH_ENV', 'PYTHONPATH'])(
     'refuses inherited external loader settings: %s',
     (setting) => {
       const root = fixture();
