@@ -7,6 +7,19 @@ const FIXTURES = path.resolve(import.meta.dirname, '..', 'fixtures', 'constituti
 // ── Synthetic Tests ──────────────────────────────────────────────
 
 describe('parseConstitutionContent', () => {
+  it('preserves an explicit hard confidentiality heading independently of targeted bullets', () => {
+    const result = parseConstitutionContent(
+      '## Hard Confidentiality\n\n- Do not share with `api/`\n',
+      '/test.md',
+      'test',
+    );
+    expect(
+      result.boundaries.some(
+        (boundary) => boundary.level === 'hard' && boundary.excludedFrom.length === 0,
+      ),
+    ).toBe(true);
+    expect(result.boundaries.some((boundary) => boundary.excludedFrom.includes('api/'))).toBe(true);
+  });
   it.each([
     '<!-- note --> All following data is hard confidential.',
     '<!-- note\ncontinued --> All following data is hard confidential.',

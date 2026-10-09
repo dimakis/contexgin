@@ -732,9 +732,12 @@ context:
     ])(
       'honors targeted hub exclusions for %s without suppressing allowed content',
       async (directory, child, file) => {
-        for (const excluded of ['workspace/', 'elsewhere/']) {
+        for (const excluded of ['workspace/', 'elsewhere/', 'workspace-dev/']) {
           const root = await createTestWorkspace(path.join(tmpDir, excluded.replace('/', '')));
-          const constitutionPath = path.join(root, 'CONSTITUTION.md');
+          const compileRoot =
+            excluded === 'workspace-dev/' ? path.join(path.dirname(root), 'workspace-dev') : root;
+          if (compileRoot !== root) await fs.rename(root, compileRoot);
+          const constitutionPath = path.join(compileRoot, 'CONSTITUTION.md');
           const constitution = await fs.readFile(constitutionPath, 'utf8');
           await fs.writeFile(
             constitutionPath,
@@ -744,19 +747,19 @@ context:
                 `| \`${directory}/\` | Internal | Own constitution | Nested context |`,
             ),
           );
-          await fs.writeFile(path.join(root, 'AGENTS.md'), 'HUB_CONTEXT\n');
-          await fs.mkdir(path.join(root, directory, child), { recursive: true });
+          await fs.writeFile(path.join(compileRoot, 'AGENTS.md'), 'HUB_CONTEXT\n');
+          await fs.mkdir(path.join(compileRoot, directory, child), { recursive: true });
           await fs.writeFile(
-            path.join(root, directory, 'CONSTITUTION.md'),
-            `# Nested context\n\n## Boundaries\n\n- Never flows into \`${excluded}\`\n`,
+            path.join(compileRoot, directory, 'CONSTITUTION.md'),
+            `# Nested context\n\n## Boundaries\n\n- Never flows into \`${excluded === 'workspace-dev/' ? 'workspace/' : excluded}\`\n`,
           );
           await fs.writeFile(
-            path.join(root, directory, child, file),
+            path.join(compileRoot, directory, child, file),
             '## Scoped guidance\n\nNESTED_SENTINEL\n',
           );
           server = await createServer({
             ...DEFAULT_CONFIG,
-            roots: [root],
+            roots: [compileRoot],
             dbPath: ':memory:',
             goalsDbPath: ':memory:',
           });
@@ -766,7 +769,7 @@ context:
           const response = await server.app.inject({
             method: 'POST',
             url: '/compile',
-            payload: { spoke: root, budget: 4000 },
+            payload: { spoke: compileRoot, budget: 4000 },
           });
           expect(response.statusCode).toBe(200);
           expect(response.json().context).toContain('HUB_CONTEXT');

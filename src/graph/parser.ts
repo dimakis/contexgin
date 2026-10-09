@@ -320,6 +320,7 @@ function extractBoundarySection(
       finishBullet();
       const headingLevel = /^#+/.exec(trimmed)![0].length;
       if (headingLevel === boundaryRootLevel && boundaryHeading.test(line)) {
+        recordPolicyProse(trimmed);
         basePolicyLines = [trimmed];
         activePolicyLines = basePolicyLines;
         inSubsection = false;
