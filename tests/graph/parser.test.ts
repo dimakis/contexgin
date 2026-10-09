@@ -7,6 +7,21 @@ const FIXTURES = path.resolve(import.meta.dirname, '..', 'fixtures', 'constituti
 // ── Synthetic Tests ──────────────────────────────────────────────
 
 describe('parseConstitutionContent', () => {
+  it.each([
+    '<!-- note --> All following data is hard confidential.',
+    '<!-- note\ncontinued --> All following data is hard confidential.',
+  ])('preserves policy text after an HTML comment closes', (policy) => {
+    const result = parseConstitutionContent(
+      `## Boundaries\n\n${policy}\n- Payroll\n`,
+      '/test.md',
+      'test',
+    );
+    expect(
+      result.boundaries.some(
+        (boundary) => boundary.level === 'hard' && boundary.description.includes('Payroll'),
+      ),
+    ).toBe(true);
+  });
   it.each(['<!-- note --> Additional context', '<!-- note\ncontinued --> Additional context'])(
     'preserves boundary rules after a comment closes before the line ends',
     (comment) => {

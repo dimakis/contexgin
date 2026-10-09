@@ -273,7 +273,9 @@ function extractDependencies(content: string, nodeId: string): Dependency[] {
 // ── Boundaries ───────────────────────────────────────────────────
 
 function extractBoundaries(content: string, nodeId: string): Boundary[] {
-  const lines = content.split('\n');
+  // Remove only comment spans, preserving visible text before and after them.
+  // Do this before section discovery so commented headings cannot affect scope.
+  const lines = content.replace(/<!--[\s\S]*?(?:-->|$)/g, '').split('\n');
   const boundaryHeading = /^#{1,6}\s+.*(boundar|confidential|excluded)/i;
   return findSections(lines, boundaryHeading).flatMap((section) =>
     extractBoundarySection(section, nodeId, boundaryHeading),
@@ -298,7 +300,6 @@ function extractBoundarySection(
   let currentBulletHasBlank = false;
   let currentBulletIndent = 0;
   let sawBullet = false;
-  let inComment = false;
   const finishBullet = () => {
     if (!currentBullet) return;
     bulletItems.push({
@@ -315,11 +316,6 @@ function extractBoundarySection(
   };
   for (const line of section) {
     const trimmed = line.trim();
-    if (trimmed.startsWith('<!--')) inComment = true;
-    if (inComment) {
-      if (trimmed.includes('-->')) inComment = false;
-      continue;
-    }
     if (/^#{1,6}\s+/.test(line)) {
       finishBullet();
       const headingLevel = /^#+/.exec(trimmed)![0].length;
