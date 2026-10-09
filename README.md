@@ -112,7 +112,8 @@ Preparation builds an independent detached release with locked dependencies. The
 performs no service control. Apply rechecks fresh main, serializes cutover by service
 label, verifies source/runtime integrity and launchd/listener/HTTP identity, and
 verifies restoration of the previous service on failure. A failed restoration retains
-the deployment lock for investigation. Do not force a restart or delete that lock.
+the deployment lock and a separate persistent failure marker for investigation.
+The marker blocks later attempts even after the original lock owner exits. Do not force a restart or delete that lock.
 Startup verifies the source commit, staged and unstaged changes, and the complete
 compiled/dependency closure including names, modes and contained symlink targets.
 

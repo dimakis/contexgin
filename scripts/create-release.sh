@@ -10,6 +10,14 @@ LABEL="com.contexgin.$SERVICE"
 PLIST_DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 LOCK_FILE="/tmp/$LABEL.$(id -u).deploy.lock"
+FAILURE_MARKER="$LOCK_FILE.failed"
+assert_no_failed_rollback() {
+  if [ -e "$FAILURE_MARKER" ] || [ -L "$FAILURE_MARKER" ]; then
+    echo "Refusing release: failed rollback requires investigation: $FAILURE_MARKER" >&2
+    return 1
+  fi
+}
+assert_no_failed_rollback
 APPLY=0
 case "${2:---plan}" in
   --plan) ;;
@@ -44,6 +52,8 @@ PLIST_NEXT=""
 PREVIOUS_COMMIT=""
 PREVIOUS_PORT="4195"
 PREVIOUS_WORKING_DIRECTORY=""
+PREVIOUS_ALLOW_LEGACY_DIRECTORY=0
+PREVIOUS_PROGRAM=""
 
 case "$STARTUP_TIMEOUT_SECONDS" in
   *[!0-9]*|'') echo "Refusing release: CONTEXGIN_STARTUP_TIMEOUT_SECONDS must be an integer" >&2; exit 1 ;;
@@ -109,6 +119,12 @@ wait_for_deployment_health() {
   local port="$1"
   local expected_commit="$2"
   local expected_working_directory="$3"
+  local allow_legacy_directory="${4:-0}"
+  local expected_program="${5:-}"
+  local observed_working_directory
+  local observed_program
+  local observed_registration
+  local process_directory
   local health_json
   local job_output
   local job_pid
@@ -120,11 +136,22 @@ wait_for_deployment_health() {
       sleep 0.5
       continue
     fi
-    if ! printf '%s\n' "$job_output" | grep -Fq "working directory = $expected_working_directory"; then
-      sleep 0.5
-      continue
-    fi
     job_pid="$(printf '%s\n' "$job_output" | awk '$1 == "pid" && $2 == "=" { print $3; exit }')"
+    observed_working_directory="$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*working directory = //p' | head -1)"
+    if [ "$observed_working_directory" != "$expected_working_directory" ]; then
+      if [ "$allow_legacy_directory" != 1 ] || [ -n "$observed_working_directory" ] || [ -z "$expected_program" ] || [ -z "$job_pid" ]; then
+        sleep 0.5; continue
+      fi
+      observed_program="$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*program = //p' | head -1)"
+      observed_registration="$(printf '%s\n' "$job_output" | sed -n 's/^[[:space:]]*path = //p' | head -1)"
+      if [ "$observed_program" != "$expected_program" ] || [ "$observed_registration" != "$PLIST_DEST" ]; then
+        sleep 0.5; continue
+      fi
+      process_directory="$(lsof -a -p "$job_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)"
+      if [ "$process_directory" != "$expected_working_directory" ]; then
+        sleep 0.5; continue
+      fi
+    fi
     listener_pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
     if [ -z "$job_pid" ] || ! printf '%s\n' "$listener_pids" | grep -Fxq "$job_pid"; then
       sleep 0.5
@@ -172,12 +199,14 @@ cleanup() {
   if [ -n "$RELEASE_TEMP" ] && [ -d "$RELEASE_TEMP" ]; then rm -rf -- "$RELEASE_TEMP"; fi
   if [ "$rollback_failed" != "1" ]; then rm -f -- "$LOCK_FILE"; fi
   if [ "$rollback_failed" = "1" ]; then
+    (umask 077; set -o noclobber; printf 'rollback_failed\nlabel=%s\nsource=%s\n' "$LABEL" "$SOURCE_COMMIT" > "$FAILURE_MARKER") || true
     echo "ContexGin rollback failed; inspect $PLIST_DEST and retained release directories" >&2
   fi
   exit "$status"
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
+assert_no_failed_rollback
 
 git -C "$SOURCE_ROOT" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
 SOURCE_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --verify "$SOURCE_REF^{commit}")"
@@ -285,6 +314,7 @@ if [ -f "$PLIST_DEST" ]; then
   }
   PREVIOUS_WORKING_DIRECTORY="$(plutil -extract WorkingDirectory raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   if [ -z "$PREVIOUS_WORKING_DIRECTORY" ]; then
+    PREVIOUS_ALLOW_LEGACY_DIRECTORY=1
     PREVIOUS_PROGRAM="$(plutil -extract ProgramArguments.0 raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
     if [ -n "$PREVIOUS_PROGRAM" ] && [ "${PREVIOUS_PROGRAM#/}" != "$PREVIOUS_PROGRAM" ]; then
       PREVIOUS_WORKING_DIRECTORY="$(git -C "$(dirname "$PREVIOUS_PROGRAM")" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -314,7 +344,7 @@ if [ -f "$PLIST_DEST" ]; then
 fi
 
 if [ -n "$PLIST_PREVIOUS" ]; then
-  wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT" "$PREVIOUS_WORKING_DIRECTORY" || {
+  wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT" "$PREVIOUS_WORKING_DIRECTORY" "$PREVIOUS_ALLOW_LEGACY_DIRECTORY" "$PREVIOUS_PROGRAM" || {
     echo "Refusing release: original deployment ownership is uncertain" >&2; exit 1
   }
 fi

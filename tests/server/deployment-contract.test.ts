@@ -39,7 +39,6 @@ describe('deployment contract', () => {
       'wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT" "$PREVIOUS_WORKING_DIRECTORY"',
     );
     expect(script).toContain('launchctl print "$DOMAIN/$LABEL"');
-    expect(script).toContain('working directory = $expected_working_directory');
     expect(script).toContain('lsof -nP -iTCP:"$port" -sTCP:LISTEN -t');
     expect(script).toContain('grep -Fxq "$job_pid"');
     expect(script).toContain('CONTEXGIN_LEGACY_WORKING_DIRECTORY');
