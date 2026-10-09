@@ -8,6 +8,9 @@ from pathlib import Path
 import plistlib
 import re
 import subprocess
+import sys
+
+sys.dont_write_bytecode = True
 
 spec = importlib.util.spec_from_file_location("runtime", Path(__file__).with_name("runtime-fingerprint.py"))
 runtime = importlib.util.module_from_spec(spec)
@@ -22,7 +25,7 @@ class ProbeError(Exception):
 def run(arguments):
     result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
     if result.returncode:
-        raise ProbeError()
+        raise ProbeError(result.returncode)
     return result.stdout.strip()
 
 
@@ -75,8 +78,9 @@ def audit_service(service, main, home=None):
             raise ProbeError()
         try:
             run(["git", "-C", str(root), "symbolic-ref", "--quiet", "HEAD"])
-        except ProbeError:
-            pass
+        except ProbeError as error:
+            if error.args != (1,):
+                raise
         else:
             raise ProbeError()
         if fingerprint(root) != expected_digest:
@@ -96,18 +100,22 @@ def main():
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     revision = None
+    freshness_error = None
     if not args.offline:
         try:
             revision = run(["git", "ls-remote", "https://github.com/dimakis/contexgin.git", "refs/heads/main"]).split()[0]
             if not re.fullmatch(r"[a-f0-9]{40}", revision):
                 raise ProbeError()
         except (ProbeError, OSError, IndexError, subprocess.TimeoutExpired):
-            print(json.dumps({"safe": False, "error": "Main freshness unavailable"}))
-            return 1
+            revision = None
+            freshness_error = "Main freshness unavailable"
     services = ("server", "publisher") if args.service == "all" else (args.service,)
     results = [audit_service(service, revision) for service in services]
+    if freshness_error:
+        for item in results:
+            item["freshnessError"] = freshness_error
     print(json.dumps(results))
-    return 0 if all(item["safe"] and item["stale"] is not True for item in results) else 1
+    return 0 if not freshness_error and all(item["safe"] and item["stale"] is not True for item in results) else 1
 
 
 if __name__ == "__main__":

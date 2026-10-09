@@ -2,6 +2,13 @@ import importlib.util
 from pathlib import Path
 import plistlib
 import tempfile
+import contextlib
+import io
+import json
+import sys
+import shutil
+import subprocess
+import os
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +20,34 @@ spec.loader.exec_module(audit)
 
 
 class AuditTests(unittest.TestCase):
+    def test_read_only_check_does_not_write_bytecode_in_the_release(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            release = Path(temporary) / "scripts"
+            release.mkdir()
+            for filename in ("check-deployment.py", "runtime-fingerprint.py"):
+                shutil.copy2(ROOT / "scripts" / filename, release / filename)
+            result = subprocess.run([sys.executable, str(release / "check-deployment.py"), "--offline"],
+                                    env={**os.environ, "HOME": temporary}, capture_output=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse((release / "__pycache__").exists())
+
+    def test_network_failure_still_audits_both_service_integrities(self):
+        output = io.StringIO()
+        def local(service, main):
+            self.assertIsNone(main)
+            return {"service": service, "safe": True, "mainChecked": False, "stale": None}
+        with patch.object(sys, "argv", ["check-deployment.py"]), \
+                patch.object(audit, "run", side_effect=audit.ProbeError()), \
+                patch.object(audit, "audit_service", side_effect=local) as services, \
+                contextlib.redirect_stdout(output):
+            code = audit.main()
+        self.assertEqual(code, 1)
+        self.assertEqual(services.call_count, 2)
+        result = json.loads(output.getvalue())
+        self.assertEqual([item["service"] for item in result], ["server", "publisher"])
+        self.assertTrue(all(item["safe"] for item in result))
+        self.assertTrue(all(item.get("freshnessError") for item in result))
+
     def test_freshness_is_separate_from_integrity_for_both_services(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
@@ -33,6 +68,7 @@ class AuditTests(unittest.TestCase):
                              "CONTEXGIN_PORT": "8643" if service == "publisher" else "4195"}}
                 plist_path.write_bytes(plistlib.dumps(plist))
 
+                symbolic_code = 1
                 def run(arguments):
                     if arguments[0] == "launchctl":
                         return f"job = {{\n state = running\n pid = 123\n working directory = {release}\n path = {plist_path}\n program = {release / 'scripts/start.sh'}\n}}"
@@ -43,7 +79,7 @@ class AuditTests(unittest.TestCase):
                     if "rev-parse" in arguments:
                         return revision
                     if "symbolic-ref" in arguments:
-                        raise audit.ProbeError()
+                        raise audit.ProbeError(symbolic_code)
                     return ""
 
                 with patch.object(audit, "run", side_effect=run):
@@ -53,6 +89,9 @@ class AuditTests(unittest.TestCase):
                     stale = audit.audit_service(service, "b" * 40, home)
                     self.assertTrue(stale["safe"])
                     self.assertTrue(stale["stale"])
+                    symbolic_code = 128
+                    self.assertFalse(audit.audit_service(service, revision, home)["safe"])
+                    symbolic_code = 1
                     (release / "dist/cli.js").write_text("changed")
                     changed = audit.audit_service(service, revision, home)
                     self.assertFalse(changed["safe"])

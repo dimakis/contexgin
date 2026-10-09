@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const repo = resolve(import.meta.dirname, '../..');
 
-function probe(status: string, revision: string) {
+function probe(status: string, revision: string, expected = 'expected') {
   const root = mkdtempSync(join(tmpdir(), 'contexgin-readiness-'));
   const bin = join(root, 'bin');
   mkdirSync(bin);
@@ -29,7 +29,7 @@ function probe(status: string, revision: string) {
     'bash',
     [
       '-c',
-      `set -euo pipefail\nDOMAIN=fixture\nLABEL=fixture\nSTARTUP_TIMEOUT_SECONDS=1\n${functionBody}\nwait_for_deployment_health 4195 expected /release`,
+      `set -euo pipefail\nDOMAIN=fixture\nLABEL=fixture\nSTARTUP_TIMEOUT_SECONDS=1\n${functionBody}\nwait_for_deployment_health 4195 '${expected}' /release`,
     ],
     {
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
@@ -46,5 +46,9 @@ describe('deployment readiness', () => {
   it('refuses rebuilding or wrong-commit responders', () => {
     expect(probe('building', 'expected').status).not.toBe(0);
     expect(probe('ok', 'other').status).not.toBe(0);
+  });
+  it('requires healthy status from legacy responders without commit metadata', () => {
+    expect(probe('ok', '', '').status).toBe(0);
+    expect(probe('building', '', '').status).not.toBe(0);
   });
 });
