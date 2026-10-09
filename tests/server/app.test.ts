@@ -752,7 +752,7 @@ context:
           );
           await fs.writeFile(
             path.join(root, directory, child, file),
-            '# Scoped guidance\n\nNESTED_SENTINEL\n',
+            '## Scoped guidance\n\nNESTED_SENTINEL\n',
           );
           server = await createServer({
             ...DEFAULT_CONFIG,
