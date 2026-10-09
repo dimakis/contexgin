@@ -128,7 +128,7 @@ wait_for_deployment_health() {
     fi
     health_json="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/health" 2>/dev/null || true)"
     if [ -n "$expected_commit" ]; then
-      node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]||h.status!=='ok') process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
+      node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]||h.status!=="ok") process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
     elif [ -n "$health_json" ]; then
       return 0
     fi
