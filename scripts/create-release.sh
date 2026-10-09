@@ -100,6 +100,12 @@ if [ "$SERVE_DB_PATH" != ":memory:" ]; then
     *) echo "Refusing release: CONTEXGIN_DB_PATH must be absolute or :memory:" >&2; exit 1 ;;
   esac
 fi
+if [ -n "${CONTEXGIN_GOALS_DB_PATH:-}" ]; then
+  case "$CONTEXGIN_GOALS_DB_PATH" in
+    /*) mkdir -p "$(dirname "$CONTEXGIN_GOALS_DB_PATH")" ;;
+    *) echo "Refusing release: goals database path must be absolute" >&2; exit 1 ;;
+  esac
+fi
 if ! shlock -f "$LOCK_FILE" -p "$$"; then
   echo "Refusing release: another ContexGin deployment is active" >&2
   exit 1

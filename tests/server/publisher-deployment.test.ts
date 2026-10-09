@@ -1,5 +1,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +15,43 @@ const repo = resolve(import.meta.dirname, '../..');
 const fixture = () => mkdtempSync(join(tmpdir(), 'contexgin-publisher-deployment-'));
 
 describe('publisher deployment', () => {
+  it('passes an explicitly selected durable goals store to the workspace server', () => {
+    const root = fixture();
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'node'), '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+    chmodSync(join(bin, 'node'), 0o755);
+    const script = readFileSync(join(repo, 'scripts/start.sh'), 'utf8').replace(
+      'export PATH="/opt/homebrew/bin:$PATH"',
+      'export PATH="$FIXTURE_BIN:$PATH"',
+    );
+    const launcher = join(root, 'start.sh');
+    writeFileSync(launcher, script);
+    const result = spawnSync('bash', [launcher], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        FIXTURE_BIN: bin,
+        CONTEXGIN_SERVICE: 'server',
+        CONTEXGIN_ROOTS: root,
+        CONTEXGIN_DB_PATH: join(root, 'graph.db'),
+        CONTEXGIN_GOALS_DB_PATH: join(root, 'goals.db'),
+        CONTEXGIN_PORT: '4195',
+      },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim().split('\n')).toEqual([
+      'dist/cli.js',
+      'serve',
+      realpathSync(root),
+      '--db',
+      join(root, 'graph.db'),
+      '--port',
+      '4195',
+      '--goals-db',
+      join(root, 'goals.db'),
+    ]);
+  });
   it.each(['NODE_OPTIONS', 'NODE_PATH', 'DYLD_INSERT_LIBRARIES'])(
     'refuses inherited external loader settings: %s',
     (setting) => {

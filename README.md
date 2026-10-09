@@ -143,6 +143,9 @@ errors never print credentials. External runtime loading settings (`NODE_OPTIONS
 and are rejected rather than silently removed. Each service has its own lock and log files.
 The source trees, databases, publication configuration and existing ingress remain
 separate; this controller does not configure providers or recreate publication state.
+`CONTEXGIN_GOALS_DB_PATH` also selects a persistent goals database for the workspace
+server. Preserve any existing in-memory goals and their contributions before its first
+restart into a persistent store; the launcher does not migrate live in-memory data.
 
 For a first guarded deployment from a legacy plist, explicitly provide
 `CONTEXGIN_LEGACY_PORT` and, if needed, `CONTEXGIN_LEGACY_WORKING_DIRECTORY`.

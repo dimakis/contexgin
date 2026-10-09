@@ -55,6 +55,7 @@ if not origin or any(character in origin for character in "\r\n\t"):
 rendered["EnvironmentVariables"]["CONTEXGIN_DEPLOYMENT_ORIGIN"] = origin
 if service == "publisher":
     rendered["EnvironmentVariables"]["CONTEXGIN_PUBLICATION_CONFIG"] = sys.argv[11]
+if len(sys.argv) > 12 and sys.argv[12]:
     rendered["EnvironmentVariables"]["CONTEXGIN_GOALS_DB_PATH"] = sys.argv[12]
 rendered["Label"] = "com.contexgin." + service
 rendered["StandardOutPath"] = str(release_dir / "logs" / (service + "-stdout.log"))

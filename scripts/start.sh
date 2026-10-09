@@ -83,6 +83,6 @@ if [ "$SERVICE" = server ]; then ARGS+=("${ROOTS[@]}"); fi
 ARGS+=(--db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" --port "${CONTEXGIN_PORT:-4195}")
 if [ "$SERVICE" = publisher ]; then
   ARGS+=(--no-watch --publication-config "$CONTEXGIN_PUBLICATION_CONFIG")
-  [ -z "${CONTEXGIN_GOALS_DB_PATH:-}" ] || ARGS+=(--goals-db "$CONTEXGIN_GOALS_DB_PATH")
 fi
+[ -z "${CONTEXGIN_GOALS_DB_PATH:-}" ] || ARGS+=(--goals-db "$CONTEXGIN_GOALS_DB_PATH")
 exec node "${ARGS[@]}"
