@@ -27,8 +27,8 @@ class AuditTests(unittest.TestCase):
                 root = home / service
                 plist_path = home / "Library/LaunchAgents" / ("com.contexgin." + service + ".plist")
                 plist_path.parent.mkdir(parents=True, exist_ok=True)
-                plist_path.write_bytes(plistlib.dumps({"WorkingDirectory": str(root)}))
                 origin = "https://example.invalid/" + service + ".git"
+                plist_path.write_bytes(plistlib.dumps({"WorkingDirectory": str(root), "EnvironmentVariables": {"CONTEXGIN_DEPLOYMENT_ORIGIN": origin}}))
                 revision = "c" * 40
                 with patch.object(audit, "run", side_effect=[origin, revision + "\trefs/heads/main"]) as commands:
                     self.assertEqual(audit.accepted_main(service, home), revision)
@@ -71,6 +71,7 @@ class AuditTests(unittest.TestCase):
                 (release / name).mkdir(parents=True)
             (release / "dist/cli.js").write_text("fixture")
             revision = "a" * 40
+            origin = "https://example.invalid/accepted.git"
             digest = audit.fingerprint(release)
             for service in ("server", "publisher"):
                 label = "com.contexgin." + service
@@ -81,10 +82,12 @@ class AuditTests(unittest.TestCase):
                              "CONTEXGIN_DEPLOYMENT_COMMIT": revision,
                              "CONTEXGIN_RUNTIME_SHA256": digest,
                              "CONTEXGIN_SERVICE": service,
+                             "CONTEXGIN_DEPLOYMENT_ORIGIN": origin,
                              "CONTEXGIN_PORT": "8643" if service == "publisher" else "4195"}}
                 plist_path.write_bytes(plistlib.dumps(plist))
 
                 symbolic_code = 1
+                actual_origin = origin
                 def run(arguments):
                     if arguments[0] == "launchctl":
                         return f"job = {{\n state = running\n pid = 123\n working directory = {release}\n path = {plist_path}\n program = {release / 'scripts/start.sh'}\n}}"
@@ -94,6 +97,8 @@ class AuditTests(unittest.TestCase):
                         return '{"status":"ok","deploymentCommit":"' + revision + '"}'
                     if "rev-parse" in arguments:
                         return revision
+                    if "get-url" in arguments:
+                        return actual_origin
                     if "symbolic-ref" in arguments:
                         raise audit.ProbeError(symbolic_code)
                     return ""
@@ -102,6 +107,10 @@ class AuditTests(unittest.TestCase):
                     healthy = audit.audit_service(service, revision, home)
                     self.assertTrue(healthy["safe"])
                     self.assertFalse(healthy["stale"])
+                    actual_origin = "https://example.invalid/unaccepted.git"
+                    self.assertFalse(audit.audit_service(service, revision, home)["safe"])
+                    with self.assertRaises(audit.ProbeError): audit.accepted_main(service, home)
+                    actual_origin = origin
                     for key, value in (("CONTEXGIN_SERVICE", "server" if service == "publisher" else "publisher"),
                                        ("NODE_OPTIONS", "--require /outside/release.js"),
                                        ("NODE_PATH", "/outside"), ("DYLD_INSERT_LIBRARIES", "/outside/library.dylib")):

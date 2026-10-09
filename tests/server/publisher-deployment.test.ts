@@ -106,6 +106,7 @@ plistlib.dump({'Label':'com.contexgin.publisher','EnvironmentVariables':{'FIXTUR
       previous,
       '/private/publication.json',
       '/private/goals.db',
+      'https://example.invalid/accepted.git',
     ]);
     const result = JSON.parse(
       execFileSync(
@@ -124,6 +125,7 @@ plistlib.dump({'Label':'com.contexgin.publisher','EnvironmentVariables':{'FIXTUR
       FIXTURE_SECRET: 'fixture-only',
       CONTEXGIN_DEPLOYMENT_COMMIT: 'a'.repeat(40),
       CONTEXGIN_SERVICE: 'publisher',
+      CONTEXGIN_DEPLOYMENT_ORIGIN: 'https://example.invalid/accepted.git',
       CONTEXGIN_ROOTS: '',
       CONTEXGIN_PORT: '8643',
       CONTEXGIN_PUBLICATION_CONFIG: '/private/publication.json',

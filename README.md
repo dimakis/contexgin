@@ -153,7 +153,8 @@ launchd directory and listener. Subsequent deployments verify the health commit 
 or `--service publisher`. Integrity/ownership (`safe`) and freshness (`stale`) are
 reported independently. A stale but intact release is safe and still exits nonzero
 so an operator can detect that main advanced. Freshness uses each deployed release's
-configured `origin`, matching its deployment controller. `--offline` skips freshness only.
+deployment origin pinned in its private plist, matching its deployment controller;
+a changed Git remote fails the integrity audit. `--offline` skips freshness only.
 This command is read-only and makes no model calls. No unattended update or
 scheduled deployment audit is installed by this controller.
 

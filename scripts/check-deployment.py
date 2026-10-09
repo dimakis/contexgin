@@ -43,8 +43,11 @@ def job_fields(output):
 def accepted_main(service, home=None):
     home = home or Path.home()
     with (home / "Library/LaunchAgents" / ("com.contexgin." + service + ".plist")).open("rb") as stream:
-        root = plistlib.load(stream)["WorkingDirectory"]
-    origin = run(["git", "-C", root, "remote", "get-url", "origin"])
+        plist = plistlib.load(stream)
+    root = plist["WorkingDirectory"]
+    origin = plist["EnvironmentVariables"]["CONTEXGIN_DEPLOYMENT_ORIGIN"]
+    if not origin or run(["git", "-C", root, "remote", "get-url", "origin"]) != origin:
+        raise ProbeError()
     revision = run(["git", "ls-remote", origin, "refs/heads/main"]).split()[0]
     if not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ProbeError()
@@ -72,6 +75,9 @@ def audit_service(service, main, home=None):
             raise ProbeError()
         result.update(source=source, stale=None if main is None else source != main)
         root = Path(plist["WorkingDirectory"])
+        origin = environment["CONTEXGIN_DEPLOYMENT_ORIGIN"]
+        if not origin or run(["git", "-C", str(root), "remote", "get-url", "origin"]) != origin:
+            raise ProbeError()
         if plist["Label"] != label or plist["ProgramArguments"] != [str(root / "scripts/start.sh")]:
             raise ProbeError()
         fields = job_fields(run(["launchctl", "print", f"gui/{os.getuid()}/{label}"]))

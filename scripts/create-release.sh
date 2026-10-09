@@ -51,6 +51,8 @@ esac
 [ "$SERVE_PORT" -ge 1 ] && [ "$SERVE_PORT" -le 65535 ] || exit 1
 STARTUP_TIMEOUT_SECONDS="${CONTEXGIN_STARTUP_TIMEOUT_SECONDS:-120}"
 RELEASE_TEMP=""
+RELEASE_INSTALL_LOCK="$RELEASE_ROOT/.release-install.lock"
+RELEASE_INSTALL_LOCK_HELD=0
 CUTOVER_ACTIVE=0
 PLIST_PREVIOUS=""
 PLIST_NEXT=""
@@ -202,6 +204,7 @@ cleanup() {
   fi
   [ -z "$PLIST_NEXT" ] || [ ! -f "$PLIST_NEXT" ] || mv "$PLIST_NEXT" "${PLIST_NEXT}.abandoned"
   if [ -n "$RELEASE_TEMP" ] && [ -d "$RELEASE_TEMP" ]; then rm -rf -- "$RELEASE_TEMP"; fi
+  if [ "${RELEASE_INSTALL_LOCK_HELD:-0}" = 1 ]; then rm -f -- "$RELEASE_INSTALL_LOCK"; fi
   if [ "$rollback_failed" != "1" ]; then rm -f -- "$LOCK_FILE"; fi
   if [ "$rollback_failed" = "1" ]; then
     (umask 077; set -o noclobber; printf 'rollback_failed\nlabel=%s\nsource=%s\n' "$LABEL" "$SOURCE_COMMIT" > "$FAILURE_MARKER") || true
@@ -262,6 +265,10 @@ release_is_valid() {
     git -C "$RELEASE_DIR" diff-index --quiet HEAD -- &&
     [ "$(runtime_sha256 "$RELEASE_DIR")" = "$BUILT_RUNTIME_SHA256" ]
 }
+if ! shlock -f "$RELEASE_INSTALL_LOCK" -p "$$"; then
+  echo "Refusing release: shared release installation is active" >&2; exit 1
+fi
+RELEASE_INSTALL_LOCK_HELD=1
 if [ -e "$RELEASE_DIR" ] && ! release_is_valid; then
   echo "Refusing release: immutable release directory is invalid: $RELEASE_DIR" >&2
   exit 1
@@ -272,6 +279,8 @@ else
   mv "$RELEASE_TEMP/release" "$RELEASE_DIR"
   rmdir "$RELEASE_TEMP"
 fi
+rm -f -- "$RELEASE_INSTALL_LOCK"
+RELEASE_INSTALL_LOCK_HELD=0
 RELEASE_TEMP=""
 mkdir -p "$RELEASE_DIR/logs"
 
@@ -285,7 +294,7 @@ python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$SERVE_DB_PATH" \
   "$SERVE_PORT" \
   "$BUILT_RUNTIME_SHA256" \
-  "$SERVICE" "$PLIST_DEST" "${CONTEXGIN_PUBLICATION_CONFIG:-}" "${CONTEXGIN_GOALS_DB_PATH:-}"
+  "$SERVICE" "$PLIST_DEST" "${CONTEXGIN_PUBLICATION_CONFIG:-}" "${CONTEXGIN_GOALS_DB_PATH:-}" "$ORIGIN_URL"
 chmod 600 "$PLIST_NEXT"
 plutil -lint "$PLIST_NEXT" >/dev/null
 

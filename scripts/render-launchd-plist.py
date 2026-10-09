@@ -49,6 +49,10 @@ if any(value and (key in ("NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY
     raise ValueError("external runtime loading settings require investigation before deployment")
 rendered["EnvironmentVariables"] = {**preserved, **rendered["EnvironmentVariables"]}
 rendered["EnvironmentVariables"]["CONTEXGIN_SERVICE"] = service
+origin = sys.argv[13] if len(sys.argv) > 13 else "https://github.com/dimakis/contexgin.git"
+if not origin or any(character in origin for character in "\r\n\t"):
+    raise ValueError("invalid deployment origin")
+rendered["EnvironmentVariables"]["CONTEXGIN_DEPLOYMENT_ORIGIN"] = origin
 if service == "publisher":
     rendered["EnvironmentVariables"]["CONTEXGIN_PUBLICATION_CONFIG"] = sys.argv[11]
     rendered["EnvironmentVariables"]["CONTEXGIN_GOALS_DB_PATH"] = sys.argv[12]
