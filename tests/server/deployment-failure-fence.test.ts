@@ -85,7 +85,10 @@ it('fails rollback before bootstrapping if the previous plist cannot be restored
     resolve(import.meta.dirname, '../../scripts/create-release.sh'),
     'utf8',
   );
-  const rollback = script.slice(script.indexOf('\nrollback() {') + 1, script.indexOf('\ncleanup()'));
+  const rollback = script.slice(
+    script.indexOf('\nrollback() {') + 1,
+    script.indexOf('\ncleanup()'),
+  );
   const previous = join(root, 'previous.plist');
   writeFileSync(previous, 'saved');
   const result = spawnSync(
