@@ -340,6 +340,7 @@ function extractBoundarySection(
       const explicitPolicy =
         inferConfidentialityLevel([trimmed]) !== 'none' ||
         /\b(shareable|public|unrestricted)\b/i.test(trimmed);
+      recordPolicyProse(trimmed);
       activePolicyLines = explicitPolicy ? [trimmed] : [...parentPolicy, trimmed];
       policyByHeadingLevel.set(headingLevel, activePolicyLines);
       sawBullet = false;

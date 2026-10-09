@@ -7,19 +7,24 @@ const FIXTURES = path.resolve(import.meta.dirname, '..', 'fixtures', 'constituti
 // ── Synthetic Tests ──────────────────────────────────────────────
 
 describe('parseConstitutionContent', () => {
-  it('preserves an explicit hard confidentiality heading independently of targeted bullets', () => {
-    const result = parseConstitutionContent(
-      '## Hard Confidentiality\n\n- Do not share with `api/`\n',
-      '/test.md',
-      'test',
-    );
-    expect(
-      result.boundaries.some(
-        (boundary) => boundary.level === 'hard' && boundary.excludedFrom.length === 0,
-      ),
-    ).toBe(true);
-    expect(result.boundaries.some((boundary) => boundary.excludedFrom.includes('api/'))).toBe(true);
-  });
+  it.each(['## Hard Confidentiality', '## Boundaries\n\n### Hard confidential'])(
+    'preserves explicit heading policy independently of targeted bullets: %s',
+    (heading) => {
+      const result = parseConstitutionContent(
+        `${heading}\n\n- Do not share with \`api/\`\n`,
+        '/test.md',
+        'test',
+      );
+      expect(
+        result.boundaries.some(
+          (boundary) => boundary.level === 'hard' && boundary.excludedFrom.length === 0,
+        ),
+      ).toBe(true);
+      expect(result.boundaries.some((boundary) => boundary.excludedFrom.includes('api/'))).toBe(
+        true,
+      );
+    },
+  );
   it.each([
     '<!-- note --> All following data is hard confidential.',
     '<!-- note\ncontinued --> All following data is hard confidential.',
@@ -447,9 +452,9 @@ All following data is hard confidential.
 - Employee records
 `;
       const result = parseConstitutionContent(content, '/test.md', 'career');
-      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries).toHaveLength(3);
       expect(result.boundaries[0].level).toBe('none');
-      expect(result.boundaries[1].level).toBe('hard');
+      expect(result.boundaries.slice(1).every((boundary) => boundary.level === 'hard')).toBe(true);
     });
 
     it('inherits section policy through neutral organizational subsections', () => {
@@ -476,8 +481,8 @@ All following data is hard confidential.
 - Payroll
 `;
       const result = parseConstitutionContent(content, '/test.md', 'test');
-      expect(result.boundaries).toHaveLength(1);
-      expect(result.boundaries[0].level).toBe('hard');
+      expect(result.boundaries).toHaveLength(2);
+      expect(result.boundaries.every((boundary) => boundary.level === 'hard')).toBe(true);
     });
 
     it('preserves adjacent boundary and confidentiality sections', () => {
