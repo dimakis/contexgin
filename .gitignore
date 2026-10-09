@@ -6,3 +6,4 @@ dist/
 logs/
 coverage/
 .env
+__pycache__/

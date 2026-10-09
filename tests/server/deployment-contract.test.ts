@@ -7,6 +7,9 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = resolve(import.meta.dirname, '../..');
 
 describe('deployment contract', () => {
+  it('audits freshness separately from source and runtime integrity for both services', () => {
+    execFileSync('python3', [join(repoRoot, 'tests/deployment/test_service_audit.py')]);
+  });
   it('serializes deploys and has atomic release, rollback, and commit attestation guards', () => {
     const script = readFileSync(join(repoRoot, 'scripts/create-release.sh'), 'utf8');
     expect(script).toContain('+refs/heads/*:refs/remotes/origin/*');
@@ -15,7 +18,7 @@ describe('deployment contract', () => {
     expect(script).toContain('"$SOURCE_COMMIT" "refs/remotes/origin/$REMOTE_BRANCH"');
     expect(script).toContain('scripts/render-launchd-plist.py');
     expect(script).toContain('shlock -f "$LOCK_FILE" -p "$$"');
-    expect(script).toContain('LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"');
+    expect(script).toContain('LOCK_FILE="/tmp/$LABEL.$(id -u).deploy.lock"');
     expect(script).not.toContain('LOCK_FILE="$RELEASE_ROOT');
     expect(script).toContain("trap 'exit 130' INT TERM HUP");
     expect(script).toContain('mktemp -d "$RELEASE_ROOT/.build.XXXXXX"');
@@ -115,6 +118,10 @@ describe('deployment contract', () => {
     mkdirSync(join(root, 'node_modules/example'), { recursive: true });
     cpSync(join(repoRoot, 'scripts/start.sh'), join(root, 'scripts/start.sh'));
     cpSync(join(repoRoot, 'scripts/runtime-sha256.sh'), join(root, 'scripts/runtime-sha256.sh'));
+    cpSync(
+      join(repoRoot, 'scripts/runtime-fingerprint.py'),
+      join(root, 'scripts/runtime-fingerprint.py'),
+    );
     writeFileSync(join(root, 'tracked.txt'), 'clean\n');
     writeFileSync(join(root, 'dist/cli.js'), 'clean\n');
     writeFileSync(join(root, 'node_modules/example/index.js'), 'dependency\n');

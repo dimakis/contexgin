@@ -33,5 +33,24 @@ replacements["__DB_PATH__"] = db_path
 replacements["__PORT__"] = port
 replacements["__RUNTIME_SHA256__"] = runtime_sha256
 rendered = replace(plist, replacements)
+service = sys.argv[9] if len(sys.argv) > 9 else "server"
+if service not in ("server", "publisher"):
+    raise ValueError("unknown ContexGin service")
+previous = Path(sys.argv[10]) if len(sys.argv) > 10 else None
+preserved = {}
+if previous and previous.exists():
+    with previous.open("rb") as stream:
+        original = plistlib.load(stream)
+    if original.get("Label") != "com.contexgin." + service:
+        raise ValueError("previous service label mismatch")
+    preserved = original.get("EnvironmentVariables", {})
+rendered["EnvironmentVariables"] = {**preserved, **rendered["EnvironmentVariables"]}
+rendered["EnvironmentVariables"]["CONTEXGIN_SERVICE"] = service
+if service == "publisher":
+    rendered["EnvironmentVariables"]["CONTEXGIN_PUBLICATION_CONFIG"] = sys.argv[11]
+    rendered["EnvironmentVariables"]["CONTEXGIN_GOALS_DB_PATH"] = sys.argv[12]
+rendered["Label"] = "com.contexgin." + service
+rendered["StandardOutPath"] = str(release_dir / "logs" / (service + "-stdout.log"))
+rendered["StandardErrorPath"] = str(release_dir / "logs" / (service + "-stderr.log"))
 with destination.open("wb") as stream:
     plistlib.dump(rendered, stream, sort_keys=False)

@@ -99,27 +99,57 @@ npm install github:dimakis/contexgin
 
 ### Production deployment
 
-Run `./scripts/create-release.sh <ref>` to deploy the daemon. The command
-fetches current `origin/main`, requires the selected commit to contain main and
-exist on a remote branch, builds a self-contained detached release clone, updates launchd
-atomically, verifies `/health`, and restores the previous plist if the new
-release does not become healthy. The production start script also refuses a
-mutable, modified, or revision-mismatched checkout.
+Production deployment selects a full accepted-main commit. Feature branch deployments
+are refused. From a clean checkout of that accepted commit:
 
-The default workspace roots are derived from the deploying account's `$HOME`.
-Override them with a colon-separated `CONTEXGIN_ROOTS` value; optional
-`CONTEXGIN_DB_PATH`, `CONTEXGIN_PORT`, and `CONTEXGIN_PROBE_ROOT` values configure
-the persistent graph, listener, and post-cutover compile probe. The deploy command
-records the effective service settings in the installed launchd plist, so rollback
-restores both the previous revision and its configuration.
+```sh
+./scripts/create-release.sh FULL_COMMIT --plan
+./scripts/create-release.sh FULL_COMMIT --apply
+python3 scripts/check-deployment.py
+```
 
-For the first guarded deployment over an older launchd plist that has no
-`WorkingDirectory`, the script derives the checkout from the absolute program path
-when possible. Otherwise, set `CONTEXGIN_LEGACY_WORKING_DIRECTORY` to the existing
-checkout for that one migration. If the old plist does not record its listener,
-also set `CONTEXGIN_LEGACY_PORT` to the old service port (including `4195` when it
-used the default). Rollback verifies the restored launchd job, its working
-directory, and ownership of the listening port before accepting it.
+Preparation builds an independent detached release with locked dependencies. The plan
+performs no service control. Apply rechecks fresh main, serializes cutover by service
+label, verifies source/runtime integrity and launchd/listener/HTTP identity, and
+verifies restoration of the previous service on failure. A failed restoration retains
+the deployment lock for investigation. Do not force a restart or delete that lock.
+Startup verifies the source commit, staged and unstaged changes, and the complete
+compiled/dependency closure including names, modes and contained symlink targets.
+
+The same controller supports both `CONTEXGIN_SERVICE=server` (default, port 4195)
+and `CONTEXGIN_SERVICE=publisher` (normally port 8643). For the server,
+`CONTEXGIN_ROOTS` is a colon-separated list of absolute workspace roots;
+`CONTEXGIN_DB_PATH`, `CONTEXGIN_PORT` and `CONTEXGIN_PROBE_ROOT` select its existing
+state, listener and compile readiness probe.
+
+For the publisher, explicitly select its existing private settings:
+
+```sh
+CONTEXGIN_SERVICE=publisher CONTEXGIN_PORT=8643 \
+CONTEXGIN_PUBLICATION_CONFIG=/absolute/private/publication.json \
+CONTEXGIN_DB_PATH=/absolute/private/graph.db \
+CONTEXGIN_GOALS_DB_PATH=/absolute/private/goals.db \
+./scripts/create-release.sh FULL_COMMIT --plan
+```
+
+Repeat with `--apply` for cutover. The publisher runs standalone with `--no-watch`;
+it does not use workspace roots or the server's compile probe. Its current credential
+environment is preserved privately in the new mode-0600 plist. Plans, checks and
+errors never print credentials. Each service has its own lock and log files.
+The source trees, databases, publication configuration and existing ingress remain
+separate; this controller does not configure providers or recreate publication state.
+
+For a first guarded deployment from a legacy plist, explicitly provide
+`CONTEXGIN_LEGACY_PORT` and, if needed, `CONTEXGIN_LEGACY_WORKING_DIRECTORY`.
+Restoration of a legacy service lacking commit health metadata verifies its original
+launchd directory and listener. Subsequent deployments verify the health commit too.
+
+`check-deployment.py` checks both services by default, or accepts `--service server`
+or `--service publisher`. Integrity/ownership (`safe`) and freshness (`stale`) are
+reported independently. A stale but intact release is safe and still exits nonzero
+so an operator can detect that main advanced. `--offline` skips freshness only.
+This command is read-only and makes no model calls. No unattended update or
+scheduled deployment audit is installed by this controller.
 
 ## Library Usage
 
@@ -343,7 +373,7 @@ Sample health response:
 
 ### Production Deployment (launchd)
 
-Use `./scripts/create-release.sh <ref>` as described in [Production deployment](#production-deployment).
+Use `./scripts/create-release.sh FULL_COMMIT --plan` as described in [Production deployment](#production-deployment).
 It is the only supported production entry point; do not install a plist from a mutable checkout.
 
 For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).

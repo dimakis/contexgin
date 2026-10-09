@@ -4,14 +4,34 @@ set -euo pipefail
 SOURCE_ROOT="${CONTEXGIN_SOURCE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 SOURCE_REF="${1:-HEAD}"
 RELEASE_ROOT="${CONTEXGIN_RELEASE_ROOT:-$HOME/projects/contexgin-releases}"
-PLIST_DEST="$HOME/Library/LaunchAgents/com.contexgin.server.plist"
+SERVICE="${CONTEXGIN_SERVICE:-server}"
+case "$SERVICE" in server|publisher) ;; *) echo "unknown ContexGin service" >&2; exit 1 ;; esac
+LABEL="com.contexgin.$SERVICE"
+PLIST_DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
-LABEL="com.contexgin.server"
-LOCK_FILE="/tmp/com.contexgin.server.$(id -u).deploy.lock"
+LOCK_FILE="/tmp/$LABEL.$(id -u).deploy.lock"
+APPLY=0
+case "${2:---plan}" in
+  --plan) ;;
+  --apply) APPLY=1 ;;
+  *) echo "Usage: create-release.sh COMMIT [--plan|--apply]" >&2; exit 1 ;;
+esac
+[ "$#" -le 2 ] || exit 1
 DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
+if [ "$SERVICE" = publisher ]; then
+  DEFAULT_ROOTS=""
+  [ -n "${CONTEXGIN_PUBLICATION_CONFIG:-}" ] && [ -f "$CONTEXGIN_PUBLICATION_CONFIG" ] &&
+    [ "${CONTEXGIN_PUBLICATION_CONFIG#/}" != "$CONTEXGIN_PUBLICATION_CONFIG" ] || {
+    echo "publisher requires an existing absolute publication configuration" >&2; exit 1
+  }
+fi
 SERVE_ROOTS="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
 SERVE_DB_PATH="${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}"
 SERVE_PORT="${CONTEXGIN_PORT:-4195}"
+case "$SERVE_PORT" in
+  *[!0-9]*|'') echo "Refusing release: service port must be an integer" >&2; exit 1 ;;
+esac
+[ "$SERVE_PORT" -ge 1 ] && [ "$SERVE_PORT" -le 65535 ] || exit 1
 STARTUP_TIMEOUT_SECONDS="${CONTEXGIN_STARTUP_TIMEOUT_SECONDS:-120}"
 RELEASE_TEMP=""
 CUTOVER_ACTIVE=0
@@ -28,6 +48,7 @@ esac
   echo "Refusing release: CONTEXGIN_STARTUP_TIMEOUT_SECONDS must be between 10 and 600" >&2
   exit 1
 }
+if [ "$SERVICE" = server ]; then
 case ":$SERVE_ROOTS:" in
   *::* ) echo "Refusing release: CONTEXGIN_ROOTS contains an empty workspace root" >&2; exit 1 ;;
 esac
@@ -46,6 +67,9 @@ for root in "${SERVE_ROOT_LIST[@]}"; do
   NORMALIZED_SERVE_ROOTS="${NORMALIZED_SERVE_ROOTS:+$NORMALIZED_SERVE_ROOTS:}$root"
 done
 SERVE_ROOTS="$NORMALIZED_SERVE_ROOTS"
+else
+  SERVE_ROOTS=""
+fi
 PROBE_ROOT="${CONTEXGIN_PROBE_ROOT:-${SERVE_ROOTS%%:*}}"
 
 mkdir -p "$RELEASE_ROOT" "$HOME/Library/LaunchAgents"
@@ -104,7 +128,7 @@ wait_for_deployment_health() {
     fi
     health_json="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$port/health" 2>/dev/null || true)"
     if [ -n "$expected_commit" ]; then
-      node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]) process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
+      node -e 'const h=JSON.parse(process.argv[1]); if(h.deploymentCommit!==process.argv[2]||h.status!=='ok') process.exit(1)' "$health_json" "$expected_commit" 2>/dev/null && return 0
     elif [ -n "$health_json" ]; then
       return 0
     fi
@@ -144,7 +168,7 @@ cleanup() {
   fi
   [ -z "$PLIST_NEXT" ] || [ ! -f "$PLIST_NEXT" ] || mv "$PLIST_NEXT" "${PLIST_NEXT}.abandoned"
   if [ -n "$RELEASE_TEMP" ] && [ -d "$RELEASE_TEMP" ]; then rm -rf -- "$RELEASE_TEMP"; fi
-  rm -f -- "$LOCK_FILE"
+  if [ "$rollback_failed" != "1" ]; then rm -f -- "$LOCK_FILE"; fi
   if [ "$rollback_failed" = "1" ]; then
     echo "ContexGin rollback failed; inspect $PLIST_DEST and retained release directories" >&2
   fi
@@ -156,8 +180,8 @@ trap 'exit 130' INT TERM HUP
 git -C "$SOURCE_ROOT" fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
 SOURCE_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --verify "$SOURCE_REF^{commit}")"
 MAIN_COMMIT="$(git -C "$SOURCE_ROOT" rev-parse --verify origin/main)"
-git -C "$SOURCE_ROOT" merge-base --is-ancestor "$MAIN_COMMIT" "$SOURCE_COMMIT" || {
-  echo "Refusing release: $SOURCE_COMMIT does not contain origin/main $MAIN_COMMIT" >&2
+[ "$SOURCE_COMMIT" = "$MAIN_COMMIT" ] || {
+  echo "Refusing release: production requires exact accepted main" >&2
   exit 1
 }
 REMOTE_REF="$(git -C "$SOURCE_ROOT" for-each-ref --format='%(refname:short) %(symref)' --contains "$SOURCE_COMMIT" refs/remotes/origin | awk 'NF == 1 { print $1; exit }')"
@@ -166,6 +190,13 @@ REMOTE_REF="$(git -C "$SOURCE_ROOT" for-each-ref --format='%(refname:short) %(sy
   exit 1
 }
 
+if [ "$APPLY" = 1 ]; then
+  CONTROLLER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+  [ "$(git -C "$CONTROLLER_ROOT" rev-parse HEAD)" = "$SOURCE_COMMIT" ] &&
+    git -C "$CONTROLLER_ROOT" diff-index --quiet HEAD -- || {
+    echo "Refusing release: apply controller must be clean accepted main" >&2; exit 1
+  }
+fi
 runtime_sha256() { "$1/scripts/runtime-sha256.sh" "$1"; }
 RELEASE_TEMP="$(mktemp -d "$RELEASE_ROOT/.build.XXXXXX")"
 git clone --no-local --no-checkout "$SOURCE_ROOT" "$RELEASE_TEMP/release"
@@ -208,7 +239,7 @@ fi
 RELEASE_TEMP=""
 mkdir -p "$RELEASE_DIR/logs"
 
-PLIST_NEXT="$(mktemp "$HOME/Library/LaunchAgents/.com.contexgin.server.XXXXXX")"
+PLIST_NEXT="$(mktemp "$HOME/Library/LaunchAgents/.$LABEL.XXXXXX")"
 python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$RELEASE_DIR/infra/com.contexgin.server.plist" \
   "$PLIST_NEXT" \
@@ -217,11 +248,22 @@ python3 "$RELEASE_DIR/scripts/render-launchd-plist.py" \
   "$SERVE_ROOTS" \
   "$SERVE_DB_PATH" \
   "$SERVE_PORT" \
-  "$BUILT_RUNTIME_SHA256"
+  "$BUILT_RUNTIME_SHA256" \
+  "$SERVICE" "$PLIST_DEST" "${CONTEXGIN_PUBLICATION_CONFIG:-}" "${CONTEXGIN_GOALS_DB_PATH:-}"
+chmod 600 "$PLIST_NEXT"
 plutil -lint "$PLIST_NEXT" >/dev/null
 
+if [ "$APPLY" = 0 ]; then
+  echo "Planned $LABEL at $SOURCE_COMMIT in $RELEASE_DIR; rerun with --apply"
+  exit 0
+fi
+# Main may advance during the build. Never cut over to a superseded selection.
+FRESH_MAIN="$(git -C "$SOURCE_ROOT" ls-remote origin refs/heads/main | awk '{print $1}')"
+[ "$FRESH_MAIN" = "$SOURCE_COMMIT" ] || {
+  echo "Refusing release: accepted main advanced during preparation" >&2; exit 1
+}
 if [ -f "$PLIST_DEST" ]; then
-  PLIST_PREVIOUS="$(mktemp "$HOME/Library/LaunchAgents/.com.contexgin.previous.XXXXXX")"
+  PLIST_PREVIOUS="$(mktemp "$HOME/Library/LaunchAgents/.$LABEL.previous.XXXXXX")"
   cp "$PLIST_DEST" "$PLIST_PREVIOUS"
   PREVIOUS_COMMIT="$(plutil -extract EnvironmentVariables.CONTEXGIN_DEPLOYMENT_COMMIT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
   PREVIOUS_PORT="$(plutil -extract EnvironmentVariables.CONTEXGIN_PORT raw -o - "$PLIST_PREVIOUS" 2>/dev/null || true)"
@@ -254,12 +296,26 @@ if [ -f "$PLIST_DEST" ]; then
     echo "Refusing release: cannot derive the legacy working directory; set CONTEXGIN_LEGACY_WORKING_DIRECTORY for the first guarded deployment" >&2
     exit 1
   }
+  # The first transition can restore the exact legacy launcher, whose health
+  # response predates commit attestation. Require the explicit legacy port.
+  if [ -n "${CONTEXGIN_LEGACY_PORT:-}" ]; then
+    LEGACY_HEALTH="$(curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$PREVIOUS_PORT/health")"
+    if node -e 'const h=JSON.parse(process.argv[1]);process.exit(h.deploymentCommit==null?0:1)' "$LEGACY_HEALTH"; then
+      [ "$(git -C "$PREVIOUS_WORKING_DIRECTORY" rev-parse HEAD)" = "${PREVIOUS_COMMIT:-$(git -C "$PREVIOUS_WORKING_DIRECTORY" rev-parse HEAD)}" ] || exit 1
+      PREVIOUS_COMMIT=""
+    fi
+  fi
   [ "${PREVIOUS_WORKING_DIRECTORY#/}" != "$PREVIOUS_WORKING_DIRECTORY" ] && [ -d "$PREVIOUS_WORKING_DIRECTORY" ] || {
     echo "Refusing release: previous ContexGin working directory is not an existing absolute directory" >&2
     exit 1
   }
 fi
 
+if [ -n "$PLIST_PREVIOUS" ]; then
+  wait_for_deployment_health "$PREVIOUS_PORT" "$PREVIOUS_COMMIT" "$PREVIOUS_WORKING_DIRECTORY" || {
+    echo "Refusing release: original deployment ownership is uncertain" >&2; exit 1
+  }
+fi
 CUTOVER_ACTIVE=1
 if ! bootout_and_wait; then
   echo "ContexGin shutdown timed out; restoring previous deployment" >&2
@@ -274,7 +330,7 @@ fi
 
 if wait_for_deployment_health "$SERVE_PORT" "$SOURCE_COMMIT" "$RELEASE_DIR"; then
   PROBE_BODY="$(node -e 'process.stdout.write(JSON.stringify({spoke:process.argv[1],budget:12000}))' "$PROBE_ROOT")"
-  if curl -fsS --connect-timeout 2 --max-time 15 \
+  if [ "$SERVICE" = publisher ] || curl -fsS --connect-timeout 2 --max-time 15 \
     -H 'content-type: application/json' \
     -d "$PROBE_BODY" \
     "http://127.0.0.1:$SERVE_PORT/compile" >/dev/null; then

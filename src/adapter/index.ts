@@ -53,7 +53,10 @@ export async function discoverAndAdapt(
     const canonical = await entryExists(agents);
     const selected = canonical ? agents : path.join(directory, 'CLAUDE.md');
     if (shouldIgnore(path.relative(root, selected), ignorePatterns)) return;
-    if (await fileExists(selected)) allNodes.push(...(await adaptFile(selected, root)));
+    // Canonical guidance is required. Let its adapter reject links and special
+    // files explicitly rather than silently omitting them or using legacy text.
+    if (canonical || (await fileExists(selected)))
+      allNodes.push(...(await adaptFile(selected, root)));
   }
 
   // 1. Root-level files

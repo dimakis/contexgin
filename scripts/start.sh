@@ -32,6 +32,9 @@ if [ -n "${CONTEXGIN_DEPLOYMENT_COMMIT:-}" ]; then
   }
 fi
 
+SERVICE="${CONTEXGIN_SERVICE:-server}"
+case "$SERVICE" in
+  server)
 DEFAULT_ROOTS="$HOME/redhat/mgmt:$HOME/redhat/openshell:$HOME/tools/mitzo:$HOME/projects/contexgin:$HOME/projects/centaur"
 ROOTS_VALUE="${CONTEXGIN_ROOTS:-$DEFAULT_ROOTS}"
 case ":$ROOTS_VALUE:" in
@@ -58,6 +61,23 @@ for index in "${!ROOTS[@]}"; do
   ROOTS[$index]="$(cd "$root" && pwd -P)"
 done
 
-exec node dist/cli.js serve "${ROOTS[@]}" \
-  --db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" \
-  --port "${CONTEXGIN_PORT:-4195}"
+    ;;
+  publisher)
+    ROOTS=()
+    [ -n "${CONTEXGIN_PUBLICATION_CONFIG:-}" ] &&
+      [ "${CONTEXGIN_PUBLICATION_CONFIG#/}" != "$CONTEXGIN_PUBLICATION_CONFIG" ] &&
+      [ -f "$CONTEXGIN_PUBLICATION_CONFIG" ] || {
+      echo "publisher requires an existing absolute publication configuration" >&2
+      exit 1
+    }
+    ;;
+  *) echo "unknown ContexGin service" >&2; exit 1 ;;
+esac
+ARGS=(dist/cli.js serve)
+if [ "$SERVICE" = server ]; then ARGS+=("${ROOTS[@]}"); fi
+ARGS+=(--db "${CONTEXGIN_DB_PATH:-$HOME/.local/share/contexgin/graph.db}" --port "${CONTEXGIN_PORT:-4195}")
+if [ "$SERVICE" = publisher ]; then
+  ARGS+=(--no-watch --publication-config "$CONTEXGIN_PUBLICATION_CONFIG")
+  [ -z "${CONTEXGIN_GOALS_DB_PATH:-}" ] || ARGS+=(--goals-db "$CONTEXGIN_GOALS_DB_PATH")
+fi
+exec node "${ARGS[@]}"
