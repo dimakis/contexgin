@@ -8,6 +8,7 @@ export function healthRoute(app: FastifyInstance, state: ServerState): void {
 
     return {
       status: state.rebuilding ? 'building' : 'ok',
+      deploymentCommit: process.env.CONTEXGIN_DEPLOYMENT_COMMIT || null,
       uptime,
       hubs: graph?.hubs.length ?? 0,
       spokes: graph?.hubs.reduce((n, h) => n + h.spokes.length, 0) ?? 0,

@@ -97,6 +97,71 @@ Two modes from the same schema:
 npm install github:dimakis/contexgin
 ```
 
+### Production deployment
+
+Production deployment selects a full accepted-main commit. Feature branch deployments
+are refused. From a clean checkout of that accepted commit:
+
+```sh
+./scripts/create-release.sh FULL_COMMIT --plan
+./scripts/create-release.sh FULL_COMMIT --apply
+python3 -I scripts/check-deployment.py
+```
+
+Preparation builds an independent detached release with locked dependencies. The plan
+performs no service control. Apply rechecks fresh main, serializes cutover by service
+label, verifies source/runtime integrity and launchd/listener/HTTP identity, and
+verifies restoration of the previous service on failure. A failed restoration retains
+the deployment lock and a separate persistent failure marker for investigation.
+The marker blocks later attempts even after the original lock owner exits. Do not force a restart or delete that lock.
+Startup verifies the source commit, staged and unstaged changes, and the complete
+compiled/dependency closure including names, modes and contained symlink targets.
+
+The same controller supports both `CONTEXGIN_SERVICE=server` (default, port 4195)
+and `CONTEXGIN_SERVICE=publisher` (normally port 8643). For the server,
+`CONTEXGIN_ROOTS` is a colon-separated list of absolute workspace roots;
+`CONTEXGIN_DB_PATH`, `CONTEXGIN_PORT` and `CONTEXGIN_PROBE_ROOT` select its existing
+state, listener and compile readiness probe.
+
+For the publisher, explicitly select its existing private settings:
+Both graph and goals database paths are required; omitted paths are refused
+before building or controlling a service. The publisher's default port is 8643.
+
+```sh
+CONTEXGIN_SERVICE=publisher CONTEXGIN_PORT=8643 \
+CONTEXGIN_PUBLICATION_CONFIG=/absolute/private/publication.json \
+CONTEXGIN_DB_PATH=/absolute/private/graph.db \
+CONTEXGIN_GOALS_DB_PATH=/absolute/private/goals.db \
+./scripts/create-release.sh FULL_COMMIT --plan
+```
+
+Repeat with `--apply` for cutover. The publisher runs standalone with `--no-watch`;
+it does not use workspace roots or the server's compile probe. Its current credential
+environment is preserved privately in the new mode-0600 plist. Plans, checks and
+errors never print credentials. External runtime loading settings (`NODE_OPTIONS`,
+`NODE_PATH`, dynamic library loading, shell startup/import controls, and Python
+startup/import controls) require investigation
+and are rejected rather than silently removed. Each service has its own lock and log files.
+The source trees, databases, publication configuration and existing ingress remain
+separate; this controller does not configure providers or recreate publication state.
+`CONTEXGIN_GOALS_DB_PATH` also selects a persistent goals database for the workspace
+server. Preserve any existing in-memory goals and their contributions before its first
+restart into a persistent store; the launcher does not migrate live in-memory data.
+
+For a first guarded deployment from a legacy plist, explicitly provide
+`CONTEXGIN_LEGACY_PORT` and, if needed, `CONTEXGIN_LEGACY_WORKING_DIRECTORY`.
+Restoration of a legacy service lacking commit health metadata verifies its original
+launchd directory and listener. Subsequent deployments verify the health commit too.
+
+`check-deployment.py` checks both services by default, or accepts `--service server`
+or `--service publisher`. Integrity/ownership (`safe`) and freshness (`stale`) are
+reported independently. A stale but intact release is safe and still exits nonzero
+so an operator can detect that main advanced. Freshness uses each deployed release's
+deployment origin pinned in its private plist, matching its deployment controller;
+a changed Git remote fails the integrity audit. `--offline` skips freshness only.
+This command is read-only and makes no model calls. No unattended update or
+scheduled deployment audit is installed by this controller.
+
 ## Library Usage
 
 ### Compile context for a workspace
@@ -319,45 +384,8 @@ Sample health response:
 
 ### Production Deployment (launchd)
 
-1. Create the start script at `scripts/start.sh`:
-
-```bash
-#!/bin/bash
-export PATH="/opt/homebrew/bin:$PATH"
-cd /path/to/contexgin
-exec node dist/cli.js serve \
-  ~/my-workspace \
-  --db ~/.local/share/contexgin/graph.db \
-  --port 4195
-```
-
-2. Create a launchd plist at `~/Library/LaunchAgents/com.contexgin.server.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key><string>com.contexgin.server</string>
-    <key>ProgramArguments</key><array>
-        <string>/bin/bash</string>
-        <string>/path/to/contexgin/scripts/start.sh</string>
-    </array>
-    <key>RunAtLoad</key><true/>
-    <key>KeepAlive</key><true/>
-    <key>StandardOutPath</key><string>/path/to/contexgin/logs/stdout.log</string>
-    <key>StandardErrorPath</key><string>/path/to/contexgin/logs/stderr.log</string>
-</dict>
-</plist>
-```
-
-3. Load and start:
-
-```bash
-mkdir -p ~/.local/share/contexgin logs
-launchctl load ~/Library/LaunchAgents/com.contexgin.server.plist
-curl http://127.0.0.1:4195/health  # verify
-```
+Use `./scripts/create-release.sh FULL_COMMIT --plan` as described in [Production deployment](#production-deployment).
+It is the only supported production entry point; do not install a plist from a mutable checkout.
 
 For integration examples (Claude Code hooks, Cursor rules, custom agent snippets), see [docs/integrations.md](docs/integrations.md).
 
