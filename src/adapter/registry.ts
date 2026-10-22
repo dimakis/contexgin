@@ -10,6 +10,7 @@ import { agentsAdapter } from './agents.js';
 import { claudeAdapter } from './claude.js';
 import { cursorAdapter } from './cursor.js';
 import { markdownAdapter } from './markdown.js';
+import { rhythmsAdapter } from './rhythms.js';
 
 /**
  * Ordered list of adapters. More specific adapters first.
@@ -21,6 +22,7 @@ const ADAPTERS: ContextAdapter[] = [
   knowledgeAdapter,
   claudeAdapter,
   cursorAdapter,
+  rhythmsAdapter,
   markdownAdapter, // fallback — must be last
 ];
 

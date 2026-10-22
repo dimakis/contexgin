@@ -26,7 +26,8 @@ export type SourceFormat =
   | 'cursor_rules'
   | 'constitution'
   | 'knowledge'
-  | 'markdown';
+  | 'markdown'
+  | 'rhythms';
 
 /** Where a context node originated */
 export interface NodeOrigin {
@@ -133,7 +134,7 @@ export function nodeToSourceKind(
   if (format === 'constitution') return 'constitution';
   if (format === 'markdown' && isProfilePath(relativePath)) return 'profile';
   if (basename === 'SERVICES.md') return 'service';
-  // claude_md, cursor_rules, knowledge, and other markdown → reference
+  // claude_md, cursor_rules, knowledge, rhythms, and other formats → reference
   return 'reference';
 }
 

@@ -57,6 +57,22 @@ describe('compileAgent', () => {
     expect(result.memory).toBeUndefined();
   });
 
+  it('retains root rhythms while excluding actual spokes', async () => {
+    await fs.mkdir(path.join(tmpDir, 'context'));
+    await fs.writeFile(path.join(tmpDir, 'context/rhythms.yaml'), 'daily:\n  - standup: team sync');
+    await fs.mkdir(path.join(tmpDir, 'private-spoke'));
+    await fs.writeFile(
+      path.join(tmpDir, 'private-spoke/CONSTITUTION.md'),
+      '# Private\n\n## Purpose\nPrivate spoke material',
+    );
+    const def = createMinimalAgent();
+    def.context.boot = { spokes: false, tokenBudget: 8000 };
+    const result = await compileAgent(def, tmpDir);
+    expect(result.bootContext.content).toContain('team sync');
+    expect(result.bootContext.sources).toContain(path.join('context', 'rhythms.yaml'));
+    expect(result.bootContext.sources).not.toContain(path.join('private-spoke', 'CONSTITUTION.md'));
+  });
+
   it('compiles boot context with default sources', async () => {
     const def = createMinimalAgent();
     def.context.boot = { tokenBudget: 8000 };
