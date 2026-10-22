@@ -30,6 +30,7 @@ const SEVERITY_ICON: Record<ViolationSeverity, string> = {
 /** Flags that consume the next argument as a value. */
 const VALUE_FLAGS = new Set([
   '--port',
+  '--host',
   '--socket',
   '--db',
   '--goals-db',
@@ -105,6 +106,7 @@ ${bold('Commands:')}
 
 ${bold('Serve options:')}
   --port N            TCP port (default: 4195)
+  --host HOST         TCP bind address (default: 127.0.0.1)
   --socket PATH       Unix socket path
   --no-watch          Disable file watching
   --db PATH           SQLite database path (default: in-memory)
@@ -303,6 +305,7 @@ async function runServe(roots: string[], args: string[]) {
       : undefined,
     roots: resolvedRoots,
     port: portFlag !== null ? Number(portFlag) : DEFAULT_CONFIG.port,
+    host: parseFlag(args, '--host') ?? DEFAULT_CONFIG.host,
     socketPath: parseFlag(args, '--socket'),
     dbPath: parseFlag(args, '--db') ?? DEFAULT_CONFIG.dbPath,
     goalsDbPath: parseFlag(args, '--goals-db') ?? DEFAULT_CONFIG.goalsDbPath,

@@ -9,10 +9,15 @@ import { knowledgeAdapter } from './knowledge.js';
 import { agentsAdapter } from './agents.js';
 import { claudeAdapter } from './claude.js';
 import { cursorAdapter } from './cursor.js';
+import { moduleManifestAdapter } from './module_manifest.js';
+import { expressRoutesAdapter } from './express_routes.js';
+import { dataSchemaAdapter } from './data_schema.js';
 import { markdownAdapter } from './markdown.js';
 
 /**
  * Ordered list of adapters. More specific adapters first.
+ * Constitution and Claude must be checked before markdown fallback.
+ * JSON/route adapters before markdown since they handle non-.md files.
  * Constitution, Knowledge, and Claude must be checked before markdown fallback.
  */
 const ADAPTERS: ContextAdapter[] = [
@@ -21,6 +26,9 @@ const ADAPTERS: ContextAdapter[] = [
   knowledgeAdapter,
   claudeAdapter,
   cursorAdapter,
+  moduleManifestAdapter,
+  expressRoutesAdapter,
+  dataSchemaAdapter,
   markdownAdapter, // fallback — must be last
 ];
 
