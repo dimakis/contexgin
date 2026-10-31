@@ -1,8 +1,11 @@
+import { Buffer } from 'node:buffer';
 /** Declarative data from one accepted source revision; never execution settings. */
+const hasControl = (value) =>
+  [...value].some((part) => part.charCodeAt(0) < 32 || part.charCodeAt(0) === 127);
 const safeRoot = (root) =>
   Buffer.from(root).toString('utf8') === root &&
   !root.includes('\\') &&
-  !/[\x00-\x1f\x7f]/.test(root) &&
+  !hasControl(root) &&
   root.split('/').every((part) => part && !part.startsWith('.'));
 const contains = (root, path) => path === root || path.startsWith(root + '/');
 const forbiddenSegment = (part) =>
@@ -64,7 +67,7 @@ export function portableSpokePathPermitted(policy, path) {
     typeof path !== 'string' ||
     !path.endsWith('.md') ||
     path.includes('\\') ||
-    /[\x00-\x1f\x7f]/.test(path) ||
+    hasControl(path) ||
     path.split('/').some((part) => !part || forbiddenSegment(part)) ||
     policy.privateRoots.some((root) => contains(root.toLowerCase(), path.toLowerCase()))
   )
