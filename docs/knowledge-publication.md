@@ -195,3 +195,9 @@ the policy's bytes and digest, derived optional paths and exact exported files.
 Verification rereads the policy blob from the manifest's accepted revision;
 local worktree edits and changing remote main cannot replace that selection.
 Older configurations without `spokePolicy` retain their current selection rules.
+
+The guarded release controller accepts `CONTEXGIN_BUILD_HEAP_MB` as a build-only
+budget: 1024 (default), 2048, 4096 or 8192 MiB. Select it from fresh host pressure
+and headroom readings. It applies only to dependency preparation and compilation;
+it is not a launchd runtime option. Inherited Node/NPM preload options remain
+rejected. Startup, accepted-source, attestation and rollback gates are unchanged.

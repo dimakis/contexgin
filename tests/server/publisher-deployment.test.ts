@@ -117,6 +117,73 @@ describe('publisher deployment', () => {
       expect(planned.stderr).toContain('external runtime loading');
     },
   );
+  it('bounds both build commands without retaining loader settings in the controller', () => {
+    const root = fixture();
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'npm'), '#!/bin/sh\nprintf "%s|%s\\n" "$*" "$NODE_OPTIONS"\n');
+    chmodSync(join(bin, 'npm'), 0o755);
+    const controller = readFileSync(join(repo, 'scripts/create-release.sh'), 'utf8');
+    const start = controller.indexOf('BUILD_HEAP_MB=');
+    const build = controller.slice(start, controller.indexOf('\nSOURCE_ROOT=', start));
+    const invoke = (heap?: string) =>
+      spawnSync(
+        'bash',
+        [
+          '-c',
+          `set -euo pipefail\n${build}\nbuild_release\nprintf 'parent:%s' "\${NODE_OPTIONS-unset}"`,
+        ],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            CONTEXGIN_BUILD_HEAP_MB: heap,
+          },
+        },
+      );
+    for (const heap of [undefined, '1024', '2048', '4096', '8192']) {
+      const result = invoke(heap);
+      expect(result.status).toBe(0);
+      expect(result.stdout.split('\n')).toEqual([
+        `--node-options=--max-old-space-size=${heap ?? 1024} ci|--max-old-space-size=${heap ?? 1024}`,
+        `--node-options=--max-old-space-size=${heap ?? 1024} run build|--max-old-space-size=${heap ?? 1024}`,
+        'parent:unset',
+      ]);
+    }
+    for (const heap of ['0', '999999', '1024 --require /outside/runtime', '$(touch outside)']) {
+      const result = invoke(heap);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('CONTEXGIN_BUILD_HEAP_MB must be');
+    }
+    // Exercise npm's real lifecycle configuration boundary without installing
+    // dependencies or building: CLI config must override even a local .npmrc.
+    writeFileSync(join(root, '.npmrc'), 'node-options=--require /outside/runtime\n');
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ scripts: { budget: 'node -p "process.env.NODE_OPTIONS"' } }),
+    );
+    const lifecycle = spawnSync(
+      'npm',
+      ['--node-options=--max-old-space-size=1024', 'run', '--silent', 'budget'],
+      { cwd: root, encoding: 'utf8', env: process.env },
+    );
+    expect(lifecycle.status).toBe(0);
+    expect(lifecycle.stdout.trim()).toBe('--max-old-space-size=1024');
+    for (const setting of [
+      'npm_config_node_options',
+      'NPM_CONFIG_NODE_OPTIONS',
+      'Npm_Config_Node_Options',
+    ]) {
+      const result = spawnSync('bash', [join(repo, 'scripts/create-release.sh')], {
+        encoding: 'utf8',
+        env: { ...process.env, [setting]: '--require /outside/runtime' },
+      });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('external runtime loading');
+    }
+  });
   it('refuses publisher plans without explicitly selected graph and goals databases', () => {
     const root = fixture();
     const config = join(root, 'publication.json');
