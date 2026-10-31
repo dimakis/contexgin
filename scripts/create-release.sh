@@ -6,6 +6,27 @@ for setting in NODE_OPTIONS NODE_PATH LD_PRELOAD LD_LIBRARY_PATH BASH_ENV ENV PY
   }
 done
 
+# npm treats its configuration environment prefix and keys case-insensitively.
+for setting in $(compgen -A variable); do
+  case "$setting" in
+    [nN][pP][mM]_[cC][oO][nN][fF][iI][gG]_[nN][oO][dD][eE]_[oO][pP][tT][iI][oO][nN][sS])
+      [ -z "${!setting:-}" ] || {
+        echo "external runtime loading settings require investigation" >&2; exit 1
+      } ;;
+  esac
+done
+
+# Build memory is a typed controller choice, never a runtime preload setting.
+BUILD_HEAP_MB="${CONTEXGIN_BUILD_HEAP_MB:-1024}"
+case "$BUILD_HEAP_MB" in
+  1024|2048|4096|8192) ;;
+  *) echo "CONTEXGIN_BUILD_HEAP_MB must be 1024, 2048, 4096 or 8192" >&2; exit 1 ;;
+esac
+build_release() {
+  NODE_OPTIONS="--max-old-space-size=$BUILD_HEAP_MB" npm --node-options="--max-old-space-size=$BUILD_HEAP_MB" ci
+  NODE_OPTIONS="--max-old-space-size=$BUILD_HEAP_MB" npm --node-options="--max-old-space-size=$BUILD_HEAP_MB" run build
+}
+
 SOURCE_ROOT="${CONTEXGIN_SOURCE_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 SOURCE_REF="${1:-HEAD}"
 RELEASE_ROOT="${CONTEXGIN_RELEASE_ROOT:-$HOME/projects/contexgin-releases}"
@@ -261,8 +282,7 @@ git -C "$RELEASE_TEMP/release" merge-base --is-ancestor \
 git -C "$RELEASE_TEMP/release" checkout --detach "$SOURCE_COMMIT"
 (
   cd "$RELEASE_TEMP/release"
-  npm ci
-  npm run build
+  build_release
 )
 BUILT_RUNTIME_SHA256="$(runtime_sha256 "$RELEASE_TEMP/release")"
 printf '%s\n' "$BUILT_RUNTIME_SHA256" > "$RELEASE_TEMP/release/.runtime.sha256"
