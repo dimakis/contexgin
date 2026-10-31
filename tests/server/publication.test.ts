@@ -1,3 +1,8 @@
+import {
+  parsePortableSpokePolicy,
+  portableSpokePaths,
+  portableSpokePathSelected,
+} from '../../src/server/publication/portable-spoke-policy.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -334,8 +339,18 @@ describe('knowledge publication', () => {
     ).toEqual(['AGENTS.md', 'memory/future.md']);
   });
 
-  it('discovers optional instructions and context directories when added and permits their deletion', async () => {
+  it('discovers optional guidance and newly declared spokes from the accepted policy, including removal', async () => {
     await publisher.close();
+    const policyPath = join(repo, 'portable-policy.json');
+    const policy = {
+      version: 1,
+      portableRoots: [] as string[],
+      markdownRoots: [] as string[],
+      privateRoots: ['career'],
+    };
+    await writeFile(policyPath, JSON.stringify(policy));
+    git('add', '.');
+    git('commit', '-m', 'initial portable policy');
     const source = {
       id: 'notes',
       url: repo,
@@ -350,6 +365,7 @@ describe('knowledge publication', () => {
       ],
       excludePaths: ['context/scripts/'],
       excludeHiddenPaths: true,
+      spokePolicy: { path: 'portable-policy.json', requiredPrivateRoots: ['career'] },
     };
     publisher = new KnowledgePublisher({ root: join(root, 'optional'), sources: [source] });
     publisher.enqueue('notes');
@@ -362,14 +378,23 @@ describe('knowledge publication', () => {
       'CLAUDE.md',
       'context/accepted.md',
       'spoke/context/new.md',
+      'new_spoke/context/facts.md',
+      'project-ideas/fx-audit/MVP.md',
+      'career/context/private.md',
       'context/scripts/leak.md',
       'context/.hidden.md',
+      'context/Private/leak.md',
+      'context/NODE_MODULES/leak.md',
     ]) {
       await mkdir(join(repo, path, '..'), { recursive: true });
       await writeFile(join(repo, path), '# ' + path);
     }
     git('add', '.');
-    git('commit', '-m', 'new optional guidance');
+    policy.portableRoots.push('new_spoke');
+    policy.markdownRoots.push('project-ideas');
+    await writeFile(policyPath, JSON.stringify(policy));
+    git('add', '.');
+    git('commit', '-m', 'new optional guidance and declared spoke');
     publisher.enqueue('notes');
     await publisher.drain();
     const added = publisher.current('notes')!;
@@ -377,12 +402,27 @@ describe('knowledge publication', () => {
       JSON.parse(await readFile(join(added.directory, 'manifest.json'), 'utf8')).files.map(
         (file: { path: string }) => file.path,
       ),
-    ).toEqual(['AGENTS.md', 'CLAUDE.md', 'context/accepted.md', 'spoke/context/new.md']);
+    ).toEqual([
+      'AGENTS.md',
+      'CLAUDE.md',
+      'context/accepted.md',
+      'new_spoke/context/facts.md',
+      'project-ideas/fx-audit/MVP.md',
+      'spoke/context/new.md',
+    ]);
+    const manifest = JSON.parse(await readFile(join(added.directory, 'manifest.json'), 'utf8'));
+    expect(manifest.spokePolicy.path).toBe(source.spokePolicy.path);
+    expect(manifest.spokePolicy.sha256).toBe(
+      createHash('sha256').update(JSON.stringify(policy)).digest('hex'),
+    );
     await rm(join(repo, 'CLAUDE.md'));
     await rm(join(repo, 'context'), { recursive: true });
     await rm(join(repo, 'spoke'), { recursive: true });
+    policy.portableRoots = [];
+    policy.markdownRoots = [];
+    await writeFile(policyPath, JSON.stringify(policy));
     git('add', '.');
-    git('commit', '-m', 'remove optional guidance');
+    git('commit', '-m', 'remove optional guidance and declared spoke');
     publisher.enqueue('notes');
     await publisher.drain();
     const removed = publisher.current('notes')!;
@@ -949,5 +989,52 @@ describe('knowledge publication', () => {
     publisher.enqueue('notes', 'isolated-fetch');
     await publisher.drain();
     expect(publisher.current('notes')!.revision).toBe(accepted);
+  });
+});
+
+// Pure policy variants share no Git, database or HTTP publication setup.
+describe('accepted portable spoke policy', () => {
+  const policy = { version: 1, portableRoots: ['architecture'], privateRoots: ['career'] };
+  it('admits a newly declared spoke using the same policy contract', () => {
+    const before = parsePortableSpokePolicy(policy, ['career']);
+    const after = parsePortableSpokePolicy(
+      {
+        ...policy,
+        portableRoots: [...policy.portableRoots, 'new_spoke'],
+        markdownRoots: ['project-ideas'],
+      },
+      ['career'],
+    );
+    expect(portableSpokePathSelected(before, 'new_spoke/context/facts.md')).toBe(false);
+    expect(portableSpokePathSelected(after, 'new_spoke/context/facts.md')).toBe(true);
+    expect(portableSpokePaths(after)).toContain('new_spoke/context/');
+    expect(portableSpokePathSelected(after, 'project-ideas/fx-audit/MVP.md')).toBe(true);
+    expect(portableSpokePathSelected(after, 'project-ideas/fx-audit/raw.json')).toBe(false);
+    expect(portableSpokePathSelected(after, 'new_spoke/CONSTITUTION.md')).toBe(true);
+  });
+  it.each([
+    'career/context/people.md',
+    'unknown/context/facts.md',
+    'architecture/private/secret.md',
+    'architecture/context/.env.md',
+    'architecture/context/node_modules/notes.md',
+    'architecture/context/raw.json',
+    'architecture/context/../escape.md',
+  ])('excludes nonportable path %s', (path) => {
+    expect(portableSpokePathSelected(parsePortableSpokePolicy(policy, ['career']), path)).toBe(
+      false,
+    );
+  });
+  it.each([
+    { ...policy, version: 2 },
+    { ...policy, portableRoots: ['../escape'] },
+    { ...policy, portableRoots: ['career'] },
+    { ...policy, markdownRoots: ['Career'] },
+    { ...policy, markdownRoots: ['career'] },
+    { ...policy, privateRoots: [] },
+    { ...policy, portableRoots: ['architecture', 'architecture'] },
+    { ...policy, adapter: '/untrusted/program' },
+  ])('rejects malformed or authority-changing policy %#', (value) => {
+    expect(() => parsePortableSpokePolicy(value, ['career'])).toThrow();
   });
 });
