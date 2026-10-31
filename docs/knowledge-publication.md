@@ -163,3 +163,35 @@ The legacy `/api/knowledge-space/rebuild` route remains separate. It pulls a loc
 checkout and invokes crawl/embed scripts; generic publication never invokes that route.
 Future backends can implement source acquisition behind the same revision/snapshot
 contract. This implementation supports configured Git stores only.
+
+## Accepted portable directory policy
+
+A host can enroll one fixed source policy file using
+`spokePolicy: {path: "knowledge-publication-policy.json", requiredPrivateRoots: [...]}`.
+The file is bounded, strict JSON data from the exact accepted Git revision:
+
+```json
+{
+  "version": 1,
+  "portableRoots": ["architecture", "new_spoke"],
+  "markdownRoots": ["project-ideas"],
+  "privateRoots": ["career", "direct_reports", "okrs/private_eng_excellence"]
+}
+```
+
+Portable roots export only their three guidance files (`CONSTITUTION.md`,
+`AGENTS.md`, `CLAUDE.md`) and Markdown below `context/`. Markdown roots export
+other explicitly reviewed Markdown directories. Paths are literal; policy data
+cannot change programs, credentials, sources, refs or execution settings.
+Private roots cannot overlap exported roots, required private roots cannot be
+removed, and private/hidden/dependency path segments stay excluded even for
+static selections. Private-root comparisons also reject case aliases.
+
+Host enrollment should retain only fixed hub/memory paths in `paths` and
+`optionalPaths`; migrate per-spoke optional paths into the source policy so
+removing a declaration actually revokes that export. New source directories
+then require only a reviewed policy/content change. The SHA-256-bound manifest binds
+the policy's bytes and digest, derived optional paths and exact exported files.
+Verification rereads the policy blob from the manifest's accepted revision;
+local worktree edits and changing remote main cannot replace that selection.
+Older configurations without `spokePolicy` retain their current selection rules.

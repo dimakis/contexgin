@@ -15,6 +15,14 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { compile } from '../../compiler/index.js';
+import {
+  parsePortableSpokePolicy,
+  parsePortableSpokePolicyText,
+  portableSpokePaths,
+  portableSpokePathSelected,
+  portableSpokePathPermitted,
+  type PortableSpokePolicy,
+} from './portable-spoke-policy.mjs';
 
 export interface KnowledgeSource {
   id: string;
@@ -32,6 +40,8 @@ export interface KnowledgeSource {
   excludePathSegments?: string[];
   /** Omit files with any dot-prefixed path segment. */
   excludeHiddenPaths?: boolean;
+  /** Host enrollment delegates only portable/private classification to this accepted Git file. */
+  spokePolicy?: { path: string; requiredPrivateRoots: string[] };
 }
 export interface PublicationConfig {
   root: string;
@@ -136,8 +146,10 @@ const safePath = (value: string) =>
   !value.split('/').some((p) => p === '..' || p === '.' || p === '');
 const matchesPath = (path: string, policy: string) =>
   policy.endsWith('/') ? path.startsWith(policy) : path === policy;
-const selectedPath = (path: string, source: KnowledgeSource) =>
-  [...source.paths, ...(source.optionalPaths ?? [])].some((policy) => matchesPath(path, policy)) &&
+const selectedPath = (path: string, source: KnowledgeSource, spokes?: PortableSpokePolicy) =>
+  ([...source.paths, ...(source.optionalPaths ?? [])].some((policy) => matchesPath(path, policy)) ||
+    (spokes && portableSpokePathSelected(spokes, path))) &&
+  (!spokes || portableSpokePathPermitted(spokes, path)) &&
   !source.excludePaths?.some((policy) => matchesPath(path, policy)) &&
   !path.split('/').some((part) => source.excludePathSegments?.includes(part)) &&
   !(source.excludeHiddenPaths && path.split('/').some((part) => part.startsWith('.')));
@@ -206,6 +218,22 @@ export class KnowledgePublisher {
         throw new Error('Explicit safe exclusion segments required');
       if (source.excludeHiddenPaths !== undefined && typeof source.excludeHiddenPaths !== 'boolean')
         throw new Error('Boolean hidden-path exclusion required');
+      if (source.spokePolicy !== undefined) {
+        const policy = source.spokePolicy;
+        if (
+          !policy ||
+          Object.keys(policy).sort().join(',') !== 'path,requiredPrivateRoots' ||
+          typeof policy.path !== 'string' ||
+          policy.path.length > 200 ||
+          !policy.path.endsWith('.json') ||
+          !safePath(policy.path)
+        )
+          throw new Error('Explicit safe spoke policy enrollment required');
+        parsePortableSpokePolicy(
+          { version: 1, portableRoots: [], privateRoots: policy.requiredPrivateRoots },
+          policy.requiredPrivateRoots,
+        );
+      }
     }
     config = { ...structuredClone(config), root: privateRoot(config) };
     this.config = config;
@@ -215,6 +243,10 @@ export class KnowledgePublisher {
       if (source.optionalPaths) Object.freeze(source.optionalPaths);
       if (source.excludePaths) Object.freeze(source.excludePaths);
       if (source.excludePathSegments) Object.freeze(source.excludePathSegments);
+      if (source.spokePolicy) {
+        Object.freeze(source.spokePolicy.requiredPrivateRoots);
+        Object.freeze(source.spokePolicy);
+      }
       Object.freeze(source);
     }
     Object.freeze(this.sources);
@@ -447,16 +479,36 @@ export class KnowledgePublisher {
     }
   }
 
-  private async git(cwd: string, args: string[], binary = false): Promise<Buffer> {
+  private async git(
+    cwd: string,
+    args: string[],
+    binary = false,
+    maxBuffer = 64 * 1024 * 1024,
+  ): Promise<Buffer> {
     const env = Object.fromEntries(
       Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
     );
     const result = await execute(
       'git',
       ['-c', 'core.hooksPath=/dev/null', '-c', 'protocol.ext.allow=never', ...args],
-      { cwd, env, timeout: 120_000, maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' },
+      { cwd, env, timeout: 120_000, maxBuffer, encoding: 'buffer' },
     );
     return binary ? result.stdout : Buffer.from(result.stdout.toString().trim());
+  }
+  private async readSpokePolicy(source: KnowledgeSource, records: string[], mirror: string) {
+    if (!source.spokePolicy) return undefined;
+    const record = records.find(
+      (entry) => entry.slice(entry.indexOf('\t') + 1) === source.spokePolicy!.path,
+    );
+    if (!record) throw new Error('Accepted spoke policy is missing');
+    const [mode, type, oid] = record.slice(0, record.indexOf('\t')).split(' ');
+    if (mode !== '100644' || type !== 'blob')
+      throw new Error('Accepted spoke policy must be regular data');
+    const bytes = await this.git(mirror, ['cat-file', 'blob', oid], true, 128 * 1024);
+    const content = bytes.toString('utf8');
+    if (!Buffer.from(content).equals(bytes)) throw new Error('Accepted spoke policy must be UTF-8');
+    const policy = parsePortableSpokePolicyText(content, source.spokePolicy.requiredPrivateRoots);
+    return { policy, receipt: { path: source.spokePolicy.path, sha256: hash(bytes), content } };
   }
   private async build(source: KnowledgeSource): Promise<Publication> {
     const sourceRoot = join(this.config.root, source.id);
@@ -502,6 +554,10 @@ export class KnowledgePublisher {
         .toString()
         .split('\0')
         .filter(Boolean);
+      const spokes = await this.readSpokePolicy(source, records, mirror);
+      const optionalPaths = spokes
+        ? [...(source.optionalPaths ?? []), ...portableSpokePaths(spokes.policy)]
+        : source.optionalPaths;
       const files: { path: string; sha256: string; bytes: number }[] = [];
       const staging = join(sourceRoot, `building-${randomUUID()}`);
       const final = join(sourceRoot, `snapshot-${revision}-${randomUUID()}`);
@@ -512,7 +568,7 @@ export class KnowledgePublisher {
           const tab = record.indexOf('\t');
           const [mode, type, oid] = record.slice(0, tab).split(' ');
           const name = record.slice(tab + 1);
-          if (!selectedPath(name, source)) continue;
+          if (!selectedPath(name, source, spokes?.policy)) continue;
           if (
             !name.endsWith('.md') &&
             [...source.paths, ...(source.optionalPaths ?? [])].some(
@@ -557,7 +613,8 @@ export class KnowledgePublisher {
           sourceIdentity: hash(JSON.stringify(source)),
           revision,
           paths: source.paths,
-          ...(source.optionalPaths !== undefined ? { optionalPaths: source.optionalPaths } : {}),
+          ...(optionalPaths !== undefined ? { optionalPaths } : {}),
+          ...(spokes ? { spokePolicy: spokes.receipt } : {}),
           ...(source.excludePaths !== undefined ? { excludePaths: source.excludePaths } : {}),
           ...(source.excludePathSegments !== undefined
             ? { excludePathSegments: source.excludePathSegments }
@@ -648,32 +705,12 @@ export class KnowledgePublisher {
         sourceIdentity: string;
         paths: string[];
         optionalPaths?: string[];
+        spokePolicy?: { path: string; sha256: string; content: string };
         excludePaths?: string[];
         excludePathSegments?: string[];
         excludeHiddenPaths?: boolean;
         files: { path: string; sha256: string; bytes: number }[];
       };
-      if (manifest.schema !== 'contexgin-portable-v1' || manifest.revision !== publication.revision)
-        return false;
-      if (
-        manifest.acceptedRef !== source.ref ||
-        manifest.source !== source.id ||
-        manifest.sourceIdentity !== hash(JSON.stringify(source)) ||
-        JSON.stringify(manifest.paths) !== JSON.stringify(source.paths) ||
-        JSON.stringify(manifest.optionalPaths) !== JSON.stringify(source.optionalPaths) ||
-        JSON.stringify(manifest.excludePaths) !== JSON.stringify(source.excludePaths) ||
-        JSON.stringify(manifest.excludePathSegments) !==
-          JSON.stringify(source.excludePathSegments) ||
-        manifest.excludeHiddenPaths !== source.excludeHiddenPaths ||
-        !manifest.files.length ||
-        source.paths.some(
-          (policy) => !manifest.files.some((file) => matchesPath(file.path, policy)),
-        ) ||
-        manifest.files.some(
-          (file) => !file.path.endsWith('.md') || !selectedPath(file.path, source),
-        )
-      )
-        return false;
       // A self-consistent snapshot is not proof that it contains the accepted tree.
       // Bind both exact policy coverage and blob contents to the immutable Git revision.
       if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(publication.revision)) return false;
@@ -687,12 +724,42 @@ export class KnowledgePublisher {
         .toString()
         .split('\0')
         .filter(Boolean);
+      const spokes = await this.readSpokePolicy(
+        source,
+        records,
+        join(this.config.root, source.id, 'mirror.git'),
+      );
+      const optionalPaths = spokes
+        ? [...(source.optionalPaths ?? []), ...portableSpokePaths(spokes.policy)]
+        : source.optionalPaths;
+      if (manifest.schema !== 'contexgin-portable-v1' || manifest.revision !== publication.revision)
+        return false;
+      if (
+        manifest.acceptedRef !== source.ref ||
+        manifest.source !== source.id ||
+        manifest.sourceIdentity !== hash(JSON.stringify(source)) ||
+        JSON.stringify(manifest.paths) !== JSON.stringify(source.paths) ||
+        JSON.stringify(manifest.optionalPaths) !== JSON.stringify(optionalPaths) ||
+        JSON.stringify(manifest.spokePolicy) !== JSON.stringify(spokes?.receipt) ||
+        JSON.stringify(manifest.excludePaths) !== JSON.stringify(source.excludePaths) ||
+        JSON.stringify(manifest.excludePathSegments) !==
+          JSON.stringify(source.excludePathSegments) ||
+        manifest.excludeHiddenPaths !== source.excludeHiddenPaths ||
+        !manifest.files.length ||
+        source.paths.some(
+          (policy) => !manifest.files.some((file) => matchesPath(file.path, policy)),
+        ) ||
+        manifest.files.some(
+          (file) => !file.path.endsWith('.md') || !selectedPath(file.path, source, spokes?.policy),
+        )
+      )
+        return false;
       const accepted = new Map<string, string>();
       for (const record of records) {
         const tab = record.indexOf('\t');
         const [mode, type, oid] = record.slice(0, tab).split(' ');
         const name = record.slice(tab + 1);
-        if (!selectedPath(name, source)) continue;
+        if (!selectedPath(name, source, spokes?.policy)) continue;
         if (
           !name.endsWith('.md') &&
           [...source.paths, ...(source.optionalPaths ?? [])].some(
