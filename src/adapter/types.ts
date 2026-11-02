@@ -21,10 +21,11 @@ export type ContextTier =
 
 /** The source format a node was parsed from */
 export type SourceFormat =
-  | 'agents_md'
   | 'claude_md'
   | 'cursor_rules'
   | 'constitution'
+  | 'entity'
+  | 'agents_md'
   | 'knowledge'
   | 'markdown';
 
@@ -133,7 +134,7 @@ export function nodeToSourceKind(
   if (format === 'constitution') return 'constitution';
   if (format === 'markdown' && isProfilePath(relativePath)) return 'profile';
   if (basename === 'SERVICES.md') return 'service';
-  // claude_md, cursor_rules, knowledge, and other markdown → reference
+  // claude_md, cursor_rules, knowledge, entity, and other formats → reference
   return 'reference';
 }
 

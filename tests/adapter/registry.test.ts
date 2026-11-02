@@ -46,6 +46,11 @@ describe('findAdapter', () => {
     expect(adapter?.format).toBe('claude_md');
   });
 
+  it('selects entity adapter for context/entities.yaml', () => {
+    const adapter = findAdapter('/workspace/context/entities.yaml');
+    expect(adapter?.format).toBe('entity');
+  });
+
   it('returns undefined for non-handled files', () => {
     expect(findAdapter('foo.ts')).toBeUndefined();
     expect(findAdapter('foo.py')).toBeUndefined();
