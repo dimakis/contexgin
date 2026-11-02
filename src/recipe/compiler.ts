@@ -112,7 +112,11 @@ async function compileBootContext(
     // would otherwise match the type-specific filters below
     if (config.spokes === false && isNestedPath(rel)) {
       // Don't filter profiles or cursor rules — they're not spokes
-      if (!profile && !rel.match(/^\.cursor[/\\]/)) {
+      if (
+        !profile &&
+        !rel.match(/^\.cursor[/\\]/) &&
+        !rel.match(/^context[/\\](rhythms|cadence)\.yaml$/)
+      ) {
         return false;
       }
     }
