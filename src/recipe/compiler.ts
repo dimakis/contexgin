@@ -10,7 +10,9 @@ import { discoverAndAdapt, adaptFile } from '../adapter/index.js';
 import { isNestedPath, isProfilePath, nodesToSources } from '../adapter/types.js';
 import type { ContextNode } from '../adapter/types.js';
 import { resolveOrigin } from '../resolve/index.js';
+import { findModuleDir } from '../resolve/module-dir.js';
 import type { SessionOrigin } from '../resolve/index.js';
+import type { ContextSource } from '../compiler/types.js';
 import type {
   AgentDefinition,
   CompiledAgentContext,
@@ -50,8 +52,8 @@ export async function compileAgent(
   // Layer 1: Boot context
   const bootContext = await compileBootContext(def.context.boot, root, origin);
 
-  // Layer 2: Context blocks
-  const contextBlocks = await compileContextBlocks(def.context.blocks ?? [], root);
+  // Layer 2: Context blocks (supports dynamic resolution via origin)
+  const contextBlocks = await compileContextBlocks(def.context.blocks ?? [], root, origin);
 
   // Layer 3: Operational context
   const operational = def.context.operational
@@ -98,14 +100,23 @@ async function compileBootContext(
 
   const budget = config.tokenBudget ?? 8000;
 
-  // Single discovery path — discoverAndAdapt is the SSOT for file discovery.
-  // Filter on ContextNode[] using origin metadata instead of maintaining
-  // a separate file list.
+  // Keep canonical adapter discovery and adapt explicit globs through the same registry.
   const allNodes = await discoverAndAdapt(workspaceRoot);
+  const explicitPaths = new Set<string>();
+  if (config.sources?.length) {
+    const existingPaths = new Set(allNodes.map((node) => node.origin.source));
+    for (const source of await resolveGlobs(config.sources, workspaceRoot)) {
+      explicitPaths.add(source.path);
+      if (!existingPaths.has(source.path)) {
+        allNodes.push(...(await adaptFile(source.path, workspaceRoot)));
+        existingPaths.add(source.path);
+      }
+    }
+  }
   const filteredNodes = allNodes.filter((node) => {
+    if (explicitPaths.has(node.origin.source)) return true;
     const rel = node.origin.relativePath;
     const basename = path.basename(rel);
-
     const profile = isProfilePath(rel);
 
     // Spoke-level files — check first since spoke constitutions/CLAUDEs
@@ -192,14 +203,30 @@ async function compileBootContext(
 
 /**
  * Compile context blocks from configuration.
+ * Blocks with source: "dynamic" resolve their content from origin metadata
+ * (e.g. page origin → module source files).
  */
 async function compileContextBlocks(
   blocks: ContextBlockConfig[],
   workspaceRoot: string,
+  origin?: SessionOrigin,
 ): Promise<CompiledAgentContext['contextBlocks']> {
   const compiled = new Map<string, { content: string; tokens: number; source: string }>();
 
   for (const block of blocks) {
+    if (block.source === 'dynamic') {
+      // Dynamic blocks resolve content from origin metadata
+      const content = await resolveDynamicBlock(block, workspaceRoot, origin);
+      if (content) {
+        compiled.set(block.id, {
+          content,
+          tokens: estimateTokens(content),
+          source: 'dynamic',
+        });
+      }
+      continue;
+    }
+
     try {
       const fullPath = path.resolve(workspaceRoot, expandTilde(block.source));
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -220,6 +247,80 @@ async function compileContextBlocks(
   }
 
   return compiled;
+}
+
+/**
+ * Resolve a dynamic context block using origin metadata.
+ * For page origins: reads source files from the active module directory.
+ */
+async function resolveDynamicBlock(
+  block: ContextBlockConfig,
+  workspaceRoot: string,
+  origin?: SessionOrigin,
+): Promise<string | undefined> {
+  if (!origin || !origin.entityId) return undefined;
+
+  // For page origins, resolve module source files
+  if (origin.source === 'page') {
+    const moduleName = origin.entityId.replace(/^#?\/?/, '').split('/')[0];
+    if (!moduleName) return undefined;
+
+    // Reject path traversal attempts
+    if (moduleName.includes('..') || path.isAbsolute(moduleName)) return undefined;
+
+    const moduleDir = await findModuleDir(moduleName, workspaceRoot);
+    if (!moduleDir) return undefined;
+
+    // Gather key source files from the module
+    const parts: string[] = [`# Module: ${moduleName}`];
+    const entries = await collectModuleFiles(moduleDir, workspaceRoot);
+    for (const entry of entries) {
+      parts.push(`## ${entry.relativePath}\n\n\`\`\`\n${entry.content}\n\`\`\``);
+    }
+
+    return parts.length > 1 ? parts.join('\n\n') : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Collect key source files from a module directory (non-recursive, limited depth).
+ */
+async function collectModuleFiles(
+  moduleDir: string,
+  workspaceRoot: string,
+): Promise<Array<{ relativePath: string; content: string }>> {
+  const results: Array<{ relativePath: string; content: string }> = [];
+  const maxFiles = 10;
+
+  try {
+    const entries = await fs.readdir(moduleDir, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (results.length >= maxFiles) break;
+
+      const fullPath = path.join(moduleDir, entry.name);
+
+      if (entry.isFile() && /\.(js|ts|json|vue|jsx|tsx)$/.test(entry.name)) {
+        try {
+          const content = await fs.readFile(fullPath, 'utf-8');
+          // Skip very large files
+          if (content.length > 10_000) continue;
+          results.push({
+            relativePath: path.relative(workspaceRoot, fullPath),
+            content,
+          });
+        } catch {
+          // skip unreadable
+        }
+      }
+    }
+  } catch {
+    // skip unreadable directory
+  }
+
+  return results;
 }
 
 /**
@@ -317,6 +418,148 @@ async function compileMemoryContext(
   }
 
   return memory;
+}
+
+// Resolve file globs relative to a workspace root.
+// Supports patterns with * wildcards. Plain paths are resolved directly.
+async function resolveGlobs(patterns: string[], workspaceRoot: string): Promise<ContextSource[]> {
+  const rootRealPath = await fs.realpath(workspaceRoot);
+  const sources: ContextSource[] = [];
+  const seen = new Set<string>();
+
+  for (const pattern of patterns) {
+    // Reject patterns with path traversal
+    if (pattern.includes('..') || path.isAbsolute(pattern)) {
+      console.warn(`[recipe] Rejecting glob pattern with traversal: "${pattern}"`);
+      continue;
+    }
+
+    try {
+      const matches = await expandGlob(pattern, workspaceRoot);
+      for (const match of matches) {
+        const fullPath = path.resolve(workspaceRoot, match);
+        const realPath = await fs.realpath(fullPath);
+        if (!realPath.startsWith(rootRealPath + path.sep)) continue;
+        if (seen.has(fullPath)) continue;
+        seen.add(fullPath);
+        sources.push({
+          path: fullPath,
+          kind: 'reference',
+          relativePath: match,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[recipe] Failed to resolve glob "${pattern}": ${msg}`);
+    }
+  }
+
+  return sources;
+}
+
+// Expand a glob pattern into matching file paths relative to root.
+// Supports * (single-level wildcard) and ** (recursive descent).
+async function expandGlob(pattern: string, root: string): Promise<string[]> {
+  const segments = pattern.split('/');
+  return expandSegments(segments, 0, root, '');
+}
+
+// Maximum recursion depth for ** glob patterns to prevent runaway traversal
+const MAX_GLOB_DEPTH = 10;
+
+async function expandSegments(
+  segments: string[],
+  index: number,
+  root: string,
+  prefix: string,
+  depth: number = 0,
+): Promise<string[]> {
+  if (index >= segments.length) return [];
+
+  const segment = segments[index];
+  const isLast = index === segments.length - 1;
+  const currentDir = path.join(root, prefix);
+  try {
+    const rootRealPath = await fs.realpath(root);
+    const currentRealPath = await fs.realpath(currentDir);
+    if (currentRealPath !== rootRealPath && !currentRealPath.startsWith(rootRealPath + path.sep))
+      return [];
+  } catch {
+    return [];
+  }
+
+  // ** recursive glob — match zero or more directory levels
+  if (segment === '**') {
+    if (depth >= MAX_GLOB_DEPTH) return [];
+
+    const results: string[] = [];
+    // Try matching remaining segments at this level (zero-depth match)
+    const sub = await expandSegments(segments, index + 1, root, prefix, depth);
+    results.push(...sub);
+    // Recurse into subdirectories
+    try {
+      const entries = await fs.readdir(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        // Continue matching ** at the deeper level
+        const deeper = await expandSegments(segments, index, root, relPath, depth + 1);
+        results.push(...deeper);
+      }
+    } catch {
+      // directory unreadable
+    }
+    return results;
+  }
+
+  if (segment.includes('*')) {
+    // Wildcard segment — list directory and filter
+    let entries: string[];
+    try {
+      entries = await fs.readdir(currentDir);
+    } catch {
+      return [];
+    }
+
+    const regex = new RegExp(
+      '^' + segment.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$',
+    );
+
+    const results: string[] = [];
+    for (const entry of entries) {
+      if (entry.startsWith('.') || entry === 'node_modules') continue;
+      if (!regex.test(entry)) continue;
+      const relPath = prefix ? `${prefix}/${entry}` : entry;
+
+      if (isLast) {
+        try {
+          const stat = await fs.stat(path.join(root, relPath));
+          if (stat.isFile()) results.push(relPath);
+        } catch {
+          // skip
+        }
+      } else {
+        const sub = await expandSegments(segments, index + 1, root, relPath);
+        results.push(...sub);
+      }
+    }
+    return results;
+  } else {
+    // Literal segment
+    const relPath = prefix ? `${prefix}/${segment}` : segment;
+
+    if (isLast) {
+      try {
+        const stat = await fs.stat(path.join(root, relPath));
+        if (stat.isFile()) return [relPath];
+      } catch {
+        return [];
+      }
+    }
+
+    return expandSegments(segments, index + 1, root, relPath);
+  }
 }
 
 /**

@@ -21,12 +21,15 @@ export type ContextTier =
 
 /** The source format a node was parsed from */
 export type SourceFormat =
-  | 'agents_md'
   | 'claude_md'
   | 'cursor_rules'
   | 'constitution'
-  | 'knowledge'
-  | 'markdown';
+  | 'markdown'
+  | 'json_manifest'
+  | 'express_routes'
+  | 'json_data'
+  | 'agents_md'
+  | 'knowledge';
 
 /** Where a context node originated */
 export interface NodeOrigin {

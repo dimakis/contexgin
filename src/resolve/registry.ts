@@ -8,9 +8,16 @@ import { chatResolver } from './chat.js';
 import { telosResolver } from './telos.js';
 import { calendarResolver } from './calendar.js';
 import { fileResolver } from './file.js';
+import { pageResolver } from './page.js';
 
 /** Registered resolvers in priority order */
-const RESOLVERS: OriginResolver[] = [telosResolver, calendarResolver, fileResolver, chatResolver];
+const RESOLVERS: OriginResolver[] = [
+  telosResolver,
+  calendarResolver,
+  pageResolver,
+  fileResolver,
+  chatResolver,
+];
 
 /**
  * Find a resolver for the given origin.

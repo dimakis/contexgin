@@ -96,7 +96,7 @@ export function agentRoutes(app: FastifyInstance, config: ServerConfig): void {
     const originEntityId = request.query['origin.entityId'];
 
     // Validate origin.source if provided
-    const VALID_ORIGIN_SOURCES: OriginSource[] = ['chat', 'telos', 'calendar', 'file'];
+    const VALID_ORIGIN_SOURCES: OriginSource[] = ['chat', 'telos', 'calendar', 'file', 'page'];
     if (originSource && !VALID_ORIGIN_SOURCES.includes(originSource)) {
       return reply.status(400).send({
         error: `Invalid origin.source: ${originSource}`,
